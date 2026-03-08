@@ -29,7 +29,7 @@ class CycleRemover:
             self.llm = get_llm(
                 temperature=0.1,
                 max_tokens=None,
-                timeout=None
+                timeout=150
             )
         else:
             self.llm = llm

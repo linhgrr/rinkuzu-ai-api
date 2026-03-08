@@ -29,6 +29,7 @@ def get_llm(temperature=0.0, **kwargs):
         api_key=api_key,
         temperature=temperature,
         max_retries=2,
+        timeout=150,
         **kwargs
     )
 
@@ -46,6 +47,7 @@ def get_embeddings(**kwargs):
         base_url=base_url,
         model=model,
         api_key=api_key,
+        timeout=150,
         **kwargs
     )
 

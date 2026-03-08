@@ -96,6 +96,7 @@ def init_llm(
         api_key=_api_key,
         temperature=0.3,
         max_retries=2,
+        timeout=150,
     )
 
     try:

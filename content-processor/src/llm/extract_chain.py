@@ -29,7 +29,7 @@ class ExtractionChain:
             self.llm = get_llm(
                 temperature=0.1,  # A bit of temperature can sometimes help reasoning
                 max_tokens=None,
-                timeout=None,
+                timeout=150,
                 top_p=1,
             )
         else:
