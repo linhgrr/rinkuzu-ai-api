@@ -1,0 +1,37 @@
+# FastAPI + Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart
+python-dotenv
+pydantic>=2.0
+pydantic-settings>=2.0
+
+# ML / Deep Learning
+torch>=2.0.0
+numpy
+networkx
+scikit-learn
+
+# LLM / LangChain (content-processor)
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.1.0
+trustcall>=0.0.10
+# Embeddings (content-processor)
+sentence-transformers>=2.2.0
+chromadb>=0.5.0
+
+# NLP Vietnamese (content-processor)
+underthesea
+pyvi
+
+# Utilities
+loguru
+aiofiles
+agentic-doc
+wikipedia
+
+# Database
+motor>=3.3.0
+pymongo>=4.6.0

@@ -1,0 +1,10 @@
+# Ignore data, uploads, temp files
+uploads/
+chroma_db/
+examples/output/
+*.json
+*.csv
+issuse.rtf
+__pycache__/
+*.pyc
+.cache/
