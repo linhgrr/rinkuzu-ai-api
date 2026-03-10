@@ -1,20 +1,19 @@
 """
-Session router — Session lifecycle endpoints
+Session router — Session lifecycle endpoints.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 
 from ..schemas import (
     SessionCreateRequest, SessionCreateResponse,
-    NextConceptResponse, TheoryResponse, ExerciseResponse, 
+    NextConceptResponse, TheoryResponse, ExerciseResponse,
     SubmitAnswerRequest, SubmitAnswerResponse,
     SessionStatusResponse,
 )
+from ..dependencies import get_session_manager, get_session_service
+from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
 
 router = APIRouter(prefix="/api/session", tags=["session"])
-
-# Will be set by main.py on startup
-session_manager = None
 
 BLOOM_LABELS = {
     1: "Remember", 2: "Understand", 3: "Apply",
@@ -23,11 +22,8 @@ BLOOM_LABELS = {
 
 
 @router.post("/start", response_model=SessionCreateResponse)
-async def start_session(req: SessionCreateRequest):
-    if session_manager is None:
-        raise HTTPException(500, "Server not initialized")
-
-    session = session_manager.create_session(max_steps=req.max_steps)
+async def start_session(req: SessionCreateRequest, manager=Depends(get_session_manager)):
+    session = manager.create_session(max_steps=req.max_steps)
 
     id_to_concept = {v: k for k, v in session.concept_map.items()}
     concepts = [
@@ -39,6 +35,17 @@ async def start_session(req: SessionCreateRequest):
         for i in range(len(session.concept_map))
     ]
 
+    # Fire eager prefetch via exercise service
+    try:
+        from ..dependencies import get_session_service as _get_svc
+        import asyncio
+        # Get exercise service from the same app state
+        exercise_service = getattr(manager, '_exercise_service', None)
+        if exercise_service:
+            asyncio.create_task(exercise_service.eager_generate_first_exercise(session))
+    except Exception:
+        pass
+
     return SessionCreateResponse(
         session_id=session.session_id,
         n_concepts=len(session.concept_map),
@@ -48,53 +55,44 @@ async def start_session(req: SessionCreateRequest):
 
 
 @router.post("/{session_id}/next-concept", response_model=NextConceptResponse)
-async def next_concept(session_id: str):
-    if session_manager is None:
-        raise HTTPException(500, "Server not initialized")
-
-    session = session_manager.get_session(session_id)
+async def next_concept(session_id: str, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+    session = manager.get_session(session_id)
     if not session:
-        raise HTTPException(404, "Session not found")
+        raise SessionNotFoundError(session_id)
     if session.status != "active":
-        raise HTTPException(400, "Session is completed")
+        raise SessionCompletedError(session_id)
 
-    concept_info = await session_manager.get_next_concept(session_id)
+    concept_info = await exercise_svc.get_next_concept(session)
     if not concept_info:
-        raise HTTPException(500, "Failed to determine next concept")
+        raise ExerciseGenerationError("Failed to determine next concept")
 
     return NextConceptResponse(**concept_info)
 
 
 @router.get("/{session_id}/theory", response_model=TheoryResponse)
-async def theory(session_id: str):
-    if session_manager is None:
-        raise HTTPException(500, "Server not initialized")
-
-    session = session_manager.get_session(session_id)
+async def theory(session_id: str, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+    session = manager.get_session(session_id)
     if not session:
-        raise HTTPException(404, "Session not found")
-        
-    theory_data = await session_manager.get_theory(session_id)
+        raise SessionNotFoundError(session_id)
+
+    theory_data = await exercise_svc.get_theory(session)
     if not theory_data:
-        raise HTTPException(404, "Theory not available for this concept")
-        
+        raise SessionNotFoundError(session_id)
+
     return TheoryResponse(**theory_data)
 
 
 @router.post("/{session_id}/exercise", response_model=ExerciseResponse)
-async def generate_exercise(session_id: str):
-    if session_manager is None:
-        raise HTTPException(500, "Server not initialized")
-
-    session = session_manager.get_session(session_id)
+async def generate_exercise(session_id: str, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+    session = manager.get_session(session_id)
     if not session:
-        raise HTTPException(404, "Session not found")
+        raise SessionNotFoundError(session_id)
     if session.status != "active":
-        raise HTTPException(400, "Session is completed")
+        raise SessionCompletedError(session_id)
 
-    exercise = await session_manager.generate_exercise(session_id)
+    exercise = await exercise_svc.generate_exercise(session)
     if not exercise:
-        raise HTTPException(500, "Failed to generate exercise")
+        raise ExerciseGenerationError()
 
     env_stats = session.env.get_session_stats()
 
@@ -113,24 +111,22 @@ async def generate_exercise(session_id: str):
 
 
 @router.post("/{session_id}/submit", response_model=SubmitAnswerResponse)
-async def submit_answer(session_id: str, req: SubmitAnswerRequest):
-    if session_manager is None:
-        raise HTTPException(500, "Server not initialized")
+async def submit_answer(session_id: str, req: SubmitAnswerRequest, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+    session = manager.get_session(session_id)
+    if not session:
+        raise SessionNotFoundError(session_id)
 
-    result = await session_manager.submit_answer(session_id, req.answer)
+    result = await exercise_svc.submit_answer(session, req.answer)
     if not result:
-        raise HTTPException(400, "No pending exercise or session not found")
+        raise ExerciseGenerationError("No pending exercise or session not found")
 
     return SubmitAnswerResponse(**result)
 
 
 @router.get("/{session_id}/status", response_model=SessionStatusResponse)
-async def session_status(session_id: str):
-    if session_manager is None:
-        raise HTTPException(500, "Server not initialized")
-
-    status = session_manager.get_session_status(session_id)
+async def session_status(session_id: str, manager=Depends(get_session_manager)):
+    status = manager.get_session_status(session_id)
     if not status:
-        raise HTTPException(404, "Session not found")
+        raise SessionNotFoundError(session_id)
 
     return SessionStatusResponse(**status)

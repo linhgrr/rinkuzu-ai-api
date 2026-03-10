@@ -1,5 +1,13 @@
 """
-session.py — Session state management
+session.py — Session state management (SessionManager + SessionState).
+
+SessionManager handles:
+  - Model loading (SAINT + DQN)
+  - Session lifecycle (create, get, status)
+  - Knowledge graph and mastery queries
+
+Exercise-related logic (generation, submission, prefetch) is delegated
+to services/exercise_service.py.
 """
 
 import uuid
@@ -7,15 +15,13 @@ import time
 import asyncio
 from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import torch
+from loguru import logger
 
 from .models import load_saint_model, load_dqn_model, DuelingQNetwork, SaintModel
 from .environment import AdaptiveLearningEnv
-from .agent import select_action, decode_action
-from .exercise_gen import generate_exercise, generate_theory
 from . import mongo_store
 
 
@@ -54,16 +60,27 @@ class SessionState:
     total_answered: int = 0
     job_id: Optional[str] = None
     created_at: float = field(default_factory=time.time)
-    status: str = "active"  # active, completed
+    status: str = "active"
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     concept_theories: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     _prefetch_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    # Keys: "correct" | "incorrect"
-    # Value: {"concept_idx": int, "bloom_level": int, "exercise_data": dict}
 
 
 class SessionManager:
-    """In-memory session storage and lifecycle management."""
+    """Session lifecycle management and knowledge graph queries.
+
+    Responsibilities:
+      - Load SAINT + DQN models once.
+      - Create / retrieve sessions.
+      - Query session status, knowledge graph, mastery matrix, concept details.
+
+    Exercise flow (generation, submission, prefetch) is handled by
+    ExerciseService, which receives SessionState objects from this manager.
+    """
+
+    # Sentence-transformer for encoding new concepts (lazy-loaded)
+    _text_encoder = None
+    _TEXT_MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"
 
     def __init__(
         self,
@@ -81,21 +98,29 @@ class SessionManager:
         self._saint_model, self._concept_map, self._saint_config = load_saint_model(saint_path, self._device)
         self._q_net, self._dqn_info = load_dqn_model(dqn_path, self._device)
 
-        # Store concept metadata
         self._concepts_data = concepts_data or {}
         self._prereq_data = prereq_data or []
-
-        # Build prereq graph (concept_idx → list of prereq_idx)
         self._prereq_graph = self._build_prereq_graph()
-
-        # Build concept names/definitions lookup
         self._concept_names, self._concept_defs = self._build_concept_info()
 
         # Active sessions
         self._sessions: Dict[str, SessionState] = {}
 
-        # Thread pool for blocking LLM calls
-        self._llm_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="llm")
+    # ── Properties ──────────────────────────────────────────
+
+    @property
+    def concept_map(self):
+        return self._concept_map
+
+    @property
+    def concept_names(self):
+        return self._concept_names
+
+    @property
+    def n_concepts(self):
+        return len(self._concept_map)
+
+    # ── Internal helpers ────────────────────────────────────
 
     def _build_prereq_graph(self) -> Dict[int, List[int]]:
         graph: Dict[int, List[int]] = {}
@@ -110,7 +135,7 @@ class SessionManager:
             else:
                 dropped += 1
         if dropped:
-            print(f"[Session] _build_prereq_graph: dropped {dropped} edges due to unresolved concept IDs")
+            logger.warning(f"[Session] _build_prereq_graph: dropped {dropped} edges")
         return graph
 
     def _build_concept_info(self):
@@ -125,7 +150,6 @@ class SessionManager:
             names[cid] = name
             defs[cid] = cdata.get("definition", "")
 
-        # Ensure all concepts have entries
         for idx in range(len(self._concept_map)):
             cid = id_to_concept.get(idx, str(idx))
             if cid not in names:
@@ -133,6 +157,24 @@ class SessionManager:
                 defs[cid] = ""
 
         return names, defs
+
+    @classmethod
+    def _get_text_encoder(cls):
+        """Lazy-load sentence-transformer (same model used in SAINT training)."""
+        if cls._text_encoder is None:
+            from sentence_transformers import SentenceTransformer
+            logger.info(f"[Session] Loading text encoder: {cls._TEXT_MODEL_NAME}")
+            cls._text_encoder = SentenceTransformer(cls._TEXT_MODEL_NAME)
+            logger.info("[Session] ✓ Text encoder ready")
+        return cls._text_encoder
+
+    def _encode_concepts(self, concept_names_ordered: List[str]) -> np.ndarray:
+        """Encode concept names into 768d embeddings."""
+        encoder = self._get_text_encoder()
+        embeddings = encoder.encode(concept_names_ordered, show_progress_bar=False, batch_size=32)
+        return np.array(embeddings, dtype=np.float32)
+
+    # ── Session Lifecycle ───────────────────────────────────
 
     def create_session(self, max_steps: int = 50) -> SessionState:
         """Create a new learning session."""
@@ -163,348 +205,157 @@ class SessionManager:
         )
 
         self._sessions[session_id] = session
-
-        # Eagerly pre-generate the first exercise in the background
-        try:
-            asyncio.get_event_loop()
-            asyncio.create_task(self._eager_generate_first_exercise(session))
-        except RuntimeError:
-            pass  # No event loop — called from sync context
-
         return session
 
     def get_session(self, session_id: str) -> Optional[SessionState]:
         return self._sessions.get(session_id)
 
-    async def _eager_generate_first_exercise(self, session: SessionState):
-        """Background: pre-generate the first exercise when a session starts/resumes.
+    async def create_session_from_pipeline(
+        self,
+        concepts_data: Dict[str, Any],
+        concept_map: Dict[str, int],
+        prereq_edges: List[Dict],
+        max_steps: int = 50,
+        precomputed_embeddings: Optional[List[List[float]]] = None,
+        job_id: Optional[str] = None,
+    ) -> SessionState:
+        """Create a learning session from PDF pipeline output."""
+        session_id = str(uuid.uuid4())[:8]
 
-        If it's step 0, forces concept_idx=0, bloom_level=1.
-        Otherwise (resumed session), uses D3QN to predict the next concept.
-        """
-        try:
-            env_stats = session.env.get_session_stats()
-            current_step = env_stats.get("step", 0)
-
-            if current_step == 0:
-                concept_idx = 0
-                bloom_level = 1
+        # Build prereq graph
+        prereq_graph: Dict[int, List[int]] = {}
+        dropped_edges = 0
+        for edge in prereq_edges:
+            src = str(edge.get("source", "")).strip()
+            tgt = str(edge.get("target", "")).strip()
+            if src in concept_map and tgt in concept_map:
+                tgt_idx = concept_map[tgt]
+                src_idx = concept_map[src]
+                prereq_graph.setdefault(tgt_idx, []).append(src_idx)
             else:
-                # Use D3QN to predict the next step exactly as get_next_concept will
-                masks = session.env.action_masks()
-                action_id = select_action(
-                    session.q_net, session.current_obs, masks, session.device,
-                    n_concepts=session.env.n_concepts,
-                )
-                concept_idx, bloom_level = decode_action(action_id)
+                dropped_edges += 1
+        if dropped_edges:
+            logger.warning(f"[Session] create_session_from_pipeline: dropped {dropped_edges}/{len(prereq_edges)} edges")
 
-            id_to_concept = {v: k for k, v in session.concept_map.items()}
-            concept_id = id_to_concept.get(concept_idx, str(concept_idx))
-            concept_name = session.concept_names.get(concept_id, concept_id)
-            concept_def = session.concept_definitions.get(concept_id, "")
+        # Build names/defs
+        names: Dict[str, str] = {}
+        defs: Dict[str, str] = {}
+        theories: Dict[str, Dict[str, Any]] = {}
+        id_to_concept = {v: k for k, v in concept_map.items()}
+        for cid_raw, cdata in concepts_data.items():
+            cid = str(cid_raw)
+            if cid not in concept_map:
+                continue
+            name = cdata.get("name", cid)
+            if not name or str(name).lower() == "nan":
+                name = cid
+            names[cid] = name
+            defs[cid] = cdata.get("definition", "")
+            if "theory" in cdata:
+                theories[cid] = cdata["theory"]
+        for idx in range(len(concept_map)):
+            cid = id_to_concept.get(idx, str(idx))
+            if cid not in names:
+                names[cid] = cid
+                defs[cid] = ""
 
-            print(f"[Eager] Pre-generating first exercise: {concept_name} (Bloom {bloom_level})...")
+        # Build concept embeddings for SAINT
+        n_pipeline = len(concept_map)
+        if precomputed_embeddings is not None:
+            logger.info(f"[Session] Using precomputed embeddings ({len(precomputed_embeddings)} concepts)")
+            raw_emb = np.array(precomputed_embeddings, dtype=np.float32)
+        else:
+            ordered_names = []
+            for idx in range(n_pipeline):
+                cid = id_to_concept.get(idx, str(idx))
+                name = names.get(cid, cid)
+                definition = defs.get(cid, "")
+                text = f"{name}: {definition}" if definition else name
+                ordered_names.append(text)
+            logger.info(f"[Session] Encoding {n_pipeline} new concepts...")
+            raw_emb = self._encode_concepts(ordered_names)
+            logger.info(f"[Session] ✓ Embeddings shape: {raw_emb.shape}")
 
-            loop = asyncio.get_event_loop()
-            exercise_data = await loop.run_in_executor(
-                self._llm_executor,
-                generate_exercise, concept_name, concept_def, bloom_level,
-            )
+        emb_dim = raw_emb.shape[1]
+        padded = np.zeros((n_pipeline + 1, emb_dim), dtype=np.float32)
+        padded[1:n_pipeline + 1] = raw_emb
+        external_embeddings = torch.from_numpy(padded).to(self._device)
 
-            if exercise_data:
-                # Store as a special prefetch entry that generate_exercise can pick up
-                session._prefetch_cache["eager"] = {
-                    "concept_idx": concept_idx,
-                    "bloom_level": bloom_level,
-                    "exercise_data": exercise_data,
-                }
-                print(f"[Eager] ✓ First exercise cached: {concept_name} (Bloom {bloom_level})")
-        except Exception as e:
-            print(f"[Eager] ✗ Failed to pre-generate first exercise: {e}")
-
-    async def get_next_concept(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Step 1: Use D3QN to select next concept+bloom. Returns concept info and bloom level."""
-        session = self._sessions.get(session_id)
-        if not session or session.status != "active":
-            return None
-
-        async with session._lock:
-            env = session.env
-            env_stats = env.get_session_stats()
-            current_step = env_stats.get("step", 0)
-
-            # ── Force first step: always concept 0 + Bloom 1 ───────────────────
-            if current_step == 0:
-                concept_idx = 0
-                bloom_level = 1
-                action_id = concept_idx * 6 + (bloom_level - 1)
-                print(f"\n{'═'*60}")
-                print(f"[Session] 🎯 STEP 0 — Forcing warm-up: concept_idx=0, bloom=1")
-            else:
-                masks = env.action_masks()
-                action_id = select_action(
-                    session.q_net, session.current_obs, masks, session.device,
-                    n_concepts=env.n_concepts,
-                )
-                concept_idx, bloom_level = decode_action(action_id)
-                print(f"\n{'═'*60}")
-                print(f"[Session] 🤖 D3QN selected action_id={action_id}")
-
-            id_to_concept = {v: k for k, v in session.concept_map.items()}
-            concept_id = id_to_concept.get(concept_idx, str(concept_idx))
-            concept_name = session.concept_names.get(concept_id, concept_id)
-            concept_def = session.concept_definitions.get(concept_id, "")
-
-            BLOOM_NAMES = {
-                1: "Remember", 2: "Understand", 3: "Apply",
-                4: "Analyze",  5: "Evaluate",  6: "Create",
-            }
-            print(f"[Session] Concept : [{concept_idx}] {concept_name}")
-            print(f"[Session] Bloom   : Level {bloom_level} ({BLOOM_NAMES.get(bloom_level, '?')})")
-            print(f"[Session] Step    : {current_step + 1}/{env_stats.get('max_steps', '?')}")
-            print(f"{'─'*60}")
-
-            session._pending_concept_idx = concept_idx
-            session._pending_bloom_level = bloom_level
-            session._pending_action = action_id
-            session.current_exercise = None  # Clear previous
-
-            return {
-                "concept_name": concept_name,
-                "concept_idx": concept_idx,
-                "bloom_level": bloom_level,
-                "bloom_label": BLOOM_NAMES.get(bloom_level, "Unknown"),
-                "step": env_stats["step"],
-                "max_steps": env_stats["max_steps"],
-            }
-
-    async def get_theory(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Step 2 (Optional): Generate theory if Bloom <= 2 based on pending concept."""
-        session = self._sessions.get(session_id)
-        if not session or not hasattr(session, '_pending_concept_idx'):
-            return None
-
-        concept_idx = session._pending_concept_idx
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
-        concept_id = id_to_concept.get(concept_idx, str(concept_idx))
-        
-        # Check if theory was pre-generated
-        if concept_id in session.concept_theories and session.concept_theories[concept_id]:
-            return session.concept_theories[concept_id]
-
-        concept_name = session.concept_names.get(concept_id, concept_id)
-        concept_def = session.concept_definitions.get(concept_id, "")
-
-        print(f"[Session] Fetching theory for {concept_name}...")
-        loop = asyncio.get_event_loop()
-        theory_data = await loop.run_in_executor(
-            self._llm_executor,
-            generate_theory, concept_name, concept_def,
+        env = AdaptiveLearningEnv(
+            saint_model=self._saint_model,
+            concept_map=concept_map,
+            prereq_graph=prereq_graph,
+            max_steps=max_steps,
+            mastery_threshold=0.75,
+            deterministic_train=False,
+            device=str(self._device),
+            external_embeddings=external_embeddings,
         )
-        
-        # Cache for future queries
-        session.concept_theories[concept_id] = theory_data
-        
-        return theory_data
+        obs, info = env.reset(seed=42)
 
-    async def generate_exercise(self, session_id: str) -> Optional[ExerciseRecord]:
-        """Step 3: Generate the actual exercise based on pending concept and bloom.
-
-        Checks the prefetch cache first. On cache miss, calls LLM.
-        After successful generation, fires a background prefetch for the next step.
-        """
-        session = self._sessions.get(session_id)
-        if not session or not hasattr(session, '_pending_concept_idx'):
-            return None
-
-        concept_idx = session._pending_concept_idx
-        bloom_level = session._pending_bloom_level
-
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
-        concept_id = id_to_concept.get(concept_idx, str(concept_idx))
-        concept_name = session.concept_names.get(concept_id, concept_id)
-
-        # --- Check prefetch cache ---
-        exercise_data = None
-        for branch in ("eager", "correct", "incorrect"):
-            cached = session._prefetch_cache.get(branch)
-            if (cached
-                    and cached["concept_idx"] == concept_idx
-                    and cached["bloom_level"] == bloom_level):
-                exercise_data = cached["exercise_data"]
-                session._prefetch_cache.clear()
-                print(f"[Session] ⚡ Cache HIT ({branch}) for {concept_name} (Bloom {bloom_level})")
-                break
-
-        # --- Cache miss → generate via LLM ---
-        if exercise_data is None:
-            session._prefetch_cache.clear()
-            concept_def = session.concept_definitions.get(concept_id, "")
-            print(f"[Session] Generating exercise for {concept_name} (Bloom {bloom_level})...")
-            loop = asyncio.get_event_loop()
+        # Load previous history from MongoDB
+        prev_history = []
+        total_correct = 0
+        total_answered = 0
+        if job_id:
             try:
-                exercise_data = await loop.run_in_executor(
-                    self._llm_executor,
-                    generate_exercise, concept_name, concept_def, bloom_level,
-                )
+                prev_session = await mongo_store.find_latest_session_for_job(job_id)
+                if prev_session and prev_session.get("exercise_history"):
+                    prev_history = prev_session["exercise_history"]
+                    total_correct = prev_session.get("total_correct", 0)
+                    total_answered = prev_session.get("total_answered", 0)
+                    logger.info(f"[Session] Found previous session with {len(prev_history)} exercises")
+                else:
+                    logger.info(f"[Session] No previous session for job {job_id}, starting fresh")
             except Exception as e:
-                print(f"[Session] ✗ Exercise generation failed: {e}")
-                return None
+                logger.warning(f"[Session] Error loading previous session: {e}, starting fresh")
 
-            if not exercise_data:
-                print(f"[Session] ✗ Exercise generation returned None — aborting")
-                return None
+        # Inject history into environment
+        if prev_history:
+            concept_indices = [ex["concept_idx"] for ex in prev_history]
+            bloom_levels = [ex["bloom_level"] for ex in prev_history]
+            responses = [1 if ex.get("is_correct") else 0 for ex in prev_history]
+            env.inject_history(concept_indices, bloom_levels, responses)
+            obs = env._build_obs()
 
-        exercise = ExerciseRecord(
-            exercise_id=str(uuid.uuid4())[:8],
-            concept_idx=concept_idx,
-            concept_name=concept_name,
-            bloom_level=bloom_level,
-            question=exercise_data["question"],
-            options=exercise_data.get("options", {}),
-            correct_option=exercise_data.get("correct_option", "A"),
-            explanation="",
-            explanation_correct=exercise_data.get("explanation_correct", ""),
-            explanation_incorrect=exercise_data.get("explanation_incorrect", ""),
-            theory=None,
-        )
-        session.current_exercise = exercise
-
-        # --- Fire background prefetch for next step ---
-        try:
-            asyncio.create_task(self._prefetch_next_exercises(session_id))
-        except Exception as e:
-            print(f"[Prefetch] Failed to schedule prefetch: {e}")
-
-        return exercise
-
-    async def _prefetch_next_exercises(self, session_id: str):
-        """Background: simulate both correct/incorrect paths IN PARALLEL and pre-generate exercises."""
-        session = self._sessions.get(session_id)
-        if not session or not hasattr(session, '_pending_action'):
-            return
-
-        action_id = session._pending_action
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
-
-        async def _prefetch_branch(is_correct: bool, branch: str):
-            try:
-                # 1. Snapshot env and simulate the answer
-                env_snap = session.env.create_snapshot()
-                obs, _, terminated, _, _ = env_snap.step(action_id, human_correct=is_correct)
-                if terminated:
-                    print(f"[Prefetch] {branch}: session would terminate — skipping")
-                    return
-
-                # 2. D3QN selects next concept+bloom on the simulated state
-                masks = env_snap.action_masks()
-                next_action = select_action(
-                    session.q_net, obs, masks, session.device,
-                    n_concepts=env_snap.n_concepts,
-                )
-                next_concept_idx, next_bloom = decode_action(next_action)
-
-                next_concept_id = id_to_concept.get(next_concept_idx, str(next_concept_idx))
-                next_concept_name = session.concept_names.get(next_concept_id, next_concept_id)
-                next_concept_def = session.concept_definitions.get(next_concept_id, "")
-
-                print(f"[Prefetch] {branch}: predicted next → {next_concept_name} (Bloom {next_bloom}). Generating...")
-
-                # 3. Generate exercise via LLM (in thread pool)
-                loop = asyncio.get_event_loop()
-                ex_data = await loop.run_in_executor(
-                    self._llm_executor,
-                    generate_exercise, next_concept_name, next_concept_def, next_bloom,
-                )
-
-                if ex_data:
-                    session._prefetch_cache[branch] = {
-                        "concept_idx": next_concept_idx,
-                        "bloom_level": next_bloom,
-                        "exercise_data": ex_data,
-                    }
-                    print(f"[Prefetch] ✓ {branch} cached: {next_concept_name} (Bloom {next_bloom})")
-
-            except Exception as e:
-                print(f"[Prefetch] ✗ {branch} failed: {e}")
-
-        # Run both branches in parallel
-        await asyncio.gather(
-            _prefetch_branch(True, "correct"),
-            _prefetch_branch(False, "incorrect"),
+        session = SessionState(
+            session_id=session_id,
+            env=env,
+            q_net=self._q_net,
+            device=self._device,
+            concept_map=concept_map,
+            concept_names=names,
+            concept_definitions=defs,
+            prereq_graph=prereq_graph,
+            current_obs=obs,
+            total_correct=total_correct,
+            total_answered=total_answered,
+            job_id=job_id,
+            concept_theories=theories,
         )
 
-    async def submit_answer(self, session_id: str, answer: str) -> Optional[Dict[str, Any]]:
-        """Process user's answer, update environment, return result."""
-        session = self._sessions.get(session_id)
-        if not session or not session.current_exercise:
-            return None
+        # Restore exercise history records
+        for ex in prev_history:
+            session.exercise_history.append(ExerciseRecord(
+                exercise_id=ex.get("exercise_id", ""),
+                concept_idx=ex["concept_idx"],
+                concept_name=ex.get("concept_name", ""),
+                bloom_level=ex["bloom_level"],
+                question=ex.get("question", ""),
+                options=ex.get("options", {}),
+                correct_option=ex.get("correct_option", ""),
+                explanation=ex.get("explanation", ""),
+                explanation_correct=ex.get("explanation_correct", ""),
+                explanation_incorrect=ex.get("explanation_incorrect", ""),
+                user_answer=ex.get("user_answer"),
+                is_correct=ex.get("is_correct"),
+                timestamp=ex.get("timestamp", 0),
+            ))
 
-        exercise = session.current_exercise
-        is_correct = answer.strip().upper() == exercise.correct_option.strip().upper()
-        verdict = "✓ ĐÚNG" if is_correct else "✗ SAI"
+        self._sessions[session_id] = session
+        return session
 
-        print(f"\n{'═'*60}")
-        print(f"[Session] 📝 submit_answer")
-        print(f"  Concept  : {exercise.concept_name} (idx={exercise.concept_idx})")
-        print(f"  Answer   : {answer} → Correct: {exercise.correct_option} → {verdict}")
-
-        # Use pre-generated explanations
-        explanation = exercise.explanation_correct if is_correct else exercise.explanation_incorrect
-
-        # Update exercise record
-        exercise.explanation = explanation
-        exercise.user_answer = answer
-        exercise.is_correct = is_correct
-        session.exercise_history.append(exercise)
-
-        if is_correct:
-            session.total_correct += 1
-        session.total_answered += 1
-
-        # Step environment with human answer
-        action_id = getattr(session, "_pending_action", 0)
-        obs, reward, terminated, truncated, info = session.env.step(action_id, human_correct=is_correct)
-        session.current_obs = obs
-        session.current_exercise = None
-
-        if terminated:
-            session.status = "completed"
-
-        # Get updated mastery
-        mastery_matrix = session.env.get_mastery_matrix()
-        concept_mastery = session.env.get_concept_mastery()
-        mastery_val = float(concept_mastery[exercise.concept_idx])
-        avg_mastery  = float(np.mean(concept_mastery))
-
-        print(f"[Session] Mastery after: {mastery_val:.3f} | Avg: {avg_mastery:.3f} | Reward: {reward:.3f}")
-        print(f"[Session] Step  : {info['step']} | Session status: {session.status}")
-        print(f"{'═'*60}")
-
-        # Persist session to MongoDB (fire-and-forget, non-blocking)
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(mongo_store.save_session(session))
-        except Exception as _mongo_err:
-            print(f"[MongoDB] save_session schedule error: {_mongo_err}")
-
-        return {
-            "is_correct": is_correct,
-            "explanation": explanation,
-            "correct_option": exercise.correct_option,
-            "concept_name": exercise.concept_name,
-            "bloom_level": exercise.bloom_level,
-            "mastery_after": mastery_val,
-            "avg_mastery": avg_mastery,
-            "step": info["step"],
-            "session_completed": session.status == "completed",
-            "stats": {
-                "total_correct": session.total_correct,
-                "total_answered": session.total_answered,
-                "accuracy": session.total_correct / max(session.total_answered, 1),
-            },
-        }
+    # ── Query Methods ───────────────────────────────────────
 
     def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get full session status."""
@@ -513,8 +364,6 @@ class SessionManager:
             return None
 
         env_stats = session.env.get_session_stats()
-        concept_mastery = session.env.get_concept_mastery()
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
 
         return {
             "session_id": session_id,
@@ -569,7 +418,6 @@ class SessionManager:
                 visited=(idx in session.env._visited),
                 prereq_ok=bool(prereq_ok_mask[idx]),
             )
-
             nodes.append({
                 "id": cid,
                 "index": idx,
@@ -657,206 +505,3 @@ class SessionManager:
             "visited": idx in session.env._visited,
             "visit_count": session.env._visit_counts.get(idx, 0),
         }
-
-    # Sentence-transformer model for encoding new concepts (lazy-loaded)
-    _text_encoder = None
-    _TEXT_MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"
-
-    @classmethod
-    def _get_text_encoder(cls):
-        """Lazy-load sentence-transformer (same model used in SAINT training)."""
-        if cls._text_encoder is None:
-            from sentence_transformers import SentenceTransformer
-            print(f"[Session] Loading text encoder: {cls._TEXT_MODEL_NAME}")
-            cls._text_encoder = SentenceTransformer(cls._TEXT_MODEL_NAME)
-            print("[Session] ✓ Text encoder ready")
-        return cls._text_encoder
-
-    def _encode_concepts(self, concept_names_ordered: List[str]) -> np.ndarray:
-        """Encode concept names into 768d embeddings using sentence-transformers."""
-        encoder = self._get_text_encoder()
-        embeddings = encoder.encode(concept_names_ordered, show_progress_bar=False, batch_size=32)
-        return np.array(embeddings, dtype=np.float32)
-
-    async def create_session_from_pipeline(
-        self,
-        concepts_data: Dict[str, Any],
-        concept_map: Dict[str, int],
-        prereq_edges: List[Dict],
-        max_steps: int = 50,
-        precomputed_embeddings: Optional[List[List[float]]] = None,
-        job_id: Optional[str] = None,
-    ) -> SessionState:
-        """Create a learning session from PDF pipeline output.
-
-        Generates proper sentence-transformer embeddings for new concepts
-        so SAINT can make meaningful predictions. If precomputed_embeddings
-        are provided (from pipeline cache/MongoDB), uses those instead.
-        
-        If a previous session exists for this job_id in MongoDB, loads
-        the exercise history so SAINT resumes from saved progress.
-        """
-        session_id = str(uuid.uuid4())[:8]
-
-        # Build prereq graph for pipeline concepts
-        prereq_graph: Dict[int, List[int]] = {}
-        dropped_edges = 0
-        for edge in prereq_edges:
-            src = str(edge.get("source", "")).strip()
-            tgt = str(edge.get("target", "")).strip()
-            if src in concept_map and tgt in concept_map:
-                tgt_idx = concept_map[tgt]
-                src_idx = concept_map[src]
-                prereq_graph.setdefault(tgt_idx, []).append(src_idx)
-            else:
-                dropped_edges += 1
-        if dropped_edges:
-            print(
-                f"[Session] create_session_from_pipeline: dropped {dropped_edges}/{len(prereq_edges)} "
-                f"edges due to unresolved IDs"
-            )
-
-        # Build names/defs from pipeline
-        names: Dict[str, str] = {}
-        defs: Dict[str, str] = {}
-        theories: Dict[str, Dict[str, Any]] = {}
-        id_to_concept = {v: k for k, v in concept_map.items()}
-        for cid_raw, cdata in concepts_data.items():
-            cid = str(cid_raw)
-            if cid not in concept_map:
-                continue
-            name = cdata.get("name", cid)
-            if not name or str(name).lower() == "nan":
-                name = cid
-            names[cid] = name
-            defs[cid] = cdata.get("definition", "")
-            if "theory" in cdata:
-                theories[cid] = cdata["theory"]
-        for idx in range(len(concept_map)):
-            cid = id_to_concept.get(idx, str(idx))
-            if cid not in names:
-                names[cid] = cid
-                defs[cid] = ""
-
-        # --- Build concept embeddings for SAINT ---
-        n_pipeline = len(concept_map)
-        if precomputed_embeddings is not None:
-            print(f"[Session] Using precomputed embeddings ({len(precomputed_embeddings)} concepts)")
-            raw_emb = np.array(precomputed_embeddings, dtype=np.float32)
-        else:
-            # Encode concept names using sentence-transformers
-            ordered_names = []
-            for idx in range(n_pipeline):
-                cid = id_to_concept.get(idx, str(idx))
-                name = names.get(cid, cid)
-                definition = defs.get(cid, "")
-                # Use "name: definition" for richer embedding
-                text = f"{name}: {definition}" if definition else name
-                ordered_names.append(text)
-            print(f"[Session] Encoding {n_pipeline} new concepts with sentence-transformers...")
-            raw_emb = self._encode_concepts(ordered_names)
-            print(f"[Session] ✓ Embeddings shape: {raw_emb.shape}")
-
-        # Build padded embedding tensor: row 0 = PAD (zeros), rows 1..K = concept embeddings
-        emb_dim = raw_emb.shape[1]  # 768
-        padded = np.zeros((n_pipeline + 1, emb_dim), dtype=np.float32)
-        padded[1:n_pipeline + 1] = raw_emb
-        external_embeddings = torch.from_numpy(padded).to(self._device)
-
-        # Create env with external embeddings
-        env = AdaptiveLearningEnv(
-            saint_model=self._saint_model,
-            concept_map=concept_map,
-            prereq_graph=prereq_graph,
-            max_steps=max_steps,
-            mastery_threshold=0.75,
-            deterministic_train=False,
-            device=str(self._device),
-            external_embeddings=external_embeddings,
-        )
-        obs, info = env.reset(seed=42)
-
-        # --- Load previous history from MongoDB ---
-        prev_history = []
-        total_correct = 0
-        total_answered = 0
-        if job_id:
-            try:
-                prev_session = await mongo_store.find_latest_session_for_job(job_id)
-                if prev_session and prev_session.get("exercise_history"):
-                    prev_history = prev_session["exercise_history"]
-                    total_correct = prev_session.get("total_correct", 0)
-                    total_answered = prev_session.get("total_answered", 0)
-                    print(f"[Session] Found previous session with {len(prev_history)} exercises ")
-                    print(f"[Session]   Accuracy: {total_correct}/{total_answered} "
-                          f"({total_correct/max(total_answered,1)*100:.0f}%)")
-                else:
-                    print(f"[Session] No previous session found for job {job_id}, starting fresh")
-            except Exception as e:
-                print(f"[Session] Error loading previous session: {e}, starting fresh")
-
-        # Inject history into environment
-        if prev_history:
-            concept_indices = [ex["concept_idx"] for ex in prev_history]
-            bloom_levels = [ex["bloom_level"] for ex in prev_history]
-            responses = [1 if ex.get("is_correct") else 0 for ex in prev_history]
-            env.inject_history(concept_indices, bloom_levels, responses)
-            obs = env._build_obs()  # rebuild observation after injection
-
-        session = SessionState(
-            session_id=session_id,
-            env=env,
-            q_net=self._q_net,
-            device=self._device,
-            concept_map=concept_map,
-            concept_names=names,
-            concept_definitions=defs,
-            prereq_graph=prereq_graph,
-            current_obs=obs,
-            total_correct=total_correct,
-            total_answered=total_answered,
-            job_id=job_id,
-            concept_theories=theories,
-        )
-
-        # Restore exercise history records
-        for ex in prev_history:
-            session.exercise_history.append(ExerciseRecord(
-                exercise_id=ex.get("exercise_id", ""),
-                concept_idx=ex["concept_idx"],
-                concept_name=ex.get("concept_name", ""),
-                bloom_level=ex["bloom_level"],
-                question=ex.get("question", ""),
-                options=ex.get("options", {}),
-                correct_option=ex.get("correct_option", ""),
-                explanation=ex.get("explanation", ""),
-                explanation_correct=ex.get("explanation_correct", ""),
-                explanation_incorrect=ex.get("explanation_incorrect", ""),
-                user_answer=ex.get("user_answer"),
-                is_correct=ex.get("is_correct"),
-                timestamp=ex.get("timestamp", 0),
-            ))
-
-        self._sessions[session_id] = session
-
-        # Eagerly pre-generate the next exercise in the background
-        # (works for both fresh sessions and resumed sessions)
-        try:
-            asyncio.get_event_loop()
-            asyncio.create_task(self._eager_generate_first_exercise(session))
-        except Exception as e:
-            print(f"[Eager] Failed to schedule for resumed/new session: {e}")
-
-        return session
-
-    @property
-    def concept_map(self):
-        return self._concept_map
-
-    @property
-    def concept_names(self):
-        return self._concept_names
-
-    @property
-    def n_concepts(self):
-        return len(self._concept_map)

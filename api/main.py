@@ -1,79 +1,78 @@
 """
-main.py — FastAPI app entry point for Adaptive Learning Demo
+main.py — FastAPI app entry point for Adaptive Learning Demo.
 """
 
-import os
-from pathlib import Path
+import asyncio
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 
-# Load .env
-load_dotenv(Path(__file__).parent.parent / ".env")
-load_dotenv(Path(__file__).parent / ".env")
-
+from .config import get_settings
+from .exceptions import register_exception_handlers
 from .core.session import SessionManager
 from .core.exercise_gen import init_llm
 from .core import mongo_store
+from .services.exercise_service import ExerciseService
 from .routers import session as session_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
 from .routers import history as history_router
 
-# Paths to pre-trained models
-BASE_DIR = Path(__file__).parent.parent
-MODELS_DIR = BASE_DIR / "models"
-SAINT_PATH = str(MODELS_DIR / "saint_best.pt")
-DQN_PATH = str(MODELS_DIR / "dqn_best.pt")
-
-
-# ── Temporary flag: set to True to re-enable SAINT + DQN loading ──
-LOAD_MODELS = True
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: load models, init components."""
-    print("=" * 60)
-    print("  ALSS-LEPC Full Demo — Starting up...")
-    print("=" * 60)
+    settings = get_settings()
 
-    # Init LLM (OpenAI-compatible local endpoint)
-    init_llm()
+    logger.info("=" * 60)
+    logger.info("  ALSS-LEPC Full Demo — Starting up...")
+    logger.info("=" * 60)
 
-    # Init MongoDB persistence
-    print("[0/2] Connecting to MongoDB...")
-    await mongo_store.init_mongo()
+    # Init LLM
+    init_llm(
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
+        api_key=settings.llm_api_key,
+    )
 
-    if LOAD_MODELS:
-        # Create session manager (loads SAINT + DQN models)
-        print("[1/2] Loading SAINT + DQN models...")
+    # Init MongoDB
+    logger.info("[0/2] Connecting to MongoDB...")
+    await mongo_store.init_mongo(mongo_url=settings.mongo_url)
+
+    # Create session repo reference for ExerciseService
+    session_repo = mongo_store.get_session_repo()
+
+    if settings.load_models:
+        logger.info("[1/2] Loading SAINT + DQN models...")
         manager = SessionManager(
-            saint_path=SAINT_PATH,
-            dqn_path=DQN_PATH,
+            saint_path=settings.saint_path,
+            dqn_path=settings.dqn_path,
         )
-        print(f"  SAINT loaded: {manager.n_concepts} concepts")
-        print(f"  DQN loaded: ready for action selection")
+        logger.info(f"  SAINT loaded: {manager.n_concepts} concepts")
+        logger.info("  DQN loaded: ready for action selection")
+
+        # Create ExerciseService with repository dependency
+        exercise_service = ExerciseService(session_repo=session_repo)
+
+        # Store reference for eager prefetch access from routers
+        manager._exercise_service = exercise_service
     else:
-        print("[1/2] Model loading DISABLED (LOAD_MODELS=False) — skipping SAINT + DQN")
+        logger.info("[1/2] Model loading DISABLED — skipping")
         manager = None
+        exercise_service = None
 
-    # Inject into routers
-    session_router.session_manager = manager
-    knowledge_router.session_manager = manager
-    pipeline_router.session_manager = manager
-
-    print("[2/2] Server ready!")
-    print("=" * 60)
-
-    # Store in app state
+    # Store in app state — accessed by dependencies.py
     app.state.session_manager = manager
+    app.state.exercise_service = exercise_service
+
+    logger.info("[2/2] Server ready!")
+    logger.info("=" * 60)
 
     yield
 
-    print("Shutting down...")
+    logger.info("Shutting down...")
 
 
 app = FastAPI(
@@ -82,6 +81,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Register custom exception handlers
+register_exception_handlers(app)
 
 # CORS
 app.add_middleware(
@@ -107,6 +109,8 @@ async def health():
 @app.get("/api/info")
 async def info():
     manager = app.state.session_manager
+    if not manager:
+        return {"error": "Models not loaded"}
     return {
         "n_concepts": manager.n_concepts,
         "concept_names": {

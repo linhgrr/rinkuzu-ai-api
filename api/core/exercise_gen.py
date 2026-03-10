@@ -1,20 +1,12 @@
 """
 exercise_gen.py — LLM-powered exercise generation and answer evaluation.
-
-Uses LangChain with an OpenAI-compatible local API endpoint.
-- generate_exercise: Native JSON Schema structured output
-- evaluate_answer:   Native JSON Schema structured output
-- generate_theory:   Native JSON Schema structured output
 """
 
-import json
-import os
 import time
 from typing import Optional, Dict, Any, Literal, List
 
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
 from loguru import logger
 
 # ---------------------------------------------------------------------------
@@ -72,7 +64,6 @@ from llm import get_llm
 
 _llm: Optional[ChatOpenAI] = None          # plain text invocation
 _structured_exercise_llm = None            # with_structured_output for exercise
-_structured_eval_llm = None                # with_structured_output for evaluation
 _structured_theory_llm = None              # with_structured_output for theory
 
 
@@ -82,20 +73,21 @@ def init_llm(
     api_key: Optional[str] = None,
 ):
     """Initialize ChatOpenAI pointing to an OpenAI-compatible endpoint."""
-    global _llm, _structured_exercise_llm, _structured_eval_llm, _structured_theory_llm
+    global _llm, _structured_exercise_llm, _structured_theory_llm
 
-    # get_llm already handles environment variables and normalization
+    # get_llm already handles normalization
     _llm = get_llm(temperature=0.3, base_url=base_url, model=model, api_key=api_key)
 
-    print(f"[LLM] Connecting with model={_llm.model_name}")
+    logger.info(f"[LLM] Connecting with model={_llm.model_name}")
 
     try:
         _structured_exercise_llm = _llm.with_structured_output(ExerciseOutput, method="json_schema")
         _structured_theory_llm = _llm.with_structured_output(TheoryOutput, method="json_schema")
     except Exception as e:
-        print(f"[LLM] ⚠ Structured chain init failed: {e}")
+        logger.warning(f"[LLM] ⚠ Structured chain init failed: {e}")
 
-    print("[LLM] ✓ Ready — structured chains initialized.")
+    logger.info("[LLM] ✓ Ready — structured chains initialized.")
+
 
 def init_gemini(api_key: Optional[str] = None):
     """Backward-compatible wrapper — delegates to init_llm."""
@@ -127,11 +119,8 @@ def generate_exercise(
 ) -> Optional[Dict[str, Any]]:
     """Generate a multiple-choice exercise via LLM with strict json_schema struct output."""
     bloom_label = BLOOM_VERBS.get(bloom_level, f"Level {bloom_level}")
-    print(f"\n{'─'*60}")
-    print("[LLM] ▶ generate_exercise called")
-    print(f"  Concept  : {concept_name}")
-    print(f"  Bloom    : Level {bloom_level} — {bloom_label}")
-    print(f"  Def.     : {concept_definition[:120]}{'...' if len(concept_definition) > 120 else ''}")
+    
+    logger.info(f"[LLM-Gen] Concept: {concept_name} | Bloom: {bloom_label}")
 
     if _structured_exercise_llm is None:
         raise ValueError("[LLM] ⚠ LLM not initialized — generation failed")
@@ -155,25 +144,21 @@ def generate_exercise(
 
     for attempt in range(1, max_retries + 1):
         try:
-            print(f"[LLM] ⏳ generate_exercise attempt {attempt}/{max_retries}")
+            logger.debug(f"[LLM] ⏳ generate_exercise attempt {attempt}/{max_retries}")
             
             result = _structured_exercise_llm.invoke(prompt_base)
             if not isinstance(result, ExerciseOutput):
                 raise ValueError(f"LLM returned invalid type: {type(result)}")
 
             elapsed = time.time() - t0
-            print(f"[LLM] ✓ Exercise generated in {elapsed:.2f}s")
-            print(f"  Q: {result.question[:120]}{'...' if len(result.question) > 120 else ''}")
-            print(f"  Correct: {result.correct_option}")
-            print(f"{'─'*60}")
+            logger.info(f"[LLM] ✓ Exercise generated in {elapsed:.2f}s")
             return _exercise_to_dict(result)
 
         except Exception as e:
-            print(f"[LLM] ⚠ generate_exercise attempt {attempt} failed: {e}")
+            logger.warning(f"[LLM] ⚠ attempt {attempt} failed: {e}")
 
     elapsed = time.time() - t0
-    print(f"[LLM] ✗ generate_exercise failed after {elapsed:.2f}s")
-    print(f"{'─'*60}")
+    logger.error(f"[LLM] ✗ generate_exercise failed after {elapsed:.2f}s")
     raise RuntimeError("Failed to generate exercise after max retries")
 
 
@@ -182,9 +167,7 @@ def generate_theory(
     concept_definition: str,
 ) -> Optional[Dict[str, Any]]:
     """Generate a concise theory summary and examples via LLM using robust json schema."""
-    print(f"\n{'─'*60}")
-    print("[LLM] ▶ generate_theory called")
-    print(f"  Concept: {concept_name}")
+    logger.info(f"[LLM-Theory] Concept: {concept_name}")
 
     if _structured_theory_llm is None:
         return {
@@ -206,22 +189,19 @@ def generate_theory(
 
     t0 = time.time()
     try:
-        print(f"[LLM] ⏳ generate_theory attempt")
+        logger.debug(f"[LLM] ⏳ generate_theory request sent")
         result = _structured_theory_llm.invoke(prompt)
         
         if not isinstance(result, TheoryOutput):
             raise ValueError(f"LLM returned invalid type: {type(result)}")
 
         elapsed = time.time() - t0
-        print(f"[LLM] ✓ Theory generated in {elapsed:.2f}s")
-        print(f"{'─'*60}")
+        logger.info(f"[LLM] ✓ Theory generated in {elapsed:.2f}s")
         return result.model_dump()
         
     except Exception as e:
-        print(f"[LLM] ✗ generate_theory failed: {e}")
+        logger.error(f"[LLM] ✗ generate_theory failed: {e}")
         return {
             "content": f"Lý thuyết cơ bản về {concept_name}: {concept_definition}",
             "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."]
         }
-
-

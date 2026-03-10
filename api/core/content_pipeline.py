@@ -1,12 +1,8 @@
 """
 content_pipeline.py — Content processor integration
-Imports from content-processor via sys.path to reuse:
-  PDF loading, text chunking, LLM concept extraction,
-  embedding, merge/dedup, prerequisite ranking, DAG construction.
 """
 
 import sys
-import os
 import uuid
 import time
 import asyncio
@@ -18,11 +14,11 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+from loguru import logger
 
 from . import mongo_store
+from ..config import get_settings
 
-# Add content-processor src to sys.path
-# content_pipeline.py is at full-demo/api/core/ → parents[2] = full-demo/
 CONTENT_PROCESSOR_SRC = str(
     Path(__file__).resolve().parents[2] / "content-processor" / "src"
 )
@@ -74,7 +70,6 @@ def get_job(job_id: str) -> Optional[PipelineJob]:
 
 
 def _populate_job_metrics_from_result(job: PipelineJob) -> None:
-    """Hydrate summary counters from job.result when loading cached/persisted data."""
     if not isinstance(job.result, dict):
         return
 
@@ -92,7 +87,6 @@ def _populate_job_metrics_from_result(job: PipelineJob) -> None:
     num_nodes = int(stats.get("num_nodes", len(concept_map)))
     num_edges = int(stats.get("num_edges", len(prereq_edges)))
 
-    # Keep concepts_extracted if already computed in runtime; otherwise infer.
     if job.concepts_extracted <= 0:
         job.concepts_extracted = len(concept_map)
     job.concepts_after_merge = max(job.concepts_after_merge, len(concept_map), num_nodes)
@@ -107,7 +101,6 @@ def _populate_job_metrics_from_result(job: PipelineJob) -> None:
 
 
 def _sanitize_concept_relations(all_concepts: List[Any]) -> Tuple[int, int]:
-    """Keep only valid PREREQUISITE relations to existing concept IDs."""
     concept_ids = {
         str(getattr(c, "concept_id", "")).strip()
         for c in all_concepts
@@ -144,21 +137,15 @@ def _sanitize_concept_relations(all_concepts: List[Any]) -> Tuple[int, int]:
 
 
 def get_s3_client():
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent.parent.parent / ".env")
-    
-    endpoint_url = os.getenv("S3_ENDPOINT_URL")
-    access_key = os.getenv("S3_ACCESS_KEY_ID")
-    secret_key = os.getenv("S3_SECRET_ACCESS_KEY")
-    
-    if not all([endpoint_url, access_key, secret_key]):
+    settings = get_settings()
+    if not settings.s3_available:
         return None
         
     return boto3.client(
         's3',
-        endpoint_url=endpoint_url,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
+        endpoint_url=settings.s3_endpoint_url,
+        aws_access_key_id=settings.s3_access_key_id,
+        aws_secret_access_key=settings.s3_secret_access_key,
         config=Config(s3={'addressing_style': 'path'})
     )
 
@@ -172,7 +159,6 @@ def calculate_file_hash(file_path: str) -> str:
 
 
 def _try_import_content_processor():
-    """Try to import content-processor modules. Returns (available, error_msg)."""
     try:
         from processors.factory import FileLoaderFactory
         from processors.chunkers.text_chunker import TextChunker
@@ -189,7 +175,7 @@ def _try_import_content_processor():
     except ImportError as e:
         import traceback
         err = f"{e}\n\nsys.path: {sys.path}\n\nTraceback:\n{traceback.format_exc()}"
-        print(f"Content processor not available: {err}")
+        logger.warning(f"Content processor not available: {err}")
         return False, str(e)
 
 
@@ -205,10 +191,6 @@ async def process_pdf(
     min_confidence: float = 0.6,
     apply_reduction: bool = True,
 ) -> PipelineJob:
-    """
-    Full pipeline: PDF -> concepts -> prerequisites -> DAG.
-    Runs in background, returns job immediately.
-    """
     job_id = str(uuid.uuid4())[:8]
     filename = Path(file_path).name
     if not subject_id:
@@ -229,7 +211,6 @@ async def process_pdf(
         )
         return job
 
-    # Run pipeline in background
     asyncio.create_task(_run_pipeline(job, file_path, prs_threshold, min_confidence, apply_reduction))
     return job
 
@@ -241,7 +222,6 @@ async def _run_pipeline(
     min_confidence: float,
     apply_reduction: bool,
 ):
-    """Execute the full 10-step content processing pipeline."""
     try:
         from processors.factory import FileLoaderFactory
         from processors.chunkers.text_chunker import TextChunker
@@ -255,11 +235,12 @@ async def _run_pipeline(
         from graph.builder import KnowledgeGraphBuilder
         from graph.cycle_removal import make_dag_with_llm
         from graph.reduction import apply_transitive_reduction
-        from config import settings
+        
+        # from config import settings as cp_settings (if needed inside content_processor)
 
         loop = asyncio.get_event_loop()
 
-        # --- Check MongoDB first ---
+        # Check MongoDB first
         mongo_doc = await mongo_store.load_pipeline_job(job.job_id)
         if (
             mongo_doc
@@ -283,13 +264,14 @@ async def _run_pipeline(
             job.current_step = "Loaded from MongoDB"
             job.progress = 1.0
             job.completed_at = mongo_doc.get("completed_at", time.time())
-            print(f"[Pipeline] Job {job.job_id} restored from MongoDB")
+            logger.info(f"[Pipeline] Job {job.job_id} restored from MongoDB")
             return
 
-        # --- Check S3 Cache ---
+        # Check S3 Cache
         file_hash = calculate_file_hash(file_path)
         s3_client = get_s3_client()
-        bucket_name = os.getenv("S3_BUCKET_NAME")
+        settings = get_settings()
+        bucket_name = settings.s3_bucket_name
         cache_key = f"cache/{file_hash}.json"
         
         if s3_client and bucket_name:
@@ -308,15 +290,14 @@ async def _run_pipeline(
                 job.current_step = "Loaded from S3 cache"
                 job.progress = 1.0
                 job.completed_at = time.time()
-                print(f"[Pipeline] Job {job.job_id} loaded from S3 cache {cache_key}")
-                # Also save to MongoDB so it shows up on the Dashboard
+                logger.info(f"[Pipeline] Job {job.job_id} loaded from S3 cache {cache_key}")
+                
                 saved = await mongo_store.save_pipeline_job(job)
                 if not saved:
                     raise RuntimeError("Failed to persist S3-cached pipeline result to MongoDB")
                 return
-            except Exception as e:
-                # Not found or error loading, continue normal pipeline
-                print(f"[Pipeline] Cache miss: {cache_key}")
+            except Exception:
+                logger.debug(f"[Pipeline] Cache miss: {cache_key}")
 
         # Step 1: Load & Chunk PDF
         job.status = PipelineStatus.LOADING
@@ -333,9 +314,7 @@ async def _run_pipeline(
         job.current_step = "Extracting concepts with LLM..."
         job.progress = 0.15
 
-        llm_client = get_llm(
-            temperature=0.1,
-        )
+        llm_client = get_llm(temperature=0.1)
         extraction_chain = ExtractionChain(client=llm_client)
 
         chunk_texts = [c.page_content for c in chunks]
@@ -346,13 +325,11 @@ async def _run_pipeline(
             job.subject_id,
         )
 
-        # Flatten concepts
         all_concepts = []
         for ext in extractions:
             if ext and hasattr(ext, "concepts"):
                 all_concepts.extend(ext.concepts)
 
-        # Postprocess
         all_concepts = postprocess_concepts(all_concepts)
         job.concepts_extracted = len(all_concepts)
         job.partial_graph = {
@@ -366,10 +343,16 @@ async def _run_pipeline(
         job.current_step = "Computing embeddings..."
         job.progress = 0.35
 
-        embed_client = EmbeddingClient(
-            model_name=settings.embedding_model,
-            batch_size=settings.embedding_batch_size,
-        )
+        # Assuming config.settings from content_processor has defaults
+        try:
+            from config import settings as cp_settings
+            model_name = cp_settings.embedding_model
+            batch_size = cp_settings.embedding_batch_size
+        except ImportError:
+            model_name = "keepitreal/vietnamese-sbert"
+            batch_size = 32
+            
+        embed_client = EmbeddingClient(model_name=model_name, batch_size=batch_size)
         await loop.run_in_executor(
             None, compute_embedding_for_concepts, all_concepts, embed_client
         )
@@ -433,16 +416,14 @@ async def _run_pipeline(
         }
         extracted_relation_count, dropped_relation_count = _sanitize_concept_relations(all_concepts)
         if dropped_relation_count:
-            print(
-                f"[Pipeline] Dropped {dropped_relation_count} invalid extracted relations "
-                f"(target missing/self-loop/non-PREREQUISITE)"
+            logger.info(
+                f"[Pipeline] Dropped {dropped_relation_count} invalid extracted relations"
             )
 
         builder = KnowledgeGraphBuilder(subject_id=job.subject_id)
         builder.add_concepts(all_concepts)
         graph = builder.get_graph()
 
-        # Guardrail: remove any placeholder/invalid nodes or non-prerequisite edges.
         edges_to_remove = []
         for src, tgt, data in list(graph.edges(data=True)):
             rel_type = str(data.get("relation_type", "PREREQUISITE")).upper()
@@ -450,17 +431,14 @@ async def _run_pipeline(
                 edges_to_remove.append((src, tgt))
         if edges_to_remove:
             graph.remove_edges_from(edges_to_remove)
-            print(f"[Pipeline] Removed {len(edges_to_remove)} invalid graph edges before optimization")
 
         orphan_nodes = [node_id for node_id in list(graph.nodes()) if node_id not in concept_ids_set]
         if orphan_nodes:
             graph.remove_nodes_from(orphan_nodes)
-            print(f"[Pipeline] Removed {len(orphan_nodes)} placeholder nodes not in concept list")
 
         existing_edges = set(graph.edges())
-        print(f"[Pipeline] Added {extracted_relation_count} relations from LLM extraction")
+        logger.debug(f"[Pipeline] Added {extracted_relation_count} relations from extraction")
 
-        # --- Add embedding-verified relations (Steps 5-6) ---
         verified_relation_count = 0
         for cid_a, cid_b, ev in verified:
             if cid_a not in concept_ids_set or cid_b not in concept_ids_set:
@@ -479,7 +457,6 @@ async def _run_pipeline(
                         existing_edges.add(edge)
                         verified_relation_count += 1
 
-        # Final cleanup after adding verified edges
         edges_to_remove = []
         for src, tgt, data in list(graph.edges(data=True)):
             rel_type = str(data.get("relation_type", "PREREQUISITE")).upper()
@@ -487,15 +464,10 @@ async def _run_pipeline(
                 edges_to_remove.append((src, tgt))
         if edges_to_remove:
             graph.remove_edges_from(edges_to_remove)
-            print(f"[Pipeline] Removed {len(edges_to_remove)} invalid graph edges after verification")
 
         orphan_nodes = [node_id for node_id in list(graph.nodes()) if node_id not in concept_ids_set]
         if orphan_nodes:
             graph.remove_nodes_from(orphan_nodes)
-            print(f"[Pipeline] Removed {len(orphan_nodes)} placeholder nodes after verification")
-
-        print(f"[Pipeline] Added {verified_relation_count} relations from embedding verification")
-        print(f"[Pipeline] Total graph edges: {graph.number_of_edges()}")
 
         def _update_partial_from_nx(nx_graph, c_list):
             c_map = {getattr(c, "concept_id", ""): getattr(c, "name", "") for c in c_list}
@@ -506,7 +478,7 @@ async def _run_pipeline(
         
         _update_partial_from_nx(graph, all_concepts)
 
-        # Step 8: Make DAG (remove cycles)
+        # Step 8: Make DAG
         job.status = PipelineStatus.OPTIMIZING
         job.current_step = "Removing cycles, building DAG..."
         job.progress = 0.90
@@ -527,7 +499,6 @@ async def _run_pipeline(
 
         job.progress = 0.95
 
-        # Build result
         stats = builder.get_stats()
         stats["num_nodes"] = graph.number_of_nodes()
         stats["num_edges"] = graph.number_of_edges()
@@ -537,15 +508,11 @@ async def _run_pipeline(
         stats["relations_verified"] = job.relations_verified
         job.graph_stats = stats
 
-        # Convert to format usable by SessionManager
         concepts_data = {}
         concept_map = {}
         for i, concept in enumerate(all_concepts):
             cid = concept.concept_id
-            if cid in concept_map:
-                raise ValueError(f"Duplicate concept_id after merge: {cid}")
             concept_map[cid] = i
-            # Save LLM-extracted relations alongside concept data
             concept_relations = []
             if hasattr(concept, "relations") and concept.relations:
                 for rel in concept.relations:
@@ -587,9 +554,9 @@ async def _run_pipeline(
                 lambda: text_model.encode(ordered_texts, show_progress_bar=False, batch_size=32)
             )
             concept_embeddings_list = concept_embeddings.tolist()
-            print(f"[Pipeline] ✓ Generated embeddings for {len(ordered_texts)} concepts ({concept_embeddings.shape})")
+            logger.info(f"[Pipeline] ✓ Generated embeddings for {len(ordered_texts)} concepts")
         except Exception as e:
-            print(f"[Pipeline] ⚠ Could not generate embeddings: {e}")
+            logger.warning(f"[Pipeline] ⚠ Could not generate embeddings: {e}")
             concept_embeddings_list = None
 
         # --- Generate concept theories ---
@@ -613,15 +580,14 @@ async def _run_pipeline(
                     tasks.append(_generate_theory_wrapper(cid, cdata["name"], cdata.get("definition", "")))
             
             if tasks:
-                print(f"[Pipeline] Generating theory for {len(tasks)} concepts...")
+                logger.info(f"[Pipeline] Generating theory for {len(tasks)} concepts...")
                 results = await asyncio.gather(*tasks)
                 for cid, theory in results:
                     concepts_data[cid]["theory"] = theory
-                print("[Pipeline] ✓ Theory generation complete")
+                logger.info("[Pipeline] ✓ Theory generation complete")
         except Exception as e:
-            print(f"[Pipeline] ⚠ Failed to pre-generate theory: {e}")
+            logger.warning(f"[Pipeline] ⚠ Failed to pre-generate theory: {e}")
 
-        # Graph nodes/edges for frontend
         nodes = []
         for cid, idx in concept_map.items():
             nodes.append({
@@ -649,12 +615,10 @@ async def _run_pipeline(
         job.progress = 1.0
         job.completed_at = time.time()
 
-        # --- Save to MongoDB ---
         saved = await mongo_store.save_pipeline_job(job)
         if not saved:
             raise RuntimeError("Failed to persist pipeline result to MongoDB")
 
-        # --- Save to S3 Cache ---
         if s3_client and bucket_name:
             try:
                 cache_data = json.dumps(job.result, ensure_ascii=False)
@@ -667,13 +631,11 @@ async def _run_pipeline(
                         ContentType='application/json'
                     )
                 )
-                print(f"[Pipeline] Uploaded result to S3 cache {cache_key}")
+                logger.info(f"[Pipeline] Uploaded result to S3 cache {cache_key}")
             except Exception as e:
-                print(f"[Pipeline] Failed to save S3 cache: {e}")
+                logger.warning(f"[Pipeline] Failed to save S3 cache: {e}")
 
-        print(f"[Pipeline] Job {job.job_id} completed: "
-              f"{job.concepts_after_merge} concepts, "
-              f"{len(prereq_edges)} prerequisite edges")
+        logger.info(f"[Pipeline] Job {job.job_id} completed: {job.concepts_after_merge} concepts")
 
     except Exception as e:
         import traceback
@@ -681,4 +643,4 @@ async def _run_pipeline(
         job.status = PipelineStatus.FAILED
         job.error_message = str(e)
         job.current_step = f"Error: {e}"
-        print(f"[Pipeline] Job {job.job_id} failed: {e}")
+        logger.error(f"[Pipeline] Job {job.job_id} failed: {e}")

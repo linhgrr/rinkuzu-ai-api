@@ -1,16 +1,13 @@
 """
-routers/pipeline.py — Content pipeline endpoints
-POST /api/pipeline/process — Upload PDF → run content processor → return concepts + graph
-GET  /api/pipeline/jobs/{job_id} — Poll job status
+routers/pipeline.py — Content pipeline endpoints.
 """
 
 import os
-
 import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 
 from ..core.content_pipeline import (
     process_pdf,
@@ -20,15 +17,17 @@ from ..core.content_pipeline import (
     CONTENT_PROCESSOR_ERROR,
 )
 from ..core import mongo_store
+from ..dependencies import get_session_manager
+from ..exceptions import (
+    ServiceUnavailableError,
+    PipelineNotFoundError,
+    PipelineNotCompletedError,
+)
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
-# Temp upload directory
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
-
-# Module-level reference to session manager (injected from main.py)
-session_manager = None
 
 
 @router.get("/status")
@@ -56,16 +55,11 @@ async def process_document(
 ):
     """Upload a PDF and run the full content processing pipeline."""
     if not CONTENT_PROCESSOR_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Content processor is not available. Please install required dependencies.",
-        )
+        raise ServiceUnavailableError("Content processor")
 
-    # Validate file
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    # Save uploaded file (async to not block event loop)
     file_id = str(uuid.uuid4())[:8]
     save_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
     try:
@@ -75,7 +69,6 @@ async def process_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-    # Start pipeline
     job = await process_pdf(
         file_path=str(save_path),
         subject_id=subject_id,
@@ -122,10 +115,10 @@ async def get_job_status(job_id: str):
             }
         return response
 
-    # Fallback to MongoDB for persisted jobs (after restart / dashboard reload)
+    # Fallback to MongoDB
     job_doc = await mongo_store.load_pipeline_job(job_id)
     if not job_doc:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+        raise PipelineNotFoundError(job_id)
 
     result = job_doc.get("result") or {}
     response = {
@@ -153,66 +146,47 @@ async def get_job_status(job_id: str):
 
 
 @router.post("/jobs/{job_id}/create-session")
-async def create_session_from_pipeline(job_id: str, max_steps: int = 50):
-    """Create a learning session using concepts from a completed pipeline job.
-    
-    Uses MongoDB as the source of truth so "Start learning" always consumes
-    exactly the persisted graph/concepts shown on the dashboard.
-    """
+async def create_session_from_pipeline(
+    job_id: str,
+    max_steps: int = 50,
+    manager=Depends(get_session_manager),
+):
+    """Create a learning session from a completed pipeline job."""
     job_doc = await mongo_store.load_pipeline_job(job_id)
     if not job_doc:
         mem_job = get_job(job_id)
         if mem_job and mem_job.status != PipelineStatus.COMPLETED:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Job is not completed yet. Current status: {mem_job.status.value}",
-            )
+            raise PipelineNotCompletedError(job_id, mem_job.status.value)
         if mem_job and mem_job.status == PipelineStatus.COMPLETED:
             raise HTTPException(
                 status_code=409,
                 detail="Job completed in memory but not persisted to MongoDB yet. Please retry shortly.",
             )
-        raise HTTPException(
-            status_code=404,
-            detail=f"Job {job_id} not found in MongoDB.",
-        )
+        raise PipelineNotFoundError(job_id)
+
     if job_doc.get("status") != "completed":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Job is not completed. Status: {job_doc.get('status')}",
-        )
+        raise PipelineNotCompletedError(job_id, job_doc.get("status", "unknown"))
 
     result = job_doc.get("result")
     if not result:
-        raise HTTPException(
-            status_code=500,
-            detail="Job found in MongoDB but has no result data.",
-        )
+        raise HTTPException(status_code=500, detail="Job found but has no result data.")
+
     for required_key in ("concepts_data", "concept_map", "prereq_edges"):
         if required_key not in result:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Persisted result missing required key: {required_key}",
-            )
+            raise HTTPException(status_code=500, detail=f"Result missing key: {required_key}")
+
     concept_ids = set(result["concept_map"].keys())
     invalid_edges = [
-        edge
-        for edge in result["prereq_edges"]
+        edge for edge in result["prereq_edges"]
         if edge.get("source") not in concept_ids or edge.get("target") not in concept_ids
     ]
     if invalid_edges:
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Persisted graph has {len(invalid_edges)} invalid prerequisite edges "
-                "that do not map to concept IDs. Please reprocess this subject."
-            ),
+            detail=f"Graph has {len(invalid_edges)} invalid edges. Please reprocess.",
         )
 
-    if session_manager is None:
-        raise HTTPException(status_code=503, detail="Session manager not initialized.")
-
-    session = await session_manager.create_session_from_pipeline(
+    session = await manager.create_session_from_pipeline(
         concepts_data=result["concepts_data"],
         concept_map=result["concept_map"],
         prereq_edges=result["prereq_edges"],
@@ -220,6 +194,15 @@ async def create_session_from_pipeline(job_id: str, max_steps: int = 50):
         precomputed_embeddings=result.get("concept_embeddings"),
         job_id=job_id,
     )
+
+    # Fire eager prefetch
+    try:
+        import asyncio
+        exercise_service = getattr(manager, '_exercise_service', None)
+        if exercise_service:
+            asyncio.create_task(exercise_service.eager_generate_first_exercise(session))
+    except Exception:
+        pass
 
     return {
         "session_id": session.session_id,
