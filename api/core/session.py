@@ -57,6 +57,9 @@ class SessionState:
     status: str = "active"  # active, completed
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     concept_theories: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    _prefetch_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Keys: "correct" | "incorrect"
+    # Value: {"concept_idx": int, "bloom_level": int, "exercise_data": dict}
 
 
 class SessionManager:
@@ -92,7 +95,7 @@ class SessionManager:
         self._sessions: Dict[str, SessionState] = {}
 
         # Thread pool for blocking LLM calls
-        self._llm_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="llm")
+        self._llm_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="llm")
 
     def _build_prereq_graph(self) -> Dict[int, List[int]]:
         graph: Dict[int, List[int]] = {}
@@ -160,10 +163,64 @@ class SessionManager:
         )
 
         self._sessions[session_id] = session
+
+        # Eagerly pre-generate the first exercise in the background
+        try:
+            asyncio.get_event_loop()
+            asyncio.create_task(self._eager_generate_first_exercise(session))
+        except RuntimeError:
+            pass  # No event loop — called from sync context
+
         return session
 
     def get_session(self, session_id: str) -> Optional[SessionState]:
         return self._sessions.get(session_id)
+
+    async def _eager_generate_first_exercise(self, session: SessionState):
+        """Background: pre-generate the first exercise when a session starts/resumes.
+
+        If it's step 0, forces concept_idx=0, bloom_level=1.
+        Otherwise (resumed session), uses D3QN to predict the next concept.
+        """
+        try:
+            env_stats = session.env.get_session_stats()
+            current_step = env_stats.get("step", 0)
+
+            if current_step == 0:
+                concept_idx = 0
+                bloom_level = 1
+            else:
+                # Use D3QN to predict the next step exactly as get_next_concept will
+                masks = session.env.action_masks()
+                action_id = select_action(
+                    session.q_net, session.current_obs, masks, session.device,
+                    n_concepts=session.env.n_concepts,
+                )
+                concept_idx, bloom_level = decode_action(action_id)
+
+            id_to_concept = {v: k for k, v in session.concept_map.items()}
+            concept_id = id_to_concept.get(concept_idx, str(concept_idx))
+            concept_name = session.concept_names.get(concept_id, concept_id)
+            concept_def = session.concept_definitions.get(concept_id, "")
+
+            print(f"[Eager] Pre-generating first exercise: {concept_name} (Bloom {bloom_level})...")
+
+            loop = asyncio.get_event_loop()
+            exercise_data = await loop.run_in_executor(
+                self._llm_executor,
+                generate_exercise, concept_name, concept_def, bloom_level,
+            )
+
+            if exercise_data:
+                # Store as a special prefetch entry that generate_exercise can pick up
+                session._prefetch_cache["eager"] = {
+                    "concept_idx": concept_idx,
+                    "bloom_level": bloom_level,
+                    "exercise_data": exercise_data,
+                }
+                print(f"[Eager] ✓ First exercise cached: {concept_name} (Bloom {bloom_level})")
+        except Exception as e:
+            print(f"[Eager] ✗ Failed to pre-generate first exercise: {e}")
 
     async def get_next_concept(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Step 1: Use D3QN to select next concept+bloom. Returns concept info and bloom level."""
@@ -251,7 +308,11 @@ class SessionManager:
         return theory_data
 
     async def generate_exercise(self, session_id: str) -> Optional[ExerciseRecord]:
-        """Step 3: Generate the actual exercise based on pending concept and bloom."""
+        """Step 3: Generate the actual exercise based on pending concept and bloom.
+
+        Checks the prefetch cache first. On cache miss, calls LLM.
+        After successful generation, fires a background prefetch for the next step.
+        """
         session = self._sessions.get(session_id)
         if not session or not hasattr(session, '_pending_concept_idx'):
             return None
@@ -262,22 +323,37 @@ class SessionManager:
         id_to_concept = {v: k for k, v in session.concept_map.items()}
         concept_id = id_to_concept.get(concept_idx, str(concept_idx))
         concept_name = session.concept_names.get(concept_id, concept_id)
-        concept_def = session.concept_definitions.get(concept_id, "")
 
-        print(f"[Session] Generating exercise for {concept_name} (Bloom {bloom_level})...")
-        loop = asyncio.get_event_loop()
-        try:
-            exercise_data = await loop.run_in_executor(
-                self._llm_executor,
-                generate_exercise, concept_name, concept_def, bloom_level,
-            )
-        except Exception as e:
-            print(f"[Session] ✗ Exercise generation failed: {e}")
-            return None
+        # --- Check prefetch cache ---
+        exercise_data = None
+        for branch in ("eager", "correct", "incorrect"):
+            cached = session._prefetch_cache.get(branch)
+            if (cached
+                    and cached["concept_idx"] == concept_idx
+                    and cached["bloom_level"] == bloom_level):
+                exercise_data = cached["exercise_data"]
+                session._prefetch_cache.clear()
+                print(f"[Session] ⚡ Cache HIT ({branch}) for {concept_name} (Bloom {bloom_level})")
+                break
 
-        if not exercise_data:
-            print(f"[Session] ✗ Exercise generation returned None — aborting")
-            return None
+        # --- Cache miss → generate via LLM ---
+        if exercise_data is None:
+            session._prefetch_cache.clear()
+            concept_def = session.concept_definitions.get(concept_id, "")
+            print(f"[Session] Generating exercise for {concept_name} (Bloom {bloom_level})...")
+            loop = asyncio.get_event_loop()
+            try:
+                exercise_data = await loop.run_in_executor(
+                    self._llm_executor,
+                    generate_exercise, concept_name, concept_def, bloom_level,
+                )
+            except Exception as e:
+                print(f"[Session] ✗ Exercise generation failed: {e}")
+                return None
+
+            if not exercise_data:
+                print(f"[Session] ✗ Exercise generation returned None — aborting")
+                return None
 
         exercise = ExerciseRecord(
             exercise_id=str(uuid.uuid4())[:8],
@@ -290,13 +366,73 @@ class SessionManager:
             explanation="",
             explanation_correct=exercise_data.get("explanation_correct", ""),
             explanation_incorrect=exercise_data.get("explanation_incorrect", ""),
-            # Theory will be handled directly in the frontend component mapping now,
-            # or we can attach an empty structure.
-            theory=None, 
+            theory=None,
         )
-
         session.current_exercise = exercise
+
+        # --- Fire background prefetch for next step ---
+        try:
+            asyncio.create_task(self._prefetch_next_exercises(session_id))
+        except Exception as e:
+            print(f"[Prefetch] Failed to schedule prefetch: {e}")
+
         return exercise
+
+    async def _prefetch_next_exercises(self, session_id: str):
+        """Background: simulate both correct/incorrect paths IN PARALLEL and pre-generate exercises."""
+        session = self._sessions.get(session_id)
+        if not session or not hasattr(session, '_pending_action'):
+            return
+
+        action_id = session._pending_action
+        id_to_concept = {v: k for k, v in session.concept_map.items()}
+
+        async def _prefetch_branch(is_correct: bool, branch: str):
+            try:
+                # 1. Snapshot env and simulate the answer
+                env_snap = session.env.create_snapshot()
+                obs, _, terminated, _, _ = env_snap.step(action_id, human_correct=is_correct)
+                if terminated:
+                    print(f"[Prefetch] {branch}: session would terminate — skipping")
+                    return
+
+                # 2. D3QN selects next concept+bloom on the simulated state
+                masks = env_snap.action_masks()
+                next_action = select_action(
+                    session.q_net, obs, masks, session.device,
+                    n_concepts=env_snap.n_concepts,
+                )
+                next_concept_idx, next_bloom = decode_action(next_action)
+
+                next_concept_id = id_to_concept.get(next_concept_idx, str(next_concept_idx))
+                next_concept_name = session.concept_names.get(next_concept_id, next_concept_id)
+                next_concept_def = session.concept_definitions.get(next_concept_id, "")
+
+                print(f"[Prefetch] {branch}: predicted next → {next_concept_name} (Bloom {next_bloom}). Generating...")
+
+                # 3. Generate exercise via LLM (in thread pool)
+                loop = asyncio.get_event_loop()
+                ex_data = await loop.run_in_executor(
+                    self._llm_executor,
+                    generate_exercise, next_concept_name, next_concept_def, next_bloom,
+                )
+
+                if ex_data:
+                    session._prefetch_cache[branch] = {
+                        "concept_idx": next_concept_idx,
+                        "bloom_level": next_bloom,
+                        "exercise_data": ex_data,
+                    }
+                    print(f"[Prefetch] ✓ {branch} cached: {next_concept_name} (Bloom {next_bloom})")
+
+            except Exception as e:
+                print(f"[Prefetch] ✗ {branch} failed: {e}")
+
+        # Run both branches in parallel
+        await asyncio.gather(
+            _prefetch_branch(True, "correct"),
+            _prefetch_branch(False, "incorrect"),
+        )
 
     async def submit_answer(self, session_id: str, answer: str) -> Optional[Dict[str, Any]]:
         """Process user's answer, update environment, return result."""
@@ -702,6 +838,15 @@ class SessionManager:
             ))
 
         self._sessions[session_id] = session
+
+        # Eagerly pre-generate the next exercise in the background
+        # (works for both fresh sessions and resumed sessions)
+        try:
+            asyncio.get_event_loop()
+            asyncio.create_task(self._eager_generate_first_exercise(session))
+        except Exception as e:
+            print(f"[Eager] Failed to schedule for resumed/new session: {e}")
+
         return session
 
     @property

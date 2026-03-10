@@ -487,3 +487,24 @@ class AdaptiveLearningEnv(gym.Env):
             "coverage": len(self._visited) / self.n_concepts,
             "visit_counts": dict(self._visit_counts),
         }
+
+    def create_snapshot(self) -> "AdaptiveLearningEnv":
+        """Create a lightweight copy for simulation.
+
+        Shares read-only references (model, embeddings, graphs) but deep-copies
+        all mutable state so that calling ``step()`` on the snapshot does not
+        affect the original environment.
+        """
+        import copy
+        snap = copy.copy(self)  # shallow — shares _model, _external_embeddings, etc.
+        # Deep-copy every mutable field
+        snap._concept_history = list(self._concept_history)
+        snap._bloom_history = list(self._bloom_history)
+        snap._response_history = list(self._response_history)
+        snap._visited = set(self._visited)
+        snap._visit_counts = dict(self._visit_counts)
+        snap._bloom_mastery = self._bloom_mastery.copy()
+        snap._current_mastery = self._current_mastery.copy()
+        snap._current_hidden = self._current_hidden.copy()
+        snap._initial_mastery_vec = self._initial_mastery_vec.copy()
+        return snap
