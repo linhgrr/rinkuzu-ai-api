@@ -15,7 +15,7 @@ import torch
 from .models import load_saint_model, load_dqn_model, DuelingQNetwork, SaintModel
 from .environment import AdaptiveLearningEnv
 from .agent import select_action, decode_action
-from .exercise_gen import generate_exercise, evaluate_answer, generate_theory
+from .exercise_gen import generate_exercise, generate_theory
 from . import mongo_store
 
 
@@ -29,6 +29,8 @@ class ExerciseRecord:
     options: Dict[str, str]
     correct_option: str
     explanation: str
+    explanation_correct: str = ""
+    explanation_incorrect: str = ""
     theory: Optional[Dict[str, Any]] = None
     user_answer: Optional[str] = None
     is_correct: Optional[bool] = None
@@ -264,10 +266,15 @@ class SessionManager:
 
         print(f"[Session] Generating exercise for {concept_name} (Bloom {bloom_level})...")
         loop = asyncio.get_event_loop()
-        exercise_data = await loop.run_in_executor(
-            self._llm_executor,
-            generate_exercise, concept_name, concept_def, bloom_level,
-        )
+        try:
+            exercise_data = await loop.run_in_executor(
+                self._llm_executor,
+                generate_exercise, concept_name, concept_def, bloom_level,
+            )
+        except Exception as e:
+            print(f"[Session] ✗ Exercise generation failed: {e}")
+            return None
+
         if not exercise_data:
             print(f"[Session] ✗ Exercise generation returned None — aborting")
             return None
@@ -280,7 +287,9 @@ class SessionManager:
             question=exercise_data["question"],
             options=exercise_data.get("options", {}),
             correct_option=exercise_data.get("correct_option", "A"),
-            explanation=exercise_data.get("explanation", ""),
+            explanation="",
+            explanation_correct=exercise_data.get("explanation_correct", ""),
+            explanation_incorrect=exercise_data.get("explanation_incorrect", ""),
             # Theory will be handled directly in the frontend component mapping now,
             # or we can attach an empty structure.
             theory=None, 
@@ -304,15 +313,11 @@ class SessionManager:
         print(f"  Concept  : {exercise.concept_name} (idx={exercise.concept_idx})")
         print(f"  Answer   : {answer} → Correct: {exercise.correct_option} → {verdict}")
 
-        # Evaluate with LLM (run in thread to avoid blocking event loop)
-        loop = asyncio.get_event_loop()
-        eval_result = await loop.run_in_executor(
-            self._llm_executor,
-            evaluate_answer,
-            exercise.question, answer, exercise.correct_option, exercise.concept_name,
-        )
+        # Use pre-generated explanations
+        explanation = exercise.explanation_correct if is_correct else exercise.explanation_incorrect
 
         # Update exercise record
+        exercise.explanation = explanation
         exercise.user_answer = answer
         exercise.is_correct = is_correct
         session.exercise_history.append(exercise)
@@ -350,7 +355,7 @@ class SessionManager:
 
         return {
             "is_correct": is_correct,
-            "explanation": eval_result["explanation"],
+            "explanation": explanation,
             "correct_option": exercise.correct_option,
             "concept_name": exercise.concept_name,
             "bloom_level": exercise.bloom_level,
@@ -689,6 +694,8 @@ class SessionManager:
                 options=ex.get("options", {}),
                 correct_option=ex.get("correct_option", ""),
                 explanation=ex.get("explanation", ""),
+                explanation_correct=ex.get("explanation_correct", ""),
+                explanation_incorrect=ex.get("explanation_incorrect", ""),
                 user_answer=ex.get("user_answer"),
                 is_correct=ex.get("is_correct"),
                 timestamp=ex.get("timestamp", 0),
