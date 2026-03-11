@@ -19,6 +19,9 @@ class PipelineRepository:
     async def ensure_indexes(self) -> None:
         """Create required indexes."""
         await self._db[self.COLLECTION].create_index("job_id", unique=True)
+        await self._db[self.COLLECTION].create_index(
+            [("user_id", 1), ("status", 1), ("completed_at", -1)]
+        )
 
     async def save(self, job) -> bool:
         """Persist a completed PipelineJob's result to MongoDB."""
@@ -59,12 +62,29 @@ class PipelineRepository:
             logger.error(f"[PipelineRepo] load error: {e}")
             return None
 
-    async def list_recent(self, limit: int = 20, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def load_for_user(self, job_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """Load a pipeline job only if it belongs to user_id."""
+        try:
+            return await self._db[self.COLLECTION].find_one(
+                {"job_id": job_id, "user_id": user_id}, {"_id": 0}
+            )
+        except Exception as e:
+            logger.error(f"[PipelineRepo] load_for_user error: {e}")
+            return None
+
+    async def list_recent(
+        self,
+        limit: int = 20,
+        user_id: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """List recent pipeline jobs."""
         try:
             query = {}
             if user_id:
                 query["user_id"] = user_id
+            if status:
+                query["status"] = status
             cursor = self._db[self.COLLECTION].find(
                 query,
                 {
@@ -99,4 +119,31 @@ class PipelineRepository:
             }
         except Exception as e:
             logger.error(f"[PipelineRepo] delete error: {e}")
+            return {"deleted_job": 0, "deleted_sessions": 0, "error": str(e)}
+
+    async def delete_for_user(
+        self,
+        job_id: str,
+        user_id: str,
+        delete_sessions: bool = True,
+    ) -> Dict[str, Any]:
+        """Delete a pipeline job only if owned by user_id."""
+        try:
+            job_result = await self._db[self.COLLECTION].delete_one(
+                {"job_id": job_id, "user_id": user_id}
+            )
+            deleted_sessions = 0
+
+            if delete_sessions and job_result.deleted_count:
+                session_result = await self._db["al_sessions"].delete_many(
+                    {"job_id": job_id, "user_id": user_id}
+                )
+                deleted_sessions = session_result.deleted_count
+
+            return {
+                "deleted_job": int(job_result.deleted_count),
+                "deleted_sessions": int(deleted_sessions),
+            }
+        except Exception as e:
+            logger.error(f"[PipelineRepo] delete_for_user error: {e}")
             return {"deleted_job": 0, "deleted_sessions": 0, "error": str(e)}

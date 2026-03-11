@@ -55,9 +55,14 @@ async def start_session(req: SessionCreateRequest, manager=Depends(get_session_m
 
 
 @router.post("/{session_id}/next-concept", response_model=NextConceptResponse)
-async def next_concept(session_id: str, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+async def next_concept(
+    session_id: str,
+    manager=Depends(get_session_manager),
+    exercise_svc=Depends(get_session_service),
+    user_id: str = Depends(get_current_user),
+):
     session = manager.get_session(session_id)
-    if not session:
+    if not session or getattr(session, "user_id", None) != user_id:
         raise SessionNotFoundError(session_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
@@ -70,9 +75,14 @@ async def next_concept(session_id: str, manager=Depends(get_session_manager), ex
 
 
 @router.get("/{session_id}/theory", response_model=TheoryResponse)
-async def theory(session_id: str, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+async def theory(
+    session_id: str,
+    manager=Depends(get_session_manager),
+    exercise_svc=Depends(get_session_service),
+    user_id: str = Depends(get_current_user),
+):
     session = manager.get_session(session_id)
-    if not session:
+    if not session or getattr(session, "user_id", None) != user_id:
         raise SessionNotFoundError(session_id)
 
     theory_data = await exercise_svc.get_theory(session)
@@ -83,9 +93,14 @@ async def theory(session_id: str, manager=Depends(get_session_manager), exercise
 
 
 @router.post("/{session_id}/exercise", response_model=ExerciseResponse)
-async def generate_exercise(session_id: str, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+async def generate_exercise(
+    session_id: str,
+    manager=Depends(get_session_manager),
+    exercise_svc=Depends(get_session_service),
+    user_id: str = Depends(get_current_user),
+):
     session = manager.get_session(session_id)
-    if not session:
+    if not session or getattr(session, "user_id", None) != user_id:
         raise SessionNotFoundError(session_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
@@ -111,9 +126,15 @@ async def generate_exercise(session_id: str, manager=Depends(get_session_manager
 
 
 @router.post("/{session_id}/submit", response_model=SubmitAnswerResponse)
-async def submit_answer(session_id: str, req: SubmitAnswerRequest, manager=Depends(get_session_manager), exercise_svc=Depends(get_session_service)):
+async def submit_answer(
+    session_id: str,
+    req: SubmitAnswerRequest,
+    manager=Depends(get_session_manager),
+    exercise_svc=Depends(get_session_service),
+    user_id: str = Depends(get_current_user),
+):
     session = manager.get_session(session_id)
-    if not session:
+    if not session or getattr(session, "user_id", None) != user_id:
         raise SessionNotFoundError(session_id)
 
     result = await exercise_svc.submit_answer(session, req.answer)
@@ -124,7 +145,14 @@ async def submit_answer(session_id: str, req: SubmitAnswerRequest, manager=Depen
 
 
 @router.get("/{session_id}/status", response_model=SessionStatusResponse)
-async def session_status(session_id: str, manager=Depends(get_session_manager)):
+async def session_status(
+    session_id: str,
+    manager=Depends(get_session_manager),
+    user_id: str = Depends(get_current_user),
+):
+    session = manager.get_session(session_id)
+    if not session or getattr(session, "user_id", None) != user_id:
+        raise SessionNotFoundError(session_id)
     status = manager.get_session_status(session_id)
     if not status:
         raise SessionNotFoundError(session_id)

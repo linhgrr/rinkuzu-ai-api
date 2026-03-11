@@ -7,7 +7,8 @@ answer submission, and prefetch caching.
 
 import uuid
 import asyncio
-from typing import Optional, Dict, Any
+import os
+from typing import Optional, Dict, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -28,7 +29,91 @@ class ExerciseService:
 
     def __init__(self, session_repo=None):
         self._session_repo = session_repo
-        self._llm_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm")
+        max_workers = int(os.getenv("ADAPTIVE_LLM_MAX_WORKERS", "8"))
+        max_concurrency = int(os.getenv("ADAPTIVE_LLM_MAX_CONCURRENCY", str(max_workers)))
+        self._llm_timeout_sec = float(os.getenv("ADAPTIVE_LLM_TIMEOUT_SEC", "120"))
+        self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
+        self._llm_semaphore = asyncio.Semaphore(max_concurrency)
+        self._exercise_inflight: Dict[Tuple[str, int, int], asyncio.Future] = {}
+        self._theory_inflight: Dict[Tuple[str, str], asyncio.Future] = {}
+
+    @staticmethod
+    def _build_id_to_concept_map(session) -> Dict[int, str]:
+        return {v: k for k, v in session.concept_map.items()}
+
+    @staticmethod
+    def _schedule_background_task(coro, label: str) -> None:
+        task = asyncio.create_task(coro)
+
+        def _done_callback(done_task: asyncio.Task):
+            try:
+                done_task.result()
+            except Exception as exc:
+                logger.warning(f"[Background] {label} failed: {exc}")
+
+        task.add_done_callback(_done_callback)
+
+    async def _run_llm_call(self, func, *args):
+        loop = asyncio.get_running_loop()
+        async with self._llm_semaphore:
+            return await asyncio.wait_for(
+                loop.run_in_executor(self._llm_executor, func, *args),
+                timeout=self._llm_timeout_sec,
+            )
+
+    async def _generate_exercise_dedup(
+        self,
+        session,
+        concept_idx: int,
+        bloom_level: int,
+        concept_name: str,
+        concept_def: str,
+    ) -> Optional[Dict[str, Any]]:
+        key = (session.session_id, concept_idx, bloom_level)
+        existing = self._exercise_inflight.get(key)
+        if existing is not None:
+            return await existing
+
+        async def _run() -> Optional[Dict[str, Any]]:
+            return await self._run_llm_call(
+                generate_exercise,
+                concept_name,
+                concept_def,
+                bloom_level,
+            )
+
+        task = asyncio.create_task(_run())
+        self._exercise_inflight[key] = task
+        try:
+            return await task
+        finally:
+            self._exercise_inflight.pop(key, None)
+
+    async def _generate_theory_dedup(
+        self,
+        session,
+        concept_id: str,
+        concept_name: str,
+        concept_def: str,
+    ) -> Optional[Dict[str, Any]]:
+        key = (session.session_id, concept_id)
+        existing = self._theory_inflight.get(key)
+        if existing is not None:
+            return await existing
+
+        async def _run() -> Optional[Dict[str, Any]]:
+            return await self._run_llm_call(
+                generate_theory,
+                concept_name,
+                concept_def,
+            )
+
+        task = asyncio.create_task(_run())
+        self._theory_inflight[key] = task
+        try:
+            return await task
+        finally:
+            self._theory_inflight.pop(key, None)
 
     async def get_next_concept(self, session) -> Optional[Dict[str, Any]]:
         """Use D3QN to select the next concept+bloom level."""
@@ -54,7 +139,7 @@ class ExerciseService:
                 concept_idx, bloom_level = decode_action(action_id)
                 logger.info(f"[Exercise] 🤖 D3QN selected action_id={action_id}")
 
-            id_to_concept = {v: k for k, v in session.concept_map.items()}
+            id_to_concept = self._build_id_to_concept_map(session)
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
             concept_name = session.concept_names.get(concept_id, concept_id)
 
@@ -80,7 +165,7 @@ class ExerciseService:
             return None
 
         concept_idx = session._pending_concept_idx
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
+        id_to_concept = self._build_id_to_concept_map(session)
         concept_id = id_to_concept.get(concept_idx, str(concept_idx))
 
         # Check pre-generated theory cache
@@ -91,11 +176,16 @@ class ExerciseService:
         concept_def = session.concept_definitions.get(concept_id, "")
 
         logger.info(f"[Exercise] Generating theory for {concept_name}...")
-        loop = asyncio.get_event_loop()
-        theory_data = await loop.run_in_executor(
-            self._llm_executor,
-            generate_theory, concept_name, concept_def,
+        theory_data = await self._generate_theory_dedup(
+            session=session,
+            concept_id=concept_id,
+            concept_name=concept_name,
+            concept_def=concept_def,
         )
+
+        if not theory_data:
+            logger.warning(f"[Exercise] Theory generation returned empty for {concept_name}")
+            return None
 
         session.concept_theories[concept_id] = theory_data
         return theory_data
@@ -110,7 +200,7 @@ class ExerciseService:
         concept_idx = session._pending_concept_idx
         bloom_level = session._pending_bloom_level
 
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
+        id_to_concept = self._build_id_to_concept_map(session)
         concept_id = id_to_concept.get(concept_idx, str(concept_idx))
         concept_name = session.concept_names.get(concept_id, concept_id)
 
@@ -131,11 +221,13 @@ class ExerciseService:
             session._prefetch_cache.clear()
             concept_def = session.concept_definitions.get(concept_id, "")
             logger.info(f"[Exercise] Generating for {concept_name} (Bloom {bloom_level})...")
-            loop = asyncio.get_event_loop()
             try:
-                exercise_data = await loop.run_in_executor(
-                    self._llm_executor,
-                    generate_exercise, concept_name, concept_def, bloom_level,
+                exercise_data = await self._generate_exercise_dedup(
+                    session=session,
+                    concept_idx=concept_idx,
+                    bloom_level=bloom_level,
+                    concept_name=concept_name,
+                    concept_def=concept_def,
                 )
             except Exception as e:
                 logger.error(f"[Exercise] ✗ Generation failed: {e}")
@@ -162,7 +254,10 @@ class ExerciseService:
 
         # Fire background prefetch
         try:
-            asyncio.create_task(self._prefetch_next_exercises(session))
+            self._schedule_background_task(
+                self._prefetch_next_exercises(session),
+                f"prefetch session={session.session_id}",
+            )
         except Exception as e:
             logger.warning(f"[Prefetch] Failed to schedule: {e}")
 
@@ -210,7 +305,10 @@ class ExerciseService:
         # Persist to MongoDB (fire-and-forget)
         if self._session_repo:
             try:
-                asyncio.create_task(self._session_repo.save(session))
+                self._schedule_background_task(
+                    self._session_repo.save(session),
+                    f"save session={session.session_id}",
+                )
             except Exception as e:
                 logger.warning(f"[Exercise] MongoDB save schedule error: {e}")
 
@@ -248,17 +346,19 @@ class ExerciseService:
                 )
                 concept_idx, bloom_level = decode_action(action_id)
 
-            id_to_concept = {v: k for k, v in session.concept_map.items()}
+            id_to_concept = self._build_id_to_concept_map(session)
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
             concept_name = session.concept_names.get(concept_id, concept_id)
             concept_def = session.concept_definitions.get(concept_id, "")
 
             logger.info(f"[Eager] Pre-generating: {concept_name} (Bloom {bloom_level})...")
 
-            loop = asyncio.get_event_loop()
-            exercise_data = await loop.run_in_executor(
-                self._llm_executor,
-                generate_exercise, concept_name, concept_def, bloom_level,
+            exercise_data = await self._generate_exercise_dedup(
+                session=session,
+                concept_idx=concept_idx,
+                bloom_level=bloom_level,
+                concept_name=concept_name,
+                concept_def=concept_def,
             )
 
             if exercise_data:
@@ -277,7 +377,7 @@ class ExerciseService:
             return
 
         action_id = session._pending_action
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
+        id_to_concept = self._build_id_to_concept_map(session)
 
         async def _prefetch_branch(is_correct: bool, branch: str):
             try:
@@ -300,10 +400,12 @@ class ExerciseService:
 
                 logger.debug(f"[Prefetch] {branch}: predicted → {next_concept_name} (Bloom {next_bloom})")
 
-                loop = asyncio.get_event_loop()
-                ex_data = await loop.run_in_executor(
-                    self._llm_executor,
-                    generate_exercise, next_concept_name, next_concept_def, next_bloom,
+                ex_data = await self._generate_exercise_dedup(
+                    session=session,
+                    concept_idx=next_concept_idx,
+                    bloom_level=next_bloom,
+                    concept_name=next_concept_name,
+                    concept_def=next_concept_def,
                 )
 
                 if ex_data:
@@ -321,3 +423,7 @@ class ExerciseService:
             _prefetch_branch(True, "correct"),
             _prefetch_branch(False, "incorrect"),
         )
+
+    def close(self) -> None:
+        """Gracefully release thread-pool resources on app shutdown."""
+        self._llm_executor.shutdown(wait=False, cancel_futures=True)

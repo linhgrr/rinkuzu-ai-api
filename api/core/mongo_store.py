@@ -81,16 +81,22 @@ async def load_session_doc(session_id: str) -> Optional[Dict[str, Any]]:
     return await _session_repo.load(session_id)
 
 
+async def load_session_doc_for_user(session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    if not _session_repo:
+        return None
+    return await _session_repo.load_for_user(session_id, user_id)
+
+
 async def list_sessions(limit: int = 50, user_id: str = None) -> list:
     if not _session_repo:
         return []
     return await _session_repo.list_recent(limit, user_id)
 
 
-async def find_latest_session_for_job(job_id: str) -> Optional[Dict[str, Any]]:
+async def find_latest_session_for_job(job_id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
     if not _session_repo:
         return None
-    return await _session_repo.find_latest_for_job(job_id)
+    return await _session_repo.find_latest_for_job(job_id, user_id)
 
 
 async def save_pipeline_job(job) -> bool:
@@ -105,13 +111,29 @@ async def load_pipeline_job(job_id: str) -> Optional[Dict[str, Any]]:
     return await _pipeline_repo.load(job_id)
 
 
-async def list_pipeline_jobs(limit: int = 20, user_id: str = None) -> list:
+async def load_pipeline_job_for_user(job_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    if not _pipeline_repo:
+        return None
+    return await _pipeline_repo.load_for_user(job_id, user_id)
+
+
+async def list_pipeline_jobs(limit: int = 20, user_id: str = None, status: str = None) -> list:
     if not _pipeline_repo:
         return []
-    return await _pipeline_repo.list_recent(limit, user_id)
+    return await _pipeline_repo.list_recent(limit=limit, user_id=user_id, status=status)
 
 
 async def delete_pipeline_job(job_id: str, delete_sessions: bool = True) -> Dict[str, Any]:
     if not _pipeline_repo:
         return {"deleted_job": 0, "deleted_sessions": 0}
     return await _pipeline_repo.delete(job_id, delete_sessions)
+
+
+async def delete_pipeline_job_for_user(
+    job_id: str,
+    user_id: str,
+    delete_sessions: bool = True,
+) -> Dict[str, Any]:
+    if not _pipeline_repo:
+        return {"deleted_job": 0, "deleted_sessions": 0}
+    return await _pipeline_repo.delete_for_user(job_id, user_id, delete_sessions)

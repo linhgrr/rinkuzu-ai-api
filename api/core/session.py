@@ -305,7 +305,7 @@ class SessionManager:
         total_answered = 0
         if job_id:
             try:
-                prev_session = await mongo_store.find_latest_session_for_job(job_id)
+                prev_session = await mongo_store.find_latest_session_for_job(job_id, user_id=user_id)
                 if prev_session and prev_session.get("exercise_history"):
                     prev_history = prev_session["exercise_history"]
                     total_correct = prev_session.get("total_correct", 0)

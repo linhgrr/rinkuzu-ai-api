@@ -90,10 +90,10 @@ async def process_document(
 
 
 @router.get("/jobs/{job_id}")
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
     """Get pipeline job status and progress."""
     job = get_job(job_id)
-    if job:
+    if job and getattr(job, "user_id", None) == user_id:
         response = {
             "job_id": job.job_id,
             "filename": job.filename,
@@ -118,7 +118,7 @@ async def get_job_status(job_id: str):
         return response
 
     # Fallback to MongoDB
-    job_doc = await mongo_store.load_pipeline_job(job_id)
+    job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
@@ -155,12 +155,20 @@ async def create_session_from_pipeline(
     user_id: str = Depends(get_current_user),
 ):
     """Create a learning session from a completed pipeline job."""
-    job_doc = await mongo_store.load_pipeline_job(job_id)
+    job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
         mem_job = get_job(job_id)
-        if mem_job and mem_job.status != PipelineStatus.COMPLETED:
+        if (
+            mem_job
+            and getattr(mem_job, "user_id", None) == user_id
+            and mem_job.status != PipelineStatus.COMPLETED
+        ):
             raise PipelineNotCompletedError(job_id, mem_job.status.value)
-        if mem_job and mem_job.status == PipelineStatus.COMPLETED:
+        if (
+            mem_job
+            and getattr(mem_job, "user_id", None) == user_id
+            and mem_job.status == PipelineStatus.COMPLETED
+        ):
             raise HTTPException(
                 status_code=409,
                 detail="Job completed in memory but not persisted to MongoDB yet. Please retry shortly.",

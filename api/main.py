@@ -73,6 +73,8 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down...")
+    if exercise_service:
+        exercise_service.close()
 
 
 app = FastAPI(

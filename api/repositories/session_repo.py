@@ -3,7 +3,6 @@ repositories/session_repo.py — MongoDB persistence for adaptive learning sessi
 """
 
 import time
-import logging
 from typing import Optional, Dict, Any, List
 
 import numpy as np
@@ -22,6 +21,9 @@ class SessionRepository:
         """Create required indexes."""
         await self._db[self.COLLECTION].create_index("session_id", unique=True)
         await self._db[self.COLLECTION].create_index("job_id")
+        await self._db[self.COLLECTION].create_index(
+            [("user_id", 1), ("updated_at", -1)]
+        )
 
     async def save(self, session) -> bool:
         """Persist a SessionState snapshot to MongoDB."""
@@ -88,6 +90,16 @@ class SessionRepository:
             logger.error(f"[SessionRepo] load error: {e}")
             return None
 
+    async def load_for_user(self, session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """Load a session only if it belongs to user_id."""
+        try:
+            return await self._db[self.COLLECTION].find_one(
+                {"session_id": session_id, "user_id": user_id}, {"_id": 0}
+            )
+        except Exception as e:
+            logger.error(f"[SessionRepo] load_for_user error: {e}")
+            return None
+
     async def list_recent(self, limit: int = 50, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List recent sessions (summary only)."""
         try:
@@ -115,11 +127,18 @@ class SessionRepository:
             logger.error(f"[SessionRepo] list_recent error: {e}")
             return []
 
-    async def find_latest_for_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+    async def find_latest_for_job(
+        self,
+        job_id: str,
+        user_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Find the most recent session for a given pipeline job_id."""
         try:
+            query: Dict[str, Any] = {"job_id": job_id}
+            if user_id:
+                query["user_id"] = user_id
             return await self._db[self.COLLECTION].find_one(
-                {"job_id": job_id},
+                query,
                 {"_id": 0},
                 sort=[("updated_at", -1)],
             )
