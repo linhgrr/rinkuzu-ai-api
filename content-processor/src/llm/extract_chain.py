@@ -83,7 +83,7 @@ class ExtractionChain:
         chunks: List[str],
         subject_id: str,
         batch_size: int = 5,
-        max_workers: int = 4,
+        max_workers: int = 8,
         max_previous_concepts: int = 20,
     ) -> List[ConceptExtraction]:
         """
@@ -218,7 +218,7 @@ class ExtractionChain:
     def verify_relations_batch(
         self,
         concept_pairs: List[Tuple[str, str]],
-        max_workers: int = 4,
+        max_workers: int = 8,
     ) -> List[EvidenceVerification]:
         """
         Verify relations for multiple concept pairs in parallel.

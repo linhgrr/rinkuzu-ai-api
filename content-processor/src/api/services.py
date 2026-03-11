@@ -55,7 +55,7 @@ class KnowledgeGraphService:
         chunk_size: int = 1500,
         chunk_overlap: int = 200,
         batch_size: int = 5,
-        max_workers: int = 4,
+        max_workers: int = 8,
         # Merging parameters
         enable_name_merge: bool = True,
         enable_embedding_merge: bool = True,

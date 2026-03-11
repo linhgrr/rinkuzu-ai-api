@@ -17,7 +17,7 @@ from ..core.content_pipeline import (
     CONTENT_PROCESSOR_ERROR,
 )
 from ..core import mongo_store
-from ..dependencies import get_session_manager
+from ..dependencies import get_session_manager, get_current_user
 from ..exceptions import (
     ServiceUnavailableError,
     PipelineNotFoundError,
@@ -52,6 +52,7 @@ async def process_document(
     prs_threshold: float = Form(0.75),
     min_confidence: float = Form(0.6),
     apply_reduction: bool = Form(True),
+    user_id: str = Depends(get_current_user),
 ):
     """Upload a PDF and run the full content processing pipeline."""
     if not CONTENT_PROCESSOR_AVAILABLE:
@@ -75,6 +76,7 @@ async def process_document(
         prs_threshold=prs_threshold,
         min_confidence=min_confidence,
         apply_reduction=apply_reduction,
+        user_id=user_id,
     )
 
     return {
@@ -150,6 +152,7 @@ async def create_session_from_pipeline(
     job_id: str,
     max_steps: int = 50,
     manager=Depends(get_session_manager),
+    user_id: str = Depends(get_current_user),
 ):
     """Create a learning session from a completed pipeline job."""
     job_doc = await mongo_store.load_pipeline_job(job_id)
@@ -193,6 +196,7 @@ async def create_session_from_pipeline(
         max_steps=max_steps,
         precomputed_embeddings=result.get("concept_embeddings"),
         job_id=job_id,
+        user_id=user_id,
     )
 
     # Fire eager prefetch

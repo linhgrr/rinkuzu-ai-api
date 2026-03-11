@@ -46,6 +46,7 @@ class PipelineJob:
     job_id: str
     filename: str
     subject_id: str
+    user_id: Optional[str] = None
     status: PipelineStatus = PipelineStatus.PENDING
     current_step: str = ""
     progress: float = 0.0
@@ -190,6 +191,7 @@ async def process_pdf(
     prs_threshold: float = 0.75,
     min_confidence: float = 0.6,
     apply_reduction: bool = True,
+    user_id: Optional[str] = None,
 ) -> PipelineJob:
     job_id = str(uuid.uuid4())[:8]
     filename = Path(file_path).name
@@ -200,6 +202,7 @@ async def process_pdf(
         job_id=job_id,
         filename=filename,
         subject_id=subject_id,
+        user_id=user_id,
     )
     _jobs[job_id] = job
 

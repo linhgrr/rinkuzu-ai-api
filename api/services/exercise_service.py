@@ -28,7 +28,7 @@ class ExerciseService:
 
     def __init__(self, session_repo=None):
         self._session_repo = session_repo
-        self._llm_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="llm")
+        self._llm_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm")
 
     async def get_next_concept(self, session) -> Optional[Dict[str, Any]]:
         """Use D3QN to select the next concept+bloom level."""

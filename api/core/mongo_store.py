@@ -81,10 +81,10 @@ async def load_session_doc(session_id: str) -> Optional[Dict[str, Any]]:
     return await _session_repo.load(session_id)
 
 
-async def list_sessions(limit: int = 50) -> list:
+async def list_sessions(limit: int = 50, user_id: str = None) -> list:
     if not _session_repo:
         return []
-    return await _session_repo.list_recent(limit)
+    return await _session_repo.list_recent(limit, user_id)
 
 
 async def find_latest_session_for_job(job_id: str) -> Optional[Dict[str, Any]]:
@@ -105,10 +105,10 @@ async def load_pipeline_job(job_id: str) -> Optional[Dict[str, Any]]:
     return await _pipeline_repo.load(job_id)
 
 
-async def list_pipeline_jobs(limit: int = 20) -> list:
+async def list_pipeline_jobs(limit: int = 20, user_id: str = None) -> list:
     if not _pipeline_repo:
         return []
-    return await _pipeline_repo.list_recent(limit)
+    return await _pipeline_repo.list_recent(limit, user_id)
 
 
 async def delete_pipeline_job(job_id: str, delete_sessions: bool = True) -> Dict[str, Any]:

@@ -51,6 +51,7 @@ class SessionRepository:
 
             doc = {
                 "session_id": session.session_id,
+                "user_id": getattr(session, "user_id", None),
                 "job_id": getattr(session, "job_id", None),
                 "status": session.status,
                 "total_correct": session.total_correct,
@@ -87,11 +88,14 @@ class SessionRepository:
             logger.error(f"[SessionRepo] load error: {e}")
             return None
 
-    async def list_recent(self, limit: int = 50) -> List[Dict[str, Any]]:
+    async def list_recent(self, limit: int = 50, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List recent sessions (summary only)."""
         try:
+            query = {}
+            if user_id:
+                query["user_id"] = user_id
             cursor = self._db[self.COLLECTION].find(
-                {},
+                query,
                 {
                     "_id": 0,
                     "session_id": 1,

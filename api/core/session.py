@@ -54,6 +54,7 @@ class SessionState:
     concept_definitions: Dict[str, str]
     prereq_graph: Dict[int, List[int]]
     current_obs: np.ndarray
+    user_id: Optional[str] = None
     current_exercise: Optional[ExerciseRecord] = None
     exercise_history: List[ExerciseRecord] = field(default_factory=list)
     total_correct: int = 0
@@ -176,7 +177,7 @@ class SessionManager:
 
     # ── Session Lifecycle ───────────────────────────────────
 
-    def create_session(self, max_steps: int = 50) -> SessionState:
+    def create_session(self, max_steps: int = 50, user_id: Optional[str] = None) -> SessionState:
         """Create a new learning session."""
         session_id = str(uuid.uuid4())[:8]
 
@@ -193,6 +194,7 @@ class SessionManager:
 
         session = SessionState(
             session_id=session_id,
+            user_id=user_id,
             env=env,
             q_net=self._q_net,
             device=self._device,
@@ -218,6 +220,7 @@ class SessionManager:
         max_steps: int = 50,
         precomputed_embeddings: Optional[List[List[float]]] = None,
         job_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> SessionState:
         """Create a learning session from PDF pipeline output."""
         session_id = str(uuid.uuid4())[:8]
@@ -276,10 +279,13 @@ class SessionManager:
             raw_emb = self._encode_concepts(ordered_names)
             logger.info(f"[Session] ✓ Embeddings shape: {raw_emb.shape}")
 
-        emb_dim = raw_emb.shape[1]
-        padded = np.zeros((n_pipeline + 1, emb_dim), dtype=np.float32)
-        padded[1:n_pipeline + 1] = raw_emb
-        external_embeddings = torch.from_numpy(padded).to(self._device)
+        emb_dim = raw_emb.shape[1] if len(raw_emb.shape) > 1 else 0
+        if emb_dim > 0:
+            padded = np.zeros((n_pipeline + 1, emb_dim), dtype=np.float32)
+            padded[1:n_pipeline + 1] = raw_emb
+            external_embeddings = torch.from_numpy(padded).to(self._device)
+        else:
+            external_embeddings = None
 
         env = AdaptiveLearningEnv(
             saint_model=self._saint_model,
@@ -320,6 +326,7 @@ class SessionManager:
 
         session = SessionState(
             session_id=session_id,
+            user_id=user_id,
             env=env,
             q_net=self._q_net,
             device=self._device,

@@ -5,7 +5,7 @@ history.py — Endpoints for querying persisted sessions and pipeline jobs from 
 from fastapi import APIRouter, Depends
 
 from ..core import mongo_store
-from ..dependencies import get_session_manager
+from ..dependencies import get_session_manager, get_current_user
 from ..exceptions import SessionNotFoundError, PipelineNotFoundError
 
 import numpy as np
@@ -14,17 +14,17 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 
 @router.get("/subjects")
-async def list_subjects(limit: int = 100):
+async def list_subjects(limit: int = 100, user_id: str = Depends(get_current_user)):
     """List all completed pipeline jobs (= subjects)."""
-    jobs = await mongo_store.list_pipeline_jobs(limit=limit)
+    jobs = await mongo_store.list_pipeline_jobs(limit=limit, user_id=user_id)
     subjects = [j for j in jobs if j.get("status") == "completed"]
     return {"subjects": subjects, "count": len(subjects)}
 
 
 @router.get("/sessions")
-async def list_sessions(limit: int = 50):
+async def list_sessions(limit: int = 50, user_id: str = Depends(get_current_user)):
     """List recent adaptive learning sessions."""
-    sessions = await mongo_store.list_sessions(limit=limit)
+    sessions = await mongo_store.list_sessions(limit=limit, user_id=user_id)
     return {"sessions": sessions, "count": len(sessions)}
 
 

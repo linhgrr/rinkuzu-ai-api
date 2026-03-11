@@ -502,7 +502,7 @@ st.sidebar.subheader("⚡ Processing")
 batch_size = st.sidebar.slider(
     "Batch Size", 1, 10, 3, 1, help="Số chunk gộp trong 1 prompt")
 max_workers = st.sidebar.slider(
-    "Max Workers", 1, 8, 4, 1, help="Số worker xử lý song song")
+    "Max Workers", 1, 16, 8, 1, help="Số worker xử lý song song")
 max_previous_concepts = st.sidebar.slider(
     "Prev. Concepts Window", 0, 50, 20, 5,
     help="Số concept đã trích xuất (gần nhất) đưa vào prompt của mỗi batch để tránh trùng lặp. 0 = tắt.")

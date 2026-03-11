@@ -29,7 +29,7 @@ class APISettings(BaseSettings):
     default_chunk_size: int = 1500
     default_chunk_overlap: int = 200
     default_batch_size: int = 5
-    default_max_workers: int = 4
+    default_max_workers: int = 8
     default_prs_threshold: float = 0.6
     default_min_confidence: float = 0.5
     default_similarity_threshold: float = 0.9

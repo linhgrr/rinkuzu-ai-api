@@ -10,7 +10,7 @@ from ..schemas import (
     SubmitAnswerRequest, SubmitAnswerResponse,
     SessionStatusResponse,
 )
-from ..dependencies import get_session_manager, get_session_service
+from ..dependencies import get_session_manager, get_session_service, get_current_user
 from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
 
 router = APIRouter(prefix="/api/session", tags=["session"])
@@ -22,8 +22,8 @@ BLOOM_LABELS = {
 
 
 @router.post("/start", response_model=SessionCreateResponse)
-async def start_session(req: SessionCreateRequest, manager=Depends(get_session_manager)):
-    session = manager.create_session(max_steps=req.max_steps)
+async def start_session(req: SessionCreateRequest, manager=Depends(get_session_manager), user_id: str = Depends(get_current_user)):
+    session = manager.create_session(max_steps=req.max_steps, user_id=user_id)
 
     id_to_concept = {v: k for k, v in session.concept_map.items()}
     concepts = [

@@ -27,6 +27,7 @@ class PipelineRepository:
                 "job_id": job.job_id,
                 "filename": job.filename,
                 "subject_id": job.subject_id,
+                "user_id": getattr(job, "user_id", None),
                 "status": job.status.value,
                 "total_chunks": job.total_chunks,
                 "concepts_extracted": job.concepts_extracted,
@@ -58,11 +59,14 @@ class PipelineRepository:
             logger.error(f"[PipelineRepo] load error: {e}")
             return None
 
-    async def list_recent(self, limit: int = 20) -> List[Dict[str, Any]]:
+    async def list_recent(self, limit: int = 20, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List recent pipeline jobs."""
         try:
+            query = {}
+            if user_id:
+                query["user_id"] = user_id
             cursor = self._db[self.COLLECTION].find(
-                {},
+                query,
                 {
                     "_id": 0,
                     "job_id": 1,
