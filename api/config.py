@@ -57,3 +57,8 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+# Module-level alias so `from config import settings` works
+# (content-processor modules expect this name)
+settings = get_settings()
