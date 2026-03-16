@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from loguru import logger
 
 from ..core.content_pipeline import (
     process_pdf,
@@ -17,7 +18,7 @@ from ..core.content_pipeline import (
     CONTENT_PROCESSOR_ERROR,
 )
 from ..core import mongo_store
-from ..dependencies import get_session_manager, get_current_user
+from ..dependencies import get_session_manager, get_session_service, get_current_user
 from ..exceptions import (
     ServiceUnavailableError,
     PipelineNotFoundError,
@@ -152,6 +153,7 @@ async def create_session_from_pipeline(
     job_id: str,
     max_steps: int = 50,
     manager=Depends(get_session_manager),
+    exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
     """Create a learning session from a completed pipeline job."""
@@ -210,11 +212,9 @@ async def create_session_from_pipeline(
     # Fire eager prefetch
     try:
         import asyncio
-        exercise_service = getattr(manager, '_exercise_service', None)
-        if exercise_service:
-            asyncio.create_task(exercise_service.eager_generate_first_exercise(session))
-    except Exception:
-        pass
+        asyncio.create_task(exercise_svc.eager_generate_first_exercise(session))
+    except Exception as exc:
+        logger.warning(f"[PipelineRouter] Failed to schedule eager prefetch: {exc}")
 
     return {
         "session_id": session.session_id,

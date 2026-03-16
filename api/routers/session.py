@@ -3,6 +3,7 @@ Session router — Session lifecycle endpoints.
 """
 
 from fastapi import APIRouter, Depends
+from loguru import logger
 
 from ..schemas import (
     SessionCreateRequest, SessionCreateResponse,
@@ -22,7 +23,12 @@ BLOOM_LABELS = {
 
 
 @router.post("/start", response_model=SessionCreateResponse)
-async def start_session(req: SessionCreateRequest, manager=Depends(get_session_manager), user_id: str = Depends(get_current_user)):
+async def start_session(
+    req: SessionCreateRequest,
+    manager=Depends(get_session_manager),
+    exercise_svc=Depends(get_session_service),
+    user_id: str = Depends(get_current_user),
+):
     session = manager.create_session(max_steps=req.max_steps, user_id=user_id)
 
     id_to_concept = {v: k for k, v in session.concept_map.items()}
@@ -37,14 +43,10 @@ async def start_session(req: SessionCreateRequest, manager=Depends(get_session_m
 
     # Fire eager prefetch via exercise service
     try:
-        from ..dependencies import get_session_service as _get_svc
         import asyncio
-        # Get exercise service from the same app state
-        exercise_service = getattr(manager, '_exercise_service', None)
-        if exercise_service:
-            asyncio.create_task(exercise_service.eager_generate_first_exercise(session))
-    except Exception:
-        pass
+        asyncio.create_task(exercise_svc.eager_generate_first_exercise(session))
+    except Exception as exc:
+        logger.warning(f"[SessionRouter] Failed to schedule eager prefetch: {exc}")
 
     return SessionCreateResponse(
         session_id=session.session_id,
@@ -87,7 +89,7 @@ async def theory(
 
     theory_data = await exercise_svc.get_theory(session)
     if not theory_data:
-        raise SessionNotFoundError(session_id)
+        raise ExerciseGenerationError("No pending concept to generate theory")
 
     return TheoryResponse(**theory_data)
 

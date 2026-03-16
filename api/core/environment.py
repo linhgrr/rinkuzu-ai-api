@@ -488,6 +488,14 @@ class AdaptiveLearningEnv(gym.Env):
             "visit_counts": dict(self._visit_counts),
         }
 
+    def is_concept_visited(self, concept_idx: int) -> bool:
+        """Return whether a concept has been visited in this session."""
+        return concept_idx in self._visited
+
+    def get_visit_count(self, concept_idx: int) -> int:
+        """Return number of interactions for a concept in this session."""
+        return int(self._visit_counts.get(concept_idx, 0))
+
     def create_snapshot(self) -> "AdaptiveLearningEnv":
         """Create a lightweight copy for simulation.
 

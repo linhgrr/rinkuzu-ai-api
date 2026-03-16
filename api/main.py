@@ -56,9 +56,6 @@ async def lifespan(app: FastAPI):
 
         # Create ExerciseService with repository dependency
         exercise_service = ExerciseService(session_repo=session_repo)
-
-        # Store reference for eager prefetch access from routers
-        manager._exercise_service = exercise_service
     else:
         logger.info("[1/2] Model loading DISABLED — skipping")
         manager = None

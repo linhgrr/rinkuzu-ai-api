@@ -124,40 +124,69 @@ class SessionManager:
     # ── Internal helpers ────────────────────────────────────
 
     def _build_prereq_graph(self) -> Dict[int, List[int]]:
+        return self._build_prereq_graph_from_edges(self._prereq_data, self._concept_map)
+
+    @staticmethod
+    def _build_id_to_concept_map(concept_map: Dict[str, int]) -> Dict[int, str]:
+        return {v: k for k, v in concept_map.items()}
+
+    @classmethod
+    def _build_prereq_graph_from_edges(
+        cls,
+        prereq_edges: List[Dict],
+        concept_map: Dict[str, int],
+    ) -> Dict[int, List[int]]:
         graph: Dict[int, List[int]] = {}
         dropped = 0
-        for edge in self._prereq_data:
+        for edge in prereq_edges:
             src = str(edge.get("source", "")).strip()
             tgt = str(edge.get("target", "")).strip()
-            if src in self._concept_map and tgt in self._concept_map:
-                tgt_idx = self._concept_map[tgt]
-                src_idx = self._concept_map[src]
+            if src in concept_map and tgt in concept_map:
+                tgt_idx = concept_map[tgt]
+                src_idx = concept_map[src]
                 graph.setdefault(tgt_idx, []).append(src_idx)
             else:
                 dropped += 1
         if dropped:
-            logger.warning(f"[Session] _build_prereq_graph: dropped {dropped} edges")
+            logger.warning(
+                f"[Session] _build_prereq_graph_from_edges: dropped {dropped}/{len(prereq_edges)} edges"
+            )
         return graph
 
     def _build_concept_info(self):
+        names, defs, _ = self._build_concept_info_from_data(self._concepts_data, self._concept_map)
+        return names, defs
+
+    @classmethod
+    def _build_concept_info_from_data(
+        cls,
+        concepts_data: Dict[str, Any],
+        concept_map: Dict[str, int],
+    ):
         names: Dict[str, str] = {}
         defs: Dict[str, str] = {}
-        id_to_concept = {v: k for k, v in self._concept_map.items()}
+        theories: Dict[str, Dict[str, Any]] = {}
+        id_to_concept = cls._build_id_to_concept_map(concept_map)
 
-        for cid, cdata in self._concepts_data.items():
+        for cid_raw, cdata in concepts_data.items():
+            cid = str(cid_raw)
+            if cid not in concept_map:
+                continue
             name = cdata.get("name", cid)
             if not name or str(name).lower() == "nan":
                 name = cid
             names[cid] = name
             defs[cid] = cdata.get("definition", "")
+            if "theory" in cdata:
+                theories[cid] = cdata["theory"]
 
-        for idx in range(len(self._concept_map)):
+        for idx in range(len(concept_map)):
             cid = id_to_concept.get(idx, str(idx))
             if cid not in names:
                 names[cid] = cid
                 defs[cid] = ""
 
-        return names, defs
+        return names, defs, theories
 
     @classmethod
     def _get_text_encoder(cls):
@@ -225,42 +254,10 @@ class SessionManager:
         """Create a learning session from PDF pipeline output."""
         session_id = str(uuid.uuid4())[:8]
 
-        # Build prereq graph
-        prereq_graph: Dict[int, List[int]] = {}
-        dropped_edges = 0
-        for edge in prereq_edges:
-            src = str(edge.get("source", "")).strip()
-            tgt = str(edge.get("target", "")).strip()
-            if src in concept_map and tgt in concept_map:
-                tgt_idx = concept_map[tgt]
-                src_idx = concept_map[src]
-                prereq_graph.setdefault(tgt_idx, []).append(src_idx)
-            else:
-                dropped_edges += 1
-        if dropped_edges:
-            logger.warning(f"[Session] create_session_from_pipeline: dropped {dropped_edges}/{len(prereq_edges)} edges")
+        prereq_graph = self._build_prereq_graph_from_edges(prereq_edges, concept_map)
 
-        # Build names/defs
-        names: Dict[str, str] = {}
-        defs: Dict[str, str] = {}
-        theories: Dict[str, Dict[str, Any]] = {}
-        id_to_concept = {v: k for k, v in concept_map.items()}
-        for cid_raw, cdata in concepts_data.items():
-            cid = str(cid_raw)
-            if cid not in concept_map:
-                continue
-            name = cdata.get("name", cid)
-            if not name or str(name).lower() == "nan":
-                name = cid
-            names[cid] = name
-            defs[cid] = cdata.get("definition", "")
-            if "theory" in cdata:
-                theories[cid] = cdata["theory"]
-        for idx in range(len(concept_map)):
-            cid = id_to_concept.get(idx, str(idx))
-            if cid not in names:
-                names[cid] = cid
-                defs[cid] = ""
+        names, defs, theories = self._build_concept_info_from_data(concepts_data, concept_map)
+        id_to_concept = self._build_id_to_concept_map(concept_map)
 
         # Build concept embeddings for SAINT
         n_pipeline = len(concept_map)
@@ -420,9 +417,10 @@ class SessionManager:
         for idx in range(len(session.concept_map)):
             cid = id_to_concept.get(idx, str(idx))
             mastery = float(concept_mastery[idx])
+            visited = session.env.is_concept_visited(idx)
             status = self._resolve_concept_status(
                 mastery=mastery,
-                visited=(idx in session.env._visited),
+                visited=visited,
                 prereq_ok=bool(prereq_ok_mask[idx]),
             )
             nodes.append({
@@ -431,7 +429,7 @@ class SessionManager:
                 "name": session.concept_names.get(cid, cid),
                 "mastery": mastery,
                 "status": status,
-                "visited": idx in session.env._visited,
+                "visited": visited,
             })
 
         edges = []
@@ -503,12 +501,12 @@ class SessionManager:
             "mastery": float(concept_mastery[idx]),
             "status": self._resolve_concept_status(
                 mastery=float(concept_mastery[idx]),
-                visited=(idx in session.env._visited),
+                visited=session.env.is_concept_visited(idx),
                 prereq_ok=bool(prereq_ok_mask[idx]),
             ),
             "bloom_mastery": [float(bloom_mastery[idx, b]) for b in range(6)],
             "prerequisites": prereqs,
             "dependents": dependents,
-            "visited": idx in session.env._visited,
-            "visit_count": session.env._visit_counts.get(idx, 0),
+            "visited": session.env.is_concept_visited(idx),
+            "visit_count": session.env.get_visit_count(idx),
         }
