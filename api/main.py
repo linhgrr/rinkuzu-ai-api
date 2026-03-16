@@ -19,6 +19,7 @@ from .routers import session as session_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
 from .routers import history as history_router
+from .routers import quiz_extract as quiz_extract_router
 
 
 @asynccontextmanager
@@ -101,6 +102,7 @@ app.include_router(session_router.router)
 app.include_router(knowledge_router.router)
 app.include_router(pipeline_router.router)
 app.include_router(history_router.router)
+app.include_router(quiz_extract_router.router)
 
 
 @app.get("/api/health")
