@@ -250,9 +250,11 @@ class SessionManager:
         precomputed_embeddings: Optional[List[List[float]]] = None,
         job_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        history_source_doc: Optional[Dict[str, Any]] = None,
     ) -> SessionState:
         """Create a learning session from PDF pipeline output."""
-        session_id = str(uuid.uuid4())[:8]
+        session_id = session_id or str(uuid.uuid4())[:8]
 
         prereq_graph = self._build_prereq_graph_from_edges(prereq_edges, concept_map)
 
@@ -300,7 +302,14 @@ class SessionManager:
         prev_history = []
         total_correct = 0
         total_answered = 0
-        if job_id:
+        if history_source_doc:
+            prev_history = history_source_doc.get("exercise_history") or []
+            total_correct = history_source_doc.get("total_correct", 0)
+            total_answered = history_source_doc.get("total_answered", 0)
+            logger.info(
+                f"[Session] Rehydrating from provided history doc with {len(prev_history)} exercises"
+            )
+        elif job_id:
             try:
                 prev_session = await mongo_store.find_latest_session_for_job(job_id, user_id=user_id)
                 if prev_session and prev_session.get("exercise_history"):
@@ -358,6 +367,71 @@ class SessionManager:
 
         self._sessions[session_id] = session
         return session
+
+    async def get_or_recover_session(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> Optional[SessionState]:
+        """Get active in-memory session; recover from MongoDB when missing.
+
+        Recovery path:
+        1) Load persisted session doc by session_id + user_id.
+        2) Load source pipeline result by job_id.
+        3) Rebuild environment and replay saved exercise history.
+        """
+        active = self._sessions.get(session_id)
+        if active and getattr(active, "user_id", None) == user_id:
+            return active
+
+        session_doc = await mongo_store.load_session_doc_for_user(session_id, user_id)
+        if not session_doc:
+            return None
+
+        job_id = session_doc.get("job_id")
+        if not job_id:
+            logger.warning(
+                f"[Session] Cannot recover session={session_id}: missing job_id in persisted doc"
+            )
+            return None
+
+        job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+        if not job_doc:
+            logger.warning(
+                f"[Session] Cannot recover session={session_id}: pipeline job {job_id} not found"
+            )
+            return None
+
+        result = job_doc.get("result") or {}
+        if not all(key in result for key in ("concepts_data", "concept_map", "prereq_edges")):
+            logger.warning(
+                f"[Session] Cannot recover session={session_id}: incomplete pipeline result"
+            )
+            return None
+
+        max_steps = int(session_doc.get("max_steps") or 50)
+
+        try:
+            recovered = await self.create_session_from_pipeline(
+                concepts_data=result["concepts_data"],
+                concept_map=result["concept_map"],
+                prereq_edges=result["prereq_edges"],
+                max_steps=max_steps,
+                precomputed_embeddings=result.get("concept_embeddings"),
+                job_id=job_id,
+                user_id=user_id,
+                session_id=session_id,
+                history_source_doc=session_doc,
+            )
+            logger.info(
+                f"[Session] Recovered session={session_id} for user={user_id} from Mongo"
+            )
+            return recovered
+        except Exception as exc:
+            logger.warning(
+                f"[Session] Failed recovering session={session_id}: {exc}"
+            )
+            return None
 
     # ── Query Methods ───────────────────────────────────────
 

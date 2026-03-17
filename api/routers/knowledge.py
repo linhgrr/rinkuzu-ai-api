@@ -13,15 +13,20 @@ from ..exceptions import SessionNotFoundError
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
 
 
+async def _resolve_user_session(manager, session_id: str, user_id: str):
+    session = await manager.get_or_recover_session(session_id, user_id)
+    if not session:
+        raise SessionNotFoundError(session_id)
+    return session
+
+
 @router.get("/{session_id}/graph", response_model=KnowledgeGraphResponse)
 async def get_knowledge_graph(
     session_id: str,
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    await _resolve_user_session(manager, session_id, user_id)
     data = manager.get_knowledge_graph(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
@@ -34,9 +39,7 @@ async def get_mastery_matrix(
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    await _resolve_user_session(manager, session_id, user_id)
     data = manager.get_mastery_matrix(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
@@ -50,9 +53,7 @@ async def get_concept_detail(
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    await _resolve_user_session(manager, session_id, user_id)
     data = manager.get_concept_detail(session_id, concept_id)
     if not data:
         raise SessionNotFoundError(session_id)

@@ -22,6 +22,13 @@ BLOOM_LABELS = {
 }
 
 
+async def _resolve_user_session(manager, session_id: str, user_id: str):
+    session = await manager.get_or_recover_session(session_id, user_id)
+    if not session:
+        raise SessionNotFoundError(session_id)
+    return session
+
+
 @router.post("/start", response_model=SessionCreateResponse)
 async def start_session(
     req: SessionCreateRequest,
@@ -63,9 +70,7 @@ async def next_concept(
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    session = await _resolve_user_session(manager, session_id, user_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
 
@@ -83,9 +88,7 @@ async def theory(
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    session = await _resolve_user_session(manager, session_id, user_id)
 
     theory_data = await exercise_svc.get_theory(session)
     if not theory_data:
@@ -101,9 +104,7 @@ async def generate_exercise(
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    session = await _resolve_user_session(manager, session_id, user_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
 
@@ -135,9 +136,7 @@ async def submit_answer(
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    session = await _resolve_user_session(manager, session_id, user_id)
 
     result = await exercise_svc.submit_answer(session, req.answer)
     if not result:
@@ -152,9 +151,7 @@ async def session_status(
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.get_session(session_id)
-    if not session or getattr(session, "user_id", None) != user_id:
-        raise SessionNotFoundError(session_id)
+    session = await _resolve_user_session(manager, session_id, user_id)
     status = manager.get_session_status(session_id)
     if not status:
         raise SessionNotFoundError(session_id)

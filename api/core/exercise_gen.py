@@ -66,6 +66,14 @@ _llm: Optional[ChatOpenAI] = None          # plain text invocation
 _structured_exercise_llm = None            # with_structured_output for exercise
 _structured_theory_llm = None              # with_structured_output for theory
 
+MATH_FORMAT_RULES = (
+    "Quy tắc định dạng toán bắt buộc:\n"
+    "- Mọi biểu thức toán inline PHẢI đặt trong $...$.\n"
+    "- Không dùng dạng vec(...), frac(...), sqrt(...). Bắt buộc dùng LaTeX: \\vec{...}, \\frac{...}{...}, \\sqrt{...}.\n"
+    "- Chỉ số với chữ cái Hy Lạp phải viết đúng LaTeX, ví dụ: $n_{\\alpha}$, $n_{\\eta}$.\n"
+    "- Ví dụ đúng: $\\vec{n}_{\\alpha} \\cdot \\vec{n}_{\\eta} = 0$.\n"
+)
+
 
 def init_llm(
     base_url: Optional[str] = None,
@@ -135,7 +143,7 @@ def generate_exercise(
         "- Câu hỏi rõ ràng, phù hợp đúng Bloom level.\n"
         "- Có duy nhất 1 đáp án đúng.\n"
         "- Giải thích chi tiết cho phương án đúng (explanation_correct) và gợi ý sửa sai cho phương án sai (explanation_incorrect).\n"
-        "- Nếu có công thức toán học, BẮT BUỘC bỏ trong cặp dấu $...$ (ví dụ: $x^2 + y^2 = z^2$).\n"
+        f"{MATH_FORMAT_RULES}"
         "- Có thể có xuống dòng, định dạng in đậm/nghiêng bằng Markdown nếu cần thiết.\n"
     )
 
@@ -183,7 +191,7 @@ def generate_theory(
         "1. Phần 'content': Tóm tắt lý thuyết cực kỳ ngắn gọn, súc tích (khoảng 3-5 câu), tập trung vào ý chính dễ hiểu.\n"
         "2. Phần 'examples': Đưa ra 2-3 ví dụ minh họa thực tế hoặc bài toán đơn giản.\n"
         "3. Ngôn ngữ: Tiếng Việt.\n"
-        "4. Nếu có công thức toán học, BẮT BUỘC bỏ trong cặp dấu $...$ (ví dụ: $E = mc^2$).\n"
+        f"4. {MATH_FORMAT_RULES}"
         "5. Có thể dùng cú pháp Markdown cơ bản (*in nghiêng*, **in đậm**).\n"
     )
 
