@@ -121,7 +121,11 @@ class ExerciseService:
             return None
 
         async with session._lock:
+            if session.env.max_steps <= 50:
+                session.env.max_steps = 9999
             env = session.env
+            if env.max_steps <= 50:
+                env.max_steps = 9999
             env_stats = env.get_session_stats()
             current_step = env_stats.get("step", 0)
 

@@ -60,7 +60,7 @@ class SessionRepository:
                 "total_answered": session.total_answered,
                 "accuracy": session.total_correct / max(session.total_answered, 1),
                 "step": env_stats.get("step", 0),
-                "max_steps": env_stats.get("max_steps", 50),
+                "max_steps": env_stats.get("max_steps", 9999),
                 "avg_mastery": float(np.mean(concept_mastery)),
                 "concept_mastery": concept_mastery.tolist(),
                 "bloom_mastery": bloom_mastery.tolist(),

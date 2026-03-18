@@ -41,7 +41,7 @@ class AdaptiveLearningEnv(gym.Env):
         concept_map: Dict[str, int],
         prereq_graph: Optional[Dict[int, List[int]]] = None,
         concept_blooms: Optional[Dict[int, List[int]]] = None,
-        max_steps: int = 50,
+        max_steps: int = 9999,
         mastery_threshold: float = 0.75,
         novelty_bonus: float = 0.3,
         mastery_gain_coeff: float = 1.0,

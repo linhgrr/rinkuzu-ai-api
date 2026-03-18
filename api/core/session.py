@@ -206,7 +206,7 @@ class SessionManager:
 
     # ── Session Lifecycle ───────────────────────────────────
 
-    def create_session(self, max_steps: int = 50, user_id: Optional[str] = None) -> SessionState:
+    def create_session(self, max_steps: int = 9999, user_id: Optional[str] = None) -> SessionState:
         """Create a new learning session."""
         session_id = str(uuid.uuid4())[:8]
 
@@ -246,7 +246,7 @@ class SessionManager:
         concepts_data: Dict[str, Any],
         concept_map: Dict[str, int],
         prereq_edges: List[Dict],
-        max_steps: int = 50,
+        max_steps: int = 9999,
         precomputed_embeddings: Optional[List[List[float]]] = None,
         job_id: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -410,6 +410,9 @@ class SessionManager:
             return None
 
         max_steps = int(session_doc.get("max_steps") or 50)
+        history_len = len(session_doc.get("exercise_history", []))
+        if max_steps <= 50:
+            max_steps = 9999
 
         try:
             recovered = await self.create_session_from_pipeline(

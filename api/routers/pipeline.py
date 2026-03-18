@@ -151,7 +151,7 @@ async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
 @router.post("/jobs/{job_id}/create-session")
 async def create_session_from_pipeline(
     job_id: str,
-    max_steps: int = 50,
+    max_steps: int = 9999,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
