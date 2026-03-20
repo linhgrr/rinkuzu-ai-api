@@ -9,13 +9,13 @@ from typing import Optional, Dict, Any
 
 from loguru import logger
 
-from ..repositories.session_repo import SessionRepository
 from ..repositories.pipeline_repo import PipelineRepository
+from ..repositories.subject_progress_repo import SubjectProgressRepository
 
 
 _mongo_available = False
-_session_repo: Optional[SessionRepository] = None
 _pipeline_repo: Optional[PipelineRepository] = None
+_subject_progress_repo: Optional[SubjectProgressRepository] = None
 
 
 async def init_mongo(mongo_url: Optional[str] = None) -> bool:
@@ -23,7 +23,7 @@ async def init_mongo(mongo_url: Optional[str] = None) -> bool:
 
     Returns True if successful, False otherwise.
     """
-    global _mongo_available, _session_repo, _pipeline_repo
+    global _mongo_available, _pipeline_repo, _subject_progress_repo
 
     if not mongo_url:
         import os
@@ -39,11 +39,11 @@ async def init_mongo(mongo_url: Optional[str] = None) -> bool:
         await client.admin.command("ping")
         db = client["adaptive_learning"]
 
-        _session_repo = SessionRepository(db)
         _pipeline_repo = PipelineRepository(db)
+        _subject_progress_repo = SubjectProgressRepository(db)
 
-        await _session_repo.ensure_indexes()
         await _pipeline_repo.ensure_indexes()
+        await _subject_progress_repo.ensure_indexes()
 
         _mongo_available = True
         logger.info("[MongoDB] ✓ Connected to adaptive_learning database")
@@ -58,45 +58,54 @@ def is_available() -> bool:
     return _mongo_available
 
 
-def get_session_repo() -> Optional[SessionRepository]:
-    return _session_repo
-
-
 def get_pipeline_repo() -> Optional[PipelineRepository]:
     return _pipeline_repo
+
+
+def get_subject_progress_repo() -> Optional[SubjectProgressRepository]:
+    return _subject_progress_repo
 
 
 # ── Backward-compatible module-level functions ──────────────
 # Used by content_pipeline.py which imports from this module directly.
 
-async def save_session(session) -> bool:
-    if not _session_repo:
+async def save_subject_progress(job_id: str, user_id: str, doc: Dict[str, Any]) -> bool:
+    if not _subject_progress_repo:
         return False
-    return await _session_repo.save(session)
+    return await _subject_progress_repo.save_snapshot(job_id, user_id, doc)
 
 
-async def load_session_doc(session_id: str) -> Optional[Dict[str, Any]]:
-    if not _session_repo:
+async def load_subject_progress_for_user(job_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    if not _subject_progress_repo:
         return None
-    return await _session_repo.load(session_id)
+    return await _subject_progress_repo.load_for_user(job_id, user_id)
 
 
-async def load_session_doc_for_user(session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-    if not _session_repo:
+async def load_subject_progress_by_session_for_user(
+    session_id: str,
+    user_id: str,
+) -> Optional[Dict[str, Any]]:
+    if not _subject_progress_repo:
         return None
-    return await _session_repo.load_for_user(session_id, user_id)
+    return await _subject_progress_repo.load_by_session_for_user(session_id, user_id)
 
 
-async def list_sessions(limit: int = 50, user_id: str = None) -> list:
-    if not _session_repo:
+async def load_subject_progress_map(job_ids: list[str], user_id: str) -> Dict[str, Dict[str, Any]]:
+    if not _subject_progress_repo:
+        return {}
+    return await _subject_progress_repo.load_many_for_user(job_ids, user_id)
+
+
+async def list_subject_progress(limit: int = 50, user_id: str = None) -> list:
+    if not _subject_progress_repo:
         return []
-    return await _session_repo.list_recent(limit, user_id)
+    return await _subject_progress_repo.list_recent(limit, user_id)
 
 
-async def find_latest_session_for_job(job_id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
-    if not _session_repo:
-        return None
-    return await _session_repo.find_latest_for_job(job_id, user_id)
+async def delete_subject_progress_for_user(job_id: str, user_id: str) -> int:
+    if not _subject_progress_repo:
+        return 0
+    return await _subject_progress_repo.delete_for_user(job_id, user_id)
 
 
 async def save_pipeline_job(job) -> bool:
@@ -115,6 +124,16 @@ async def load_pipeline_job_for_user(job_id: str, user_id: str) -> Optional[Dict
     if not _pipeline_repo:
         return None
     return await _pipeline_repo.load_for_user(job_id, user_id)
+
+
+async def load_pipeline_job_map_for_user(
+    job_ids: list[str],
+    user_id: str,
+    projection: Optional[Dict[str, int]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    if not _pipeline_repo:
+        return {}
+    return await _pipeline_repo.load_many_for_user(job_ids, user_id, projection=projection)
 
 
 async def list_pipeline_jobs(limit: int = 20, user_id: str = None, status: str = None) -> list:

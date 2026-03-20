@@ -7,12 +7,12 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from loguru import logger
+import aiofiles
 
 from ..core.content_pipeline import (
     process_pdf,
-    get_job,
     PipelineStatus,
     CONTENT_PROCESSOR_AVAILABLE,
     CONTENT_PROCESSOR_ERROR,
@@ -48,6 +48,7 @@ async def pipeline_status():
 
 @router.post("/process")
 async def process_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     subject_id: Optional[str] = Form(None),
     prs_threshold: float = Form(0.75),
@@ -58,6 +59,8 @@ async def process_document(
     """Upload a PDF and run the full content processing pipeline."""
     if not CONTENT_PROCESSOR_AVAILABLE:
         raise ServiceUnavailableError("Content processor")
+    if not mongo_store.is_available():
+        raise ServiceUnavailableError("MongoDB persistence")
 
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
@@ -65,20 +68,29 @@ async def process_document(
     file_id = str(uuid.uuid4())[:8]
     save_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
     try:
-        contents = await file.read()
-        with open(save_path, "wb") as f:
-            f.write(contents)
+        async with aiofiles.open(save_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                await f.write(chunk)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-    job = await process_pdf(
-        file_path=str(save_path),
-        subject_id=subject_id,
-        prs_threshold=prs_threshold,
-        min_confidence=min_confidence,
-        apply_reduction=apply_reduction,
-        user_id=user_id,
-    )
+    try:
+        job = await process_pdf(
+            file_path=str(save_path),
+            subject_id=subject_id,
+            prs_threshold=prs_threshold,
+            min_confidence=min_confidence,
+            apply_reduction=apply_reduction,
+            user_id=user_id,
+            background_tasks=background_tasks,
+        )
+    except Exception as exc:
+        try:
+            if save_path.exists():
+                save_path.unlink()
+        except OSError:
+            logger.warning(f"[PipelineRouter] Failed to cleanup upload {save_path}")
+        raise HTTPException(status_code=503, detail=f"Failed to initialize pipeline job: {exc}")
 
     return {
         "job_id": job.job_id,
@@ -93,32 +105,6 @@ async def process_document(
 @router.get("/jobs/{job_id}")
 async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
     """Get pipeline job status and progress."""
-    job = get_job(job_id)
-    if job and getattr(job, "user_id", None) == user_id:
-        response = {
-            "job_id": job.job_id,
-            "filename": job.filename,
-            "subject_id": job.subject_id,
-            "status": job.status.value,
-            "current_step": job.current_step,
-            "progress": job.progress,
-            "total_chunks": job.total_chunks,
-            "concepts_extracted": job.concepts_extracted,
-            "concepts_after_merge": job.concepts_after_merge,
-            "relations_verified": job.relations_verified,
-            "graph_stats": job.graph_stats,
-            "error_message": job.error_message,
-            "partial_graph": job.partial_graph,
-        }
-        if job.status == PipelineStatus.COMPLETED and job.result:
-            response["result"] = {
-                "graph": job.result["graph"],
-                "stats": job.result["stats"],
-                "n_concepts": len(job.result["concept_map"]),
-            }
-        return response
-
-    # Fallback to MongoDB
     job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
@@ -129,17 +115,17 @@ async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
         "filename": job_doc.get("filename", ""),
         "subject_id": job_doc.get("subject_id", ""),
         "status": job_doc.get("status", "unknown"),
-        "current_step": "Loaded from MongoDB",
-        "progress": 1.0 if job_doc.get("status") == "completed" else 0.0,
+        "current_step": job_doc.get("current_step", "Loaded from MongoDB"),
+        "progress": job_doc.get("progress", 1.0 if job_doc.get("status") == "completed" else 0.0),
         "total_chunks": job_doc.get("total_chunks", 0),
         "concepts_extracted": job_doc.get("concepts_extracted", 0),
         "concepts_after_merge": job_doc.get("concepts_after_merge", 0),
         "relations_verified": job_doc.get("relations_verified", 0),
         "graph_stats": job_doc.get("graph_stats", {}),
-        "error_message": None,
-        "partial_graph": None,
+        "error_message": job_doc.get("error_message"),
+        "partial_graph": job_doc.get("partial_graph"),
     }
-    if job_doc.get("status") == "completed" and result:
+    if job_doc.get("status") == PipelineStatus.COMPLETED.value and result:
         response["result"] = {
             "graph": result.get("graph", {"nodes": [], "edges": []}),
             "stats": result.get("stats", {}),
@@ -151,6 +137,7 @@ async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
 @router.post("/jobs/{job_id}/create-session")
 async def create_session_from_pipeline(
     job_id: str,
+    background_tasks: BackgroundTasks,
     max_steps: int = 9999,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
@@ -159,22 +146,6 @@ async def create_session_from_pipeline(
     """Create a learning session from a completed pipeline job."""
     job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
-        mem_job = get_job(job_id)
-        if (
-            mem_job
-            and getattr(mem_job, "user_id", None) == user_id
-            and mem_job.status != PipelineStatus.COMPLETED
-        ):
-            raise PipelineNotCompletedError(job_id, mem_job.status.value)
-        if (
-            mem_job
-            and getattr(mem_job, "user_id", None) == user_id
-            and mem_job.status == PipelineStatus.COMPLETED
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Job completed in memory but not persisted to MongoDB yet. Please retry shortly.",
-            )
         raise PipelineNotFoundError(job_id)
 
     if job_doc.get("status") != "completed":
@@ -211,15 +182,14 @@ async def create_session_from_pipeline(
 
     # Fire eager prefetch
     try:
-        import asyncio
-        asyncio.create_task(exercise_svc.eager_generate_first_exercise(session))
+        background_tasks.add_task(exercise_svc.eager_generate_first_exercise, session)
     except Exception as exc:
         logger.warning(f"[PipelineRouter] Failed to schedule eager prefetch: {exc}")
 
     return {
         "session_id": session.session_id,
         "n_concepts": len(result["concept_map"]),
-        "source": "mongodb",
+        "source": "new_session",
         "job_id": job_id,
         "status": "active",
     }

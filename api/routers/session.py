@@ -2,7 +2,7 @@
 Session router — Session lifecycle endpoints.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from loguru import logger
 
 from ..schemas import (
@@ -32,11 +32,12 @@ async def _resolve_user_session(manager, session_id: str, user_id: str):
 @router.post("/start", response_model=SessionCreateResponse)
 async def start_session(
     req: SessionCreateRequest,
+    background_tasks: BackgroundTasks,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
-    session = manager.create_session(max_steps=req.max_steps, user_id=user_id)
+    session = await manager.create_session(max_steps=req.max_steps, user_id=user_id)
 
     id_to_concept = {v: k for k, v in session.concept_map.items()}
     concepts = [
@@ -48,10 +49,9 @@ async def start_session(
         for i in range(len(session.concept_map))
     ]
 
-    # Fire eager prefetch via exercise service
+    # Fire eager prefetch via built-in BackgroundTasks
     try:
-        import asyncio
-        asyncio.create_task(exercise_svc.eager_generate_first_exercise(session))
+        background_tasks.add_task(exercise_svc.eager_generate_first_exercise, session)
     except Exception as exc:
         logger.warning(f"[SessionRouter] Failed to schedule eager prefetch: {exc}")
 
@@ -100,6 +100,7 @@ async def theory(
 @router.post("/{session_id}/exercise", response_model=ExerciseResponse)
 async def generate_exercise(
     session_id: str,
+    background_tasks: BackgroundTasks,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
@@ -108,7 +109,7 @@ async def generate_exercise(
     if session.status != "active":
         raise SessionCompletedError(session_id)
 
-    exercise = await exercise_svc.generate_exercise(session)
+    exercise = await exercise_svc.generate_exercise(session, background_tasks)
     if not exercise:
         raise ExerciseGenerationError()
 
@@ -132,13 +133,14 @@ async def generate_exercise(
 async def submit_answer(
     session_id: str,
     req: SubmitAnswerRequest,
+    background_tasks: BackgroundTasks,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
     session = await _resolve_user_session(manager, session_id, user_id)
 
-    result = await exercise_svc.submit_answer(session, req.answer)
+    result = await exercise_svc.submit_answer(session, req.answer, background_tasks)
     if not result:
         raise ExerciseGenerationError("No pending exercise or session not found")
 

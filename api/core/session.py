@@ -23,6 +23,7 @@ from loguru import logger
 from .models import load_saint_model, load_dqn_model, DuelingQNetwork, SaintModel
 from .environment import AdaptiveLearningEnv
 from . import mongo_store
+from .subject_progress_snapshot import build_subject_progress_snapshot
 
 
 @dataclass
@@ -61,6 +62,7 @@ class SessionState:
     total_answered: int = 0
     job_id: Optional[str] = None
     created_at: float = field(default_factory=time.time)
+    accessed_at: float = field(default_factory=time.time)
     status: str = "active"
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     concept_theories: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -106,6 +108,7 @@ class SessionManager:
 
         # Active sessions
         self._sessions: Dict[str, SessionState] = {}
+        self._recovery_locks: Dict[str, asyncio.Lock] = {}
 
     # ── Properties ──────────────────────────────────────────
 
@@ -206,7 +209,45 @@ class SessionManager:
 
     # ── Session Lifecycle ───────────────────────────────────
 
-    def create_session(self, max_steps: int = 9999, user_id: Optional[str] = None) -> SessionState:
+    def _clean_expired_sessions(self, max_size=500):
+        """Simple eviction logic: if we exceed max_size, evict oldest 20% by access time."""
+        if len(self._sessions) > max_size:
+            sorted_keys = sorted(
+                self._sessions.keys(),
+                key=lambda k: getattr(self._sessions[k], 'accessed_at', getattr(self._sessions[k], 'created_at', 0))
+            )
+            # Remove oldest 20%
+            for k in sorted_keys[:max_size // 5]:
+                self._sessions.pop(k, None)
+                lock = self._recovery_locks.get(k)
+                if lock is not None and not lock.locked():
+                    self._recovery_locks.pop(k, None)
+
+    def _register_session(self, session: SessionState) -> SessionState:
+        self._sessions[session.session_id] = session
+        self._clean_expired_sessions()
+        return session
+
+    def remove_session(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+        lock = self._recovery_locks.get(session_id)
+        if lock is not None and not lock.locked():
+            self._recovery_locks.pop(session_id, None)
+
+    @staticmethod
+    def build_subject_progress_snapshot(session: SessionState) -> Dict[str, Any]:
+        return build_subject_progress_snapshot(session)
+
+    async def persist_subject_progress(self, session: SessionState) -> bool:
+        if not session.job_id or not session.user_id:
+            return True
+        return await mongo_store.save_subject_progress(
+            session.job_id,
+            session.user_id,
+            self.build_subject_progress_snapshot(session),
+        )
+
+    async def create_session(self, max_steps: int = 9999, user_id: Optional[str] = None) -> SessionState:
         """Create a new learning session."""
         session_id = str(uuid.uuid4())[:8]
 
@@ -235,11 +276,17 @@ class SessionManager:
             concept_theories={},
         )
 
-        self._sessions[session_id] = session
+        self._register_session(session)
+        if not await self.persist_subject_progress(session):
+            self.remove_session(session.session_id)
+            raise RuntimeError(f"Failed to persist subject progress for {session.session_id}")
         return session
 
     def get_session(self, session_id: str) -> Optional[SessionState]:
-        return self._sessions.get(session_id)
+        session = self._sessions.get(session_id)
+        if session:
+            session.accessed_at = time.time()
+        return session
 
     async def create_session_from_pipeline(
         self,
@@ -298,29 +345,20 @@ class SessionManager:
         )
         obs, info = env.reset(seed=42)
 
-        # Load previous history from MongoDB
+        history_doc = history_source_doc
+        if history_doc is None and job_id and user_id:
+            history_doc = await mongo_store.load_subject_progress_for_user(job_id, user_id)
+
         prev_history = []
         total_correct = 0
         total_answered = 0
-        if history_source_doc:
-            prev_history = history_source_doc.get("exercise_history") or []
-            total_correct = history_source_doc.get("total_correct", 0)
-            total_answered = history_source_doc.get("total_answered", 0)
+        if history_doc:
+            prev_history = history_doc.get("exercise_history") or []
+            total_correct = history_doc.get("total_correct", 0)
+            total_answered = history_doc.get("total_answered", 0)
             logger.info(
-                f"[Session] Rehydrating from provided history doc with {len(prev_history)} exercises"
+                f"[Session] Rehydrating subject history with {len(prev_history)} exercises"
             )
-        elif job_id:
-            try:
-                prev_session = await mongo_store.find_latest_session_for_job(job_id, user_id=user_id)
-                if prev_session and prev_session.get("exercise_history"):
-                    prev_history = prev_session["exercise_history"]
-                    total_correct = prev_session.get("total_correct", 0)
-                    total_answered = prev_session.get("total_answered", 0)
-                    logger.info(f"[Session] Found previous session with {len(prev_history)} exercises")
-                else:
-                    logger.info(f"[Session] No previous session for job {job_id}, starting fresh")
-            except Exception as e:
-                logger.warning(f"[Session] Error loading previous session: {e}, starting fresh")
 
         # Inject history into environment
         if prev_history:
@@ -344,6 +382,8 @@ class SessionManager:
             total_correct=total_correct,
             total_answered=total_answered,
             job_id=job_id,
+            created_at=(history_doc or {}).get("created_at", time.time()),
+            status=(history_doc or {}).get("status", "active"),
             concept_theories=theories,
         )
 
@@ -365,7 +405,10 @@ class SessionManager:
                 timestamp=ex.get("timestamp", 0),
             ))
 
-        self._sessions[session_id] = session
+        self._register_session(session)
+        if not await self.persist_subject_progress(session):
+            self.remove_session(session.session_id)
+            raise RuntimeError(f"Failed to persist subject progress for {session.session_id}")
         return session
 
     async def get_or_recover_session(
@@ -373,49 +416,38 @@ class SessionManager:
         session_id: str,
         user_id: str,
     ) -> Optional[SessionState]:
-        """Get active in-memory session; recover from MongoDB when missing.
-
-        Recovery path:
-        1) Load persisted session doc by session_id + user_id.
-        2) Load source pipeline result by job_id.
-        3) Rebuild environment and replay saved exercise history.
-        """
-        active = self._sessions.get(session_id)
+        active = self.get_session(session_id)
         if active and getattr(active, "user_id", None) == user_id:
             return active
 
-        session_doc = await mongo_store.load_session_doc_for_user(session_id, user_id)
-        if not session_doc:
-            return None
+        lock = self._recovery_locks.setdefault(session_id, asyncio.Lock())
+        async with lock:
+            active = self.get_session(session_id)
+            if active and getattr(active, "user_id", None) == user_id:
+                return active
 
-        job_id = session_doc.get("job_id")
-        if not job_id:
-            logger.warning(
-                f"[Session] Cannot recover session={session_id}: missing job_id in persisted doc"
+            progress_doc = await mongo_store.load_subject_progress_by_session_for_user(
+                session_id,
+                user_id,
             )
-            return None
+            if not progress_doc:
+                return None
 
-        job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
-        if not job_doc:
-            logger.warning(
-                f"[Session] Cannot recover session={session_id}: pipeline job {job_id} not found"
-            )
-            return None
+            job_id = progress_doc.get("job_id")
+            if not job_id:
+                return None
 
-        result = job_doc.get("result") or {}
-        if not all(key in result for key in ("concepts_data", "concept_map", "prereq_edges")):
-            logger.warning(
-                f"[Session] Cannot recover session={session_id}: incomplete pipeline result"
-            )
-            return None
+            job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+            if not job_doc:
+                return None
 
-        max_steps = int(session_doc.get("max_steps") or 50)
-        history_len = len(session_doc.get("exercise_history", []))
-        if max_steps <= 50:
-            max_steps = 9999
+            result = job_doc.get("result") or {}
+            if not all(key in result for key in ("concepts_data", "concept_map", "prereq_edges")):
+                return None
 
-        try:
-            recovered = await self.create_session_from_pipeline(
+            max_steps = int(progress_doc.get("max_steps") or 9999)
+
+            return await self.create_session_from_pipeline(
                 concepts_data=result["concepts_data"],
                 concept_map=result["concept_map"],
                 prereq_edges=result["prereq_edges"],
@@ -424,23 +456,14 @@ class SessionManager:
                 job_id=job_id,
                 user_id=user_id,
                 session_id=session_id,
-                history_source_doc=session_doc,
+                history_source_doc=progress_doc,
             )
-            logger.info(
-                f"[Session] Recovered session={session_id} for user={user_id} from Mongo"
-            )
-            return recovered
-        except Exception as exc:
-            logger.warning(
-                f"[Session] Failed recovering session={session_id}: {exc}"
-            )
-            return None
 
     # ── Query Methods ───────────────────────────────────────
 
     def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get full session status."""
-        session = self._sessions.get(session_id)
+        session = self.get_session(session_id)
         if not session:
             return None
 
@@ -482,7 +505,7 @@ class SessionManager:
 
     def get_knowledge_graph(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get knowledge graph with mastery overlay."""
-        session = self._sessions.get(session_id)
+        session = self.get_session(session_id)
         if not session:
             return None
 
@@ -520,7 +543,7 @@ class SessionManager:
 
     def get_mastery_matrix(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get full mastery matrix (concepts × bloom levels)."""
-        session = self._sessions.get(session_id)
+        session = self.get_session(session_id)
         if not session:
             return None
 
@@ -542,7 +565,7 @@ class SessionManager:
 
     def get_concept_detail(self, session_id: str, concept_id: str) -> Optional[Dict[str, Any]]:
         """Get detailed info for a specific concept."""
-        session = self._sessions.get(session_id)
+        session = self.get_session(session_id)
         if not session or concept_id not in session.concept_map:
             return None
 

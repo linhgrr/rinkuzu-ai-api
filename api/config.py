@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     saint_path: str = str(BASE_DIR / "models" / "saint_best.pt")
     dqn_path: str = str(BASE_DIR / "models" / "dqn_best.pt")
 
+    # ── App Config ──────────────────────────────────────────
+    cors_origins: list[str] = ["*"]
+
     # ── MongoDB ─────────────────────────────────────────────
     mongo_url: Optional[str] = None
 

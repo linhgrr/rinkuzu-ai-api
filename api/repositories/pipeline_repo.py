@@ -12,6 +12,17 @@ class PipelineRepository:
     """Data access layer for pipeline jobs in MongoDB."""
 
     COLLECTION = "al_pipeline_jobs"
+    SUMMARY_PROJECTION = {
+        "_id": 0,
+        "job_id": 1,
+        "filename": 1,
+        "subject_id": 1,
+        "status": 1,
+        "concepts_extracted": 1,
+        "concepts_after_merge": 1,
+        "relations_verified": 1,
+        "completed_at": 1,
+    }
 
     def __init__(self, db):
         self._db = db
@@ -38,6 +49,10 @@ class PipelineRepository:
                 "relations_verified": job.relations_verified,
                 "graph_stats": job.graph_stats if isinstance(job.graph_stats, dict) else {},
                 "result": job.result,
+                "current_step": getattr(job, "current_step", ""),
+                "progress": getattr(job, "progress", 0.0),
+                "error_message": getattr(job, "error_message", None),
+                "partial_graph": getattr(job, "partial_graph", None),
                 "created_at": job.created_at,
                 "completed_at": job.completed_at or time.time(),
             }
@@ -72,6 +87,27 @@ class PipelineRepository:
             logger.error(f"[PipelineRepo] load_for_user error: {e}")
             return None
 
+    async def load_many_for_user(
+        self,
+        job_ids: List[str],
+        user_id: str,
+        projection: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Load multiple pipeline jobs for a user in one round-trip."""
+        if not job_ids:
+            return {}
+
+        try:
+            cursor = self._db[self.COLLECTION].find(
+                {"job_id": {"$in": job_ids}, "user_id": user_id},
+                projection or {"_id": 0},
+            )
+            rows = await cursor.to_list(length=len(job_ids))
+            return {row["job_id"]: row for row in rows if row.get("job_id")}
+        except Exception as e:
+            logger.error(f"[PipelineRepo] load_many_for_user error: {e}")
+            return {}
+
     async def list_recent(
         self,
         limit: int = 20,
@@ -87,16 +123,7 @@ class PipelineRepository:
                 query["status"] = status
             cursor = self._db[self.COLLECTION].find(
                 query,
-                {
-                    "_id": 0,
-                    "job_id": 1,
-                    "filename": 1,
-                    "subject_id": 1,
-                    "status": 1,
-                    "concepts_after_merge": 1,
-                    "relations_verified": 1,
-                    "completed_at": 1,
-                },
+                self.SUMMARY_PROJECTION,
             ).sort("completed_at", -1).limit(limit)
             return await cursor.to_list(length=limit)
         except Exception as e:
@@ -110,8 +137,8 @@ class PipelineRepository:
             deleted_sessions = 0
 
             if delete_sessions:
-                session_result = await self._db["al_sessions"].delete_many({"job_id": job_id})
-                deleted_sessions = session_result.deleted_count
+                progress_result = await self._db["al_subject_progress"].delete_many({"job_id": job_id})
+                deleted_sessions = int(progress_result.deleted_count)
 
             return {
                 "deleted_job": int(job_result.deleted_count),
@@ -135,10 +162,10 @@ class PipelineRepository:
             deleted_sessions = 0
 
             if delete_sessions and job_result.deleted_count:
-                session_result = await self._db["al_sessions"].delete_many(
+                progress_result = await self._db["al_subject_progress"].delete_many(
                     {"job_id": job_id, "user_id": user_id}
                 )
-                deleted_sessions = session_result.deleted_count
+                deleted_sessions = int(progress_result.deleted_count)
 
             return {
                 "deleted_job": int(job_result.deleted_count),

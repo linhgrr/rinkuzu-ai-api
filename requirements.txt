@@ -42,3 +42,4 @@ pymongo>=4.6.0
 
 # Utilities
 loguru
+httpx>=0.27.0

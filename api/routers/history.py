@@ -1,97 +1,179 @@
 """
-history.py — Endpoints for querying persisted sessions and pipeline jobs from MongoDB.
+history.py — Endpoints for querying persisted subject progress and pipeline jobs from MongoDB.
 """
+
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
 from ..core import mongo_store
-from ..dependencies import get_session_manager, get_current_user
-from ..exceptions import SessionNotFoundError, PipelineNotFoundError
-
-import numpy as np
+from ..dependencies import get_current_user
+from ..exceptions import PipelineNotFoundError
+from ..schemas import (
+    SubjectHistoryListResponse,
+    SubjectProgressListResponse,
+    SubjectHistoryDetailResponse,
+)
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
 
-@router.get("/subjects")
+def _to_progress_percent(mastered_concept: int, all_concept: int) -> int:
+    if all_concept <= 0:
+        return 0
+    return max(0, min(100, round((mastered_concept / all_concept) * 100)))
+
+
+def _count_mastered_concepts(concept_mastery: list[float], threshold: float = 0.6) -> int:
+    return int(sum(1 for value in concept_mastery if value >= threshold))
+
+
+def _build_subject_progress_detail(
+    job_doc: dict[str, Any],
+    progress_doc: dict[str, Any] | None,
+) -> dict[str, Any]:
+    result = job_doc.get("result") or {}
+    concept_map = result.get("concept_map") or {}
+    concept_names = (progress_doc or {}).get("concept_names") or {
+        str(cid): (cdata or {}).get("name", str(cid))
+        for cid, cdata in (result.get("concepts_data") or {}).items()
+    }
+    concept_count = len(concept_map)
+
+    if progress_doc:
+        return {
+            "job_id": job_doc["job_id"],
+            "filename": job_doc.get("filename", ""),
+            "subject_id": job_doc.get("subject_id", ""),
+            "status": progress_doc.get("status", "active"),
+            "total_correct": progress_doc.get("total_correct", 0),
+            "total_answered": progress_doc.get("total_answered", 0),
+            "accuracy": progress_doc.get("accuracy", 0.0),
+            "step": progress_doc.get("step", 0),
+            "max_steps": progress_doc.get("max_steps", 9999),
+            "avg_mastery": progress_doc.get("avg_mastery", 0.0),
+            "concept_names": concept_names,
+            "concept_mastery": progress_doc.get("concept_mastery", []),
+            "bloom_mastery": progress_doc.get("bloom_mastery", []),
+            "exercise_history": progress_doc.get("exercise_history", []),
+            "created_at": progress_doc.get("created_at", job_doc.get("completed_at", 0)),
+            "updated_at": progress_doc.get("updated_at", job_doc.get("completed_at", 0)),
+            "last_session_id": progress_doc.get("last_session_id"),
+        }
+
+    return {
+        "job_id": job_doc["job_id"],
+        "filename": job_doc.get("filename", ""),
+        "subject_id": job_doc.get("subject_id", ""),
+        "status": "not_started",
+        "total_correct": 0,
+        "total_answered": 0,
+        "accuracy": 0.0,
+        "step": 0,
+        "max_steps": 9999,
+        "avg_mastery": 0.0,
+        "concept_names": concept_names,
+        "concept_mastery": [0.0] * concept_count,
+        "bloom_mastery": [[0.0] * 6 for _ in range(concept_count)],
+        "exercise_history": [],
+        "created_at": job_doc.get("completed_at", 0),
+        "updated_at": job_doc.get("completed_at", 0),
+        "last_session_id": None,
+    }
+
+
+def _build_subject_progress_summary(
+    progress_doc: dict[str, Any],
+    job_doc: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "job_id": progress_doc.get("job_id") or "",
+        "filename": (job_doc or {}).get("filename", ""),
+        "subject_id": (job_doc or {}).get("subject_id", ""),
+        "status": progress_doc.get("status", "active"),
+        "total_correct": progress_doc.get("total_correct", 0),
+        "total_answered": progress_doc.get("total_answered", 0),
+        "accuracy": progress_doc.get("accuracy", 0.0),
+        "avg_mastery": progress_doc.get("avg_mastery", 0.0),
+        "step": progress_doc.get("step", 0),
+        "max_steps": progress_doc.get("max_steps", 9999),
+        "created_at": progress_doc.get("created_at", 0),
+        "updated_at": progress_doc.get("updated_at", 0),
+        "last_session_id": progress_doc.get("last_session_id"),
+    }
+
+
+@router.get("/subjects", response_model=SubjectHistoryListResponse)
 async def list_subjects(
     limit: int = Query(default=100, ge=1, le=500),
     user_id: str = Depends(get_current_user),
 ):
-    """List all completed pipeline jobs (= subjects)."""
+    """List all completed pipeline jobs (= subjects) enriched with mastery stats."""
     subjects = await mongo_store.list_pipeline_jobs(
         limit=limit,
         user_id=user_id,
         status="completed",
     )
+
+    if not subjects:
+        return {"subjects": [], "count": 0}
+
+    job_ids = [s["job_id"] for s in subjects]
+    progress_map = await mongo_store.load_subject_progress_map(job_ids, user_id)
+
+    for subj in subjects:
+        jid = subj["job_id"]
+        progress_doc = progress_map.get(jid, {})
+        concept_mastery = progress_doc.get("concept_mastery") or []
+        all_c = (
+            len(concept_mastery)
+            or subj.get("concepts_after_merge")
+            or subj.get("concepts_extracted")
+            or 0
+        )
+        mastered_c = _count_mastered_concepts(concept_mastery)
+
+        subj["all_concept"] = all_c
+        subj["mastered_concept"] = mastered_c
+        subj["progress_percent"] = _to_progress_percent(mastered_c, all_c)
+
     return {"subjects": subjects, "count": len(subjects)}
 
 
-@router.get("/sessions")
-async def list_sessions(
+@router.get("/subjects/progress", response_model=SubjectProgressListResponse)
+async def list_subject_progress(
     limit: int = Query(default=50, ge=1, le=500),
     user_id: str = Depends(get_current_user),
 ):
-    """List recent adaptive learning sessions."""
-    sessions = await mongo_store.list_sessions(limit=limit, user_id=user_id)
-    return {"sessions": sessions, "count": len(sessions)}
+    """List recent subject-level progress records."""
+    progress_docs = await mongo_store.list_subject_progress(limit=limit, user_id=user_id)
+    job_ids = [doc.get("job_id") for doc in progress_docs if doc.get("job_id")]
+    job_map = await mongo_store.load_pipeline_job_map_for_user(
+        job_ids,
+        user_id,
+        projection={"_id": 0, "job_id": 1, "filename": 1, "subject_id": 1},
+    )
+    items = []
+    for progress_doc in progress_docs:
+        job_id = progress_doc.get("job_id")
+        if not job_id:
+            continue
+        items.append(_build_subject_progress_summary(progress_doc, job_map.get(job_id)))
+    return {"subjects": items, "count": len(items)}
 
 
-@router.get("/sessions/{session_id}")
-async def get_session_history(
-    session_id: str,
-    manager=Depends(get_session_manager),
+@router.get("/subjects/{job_id}", response_model=SubjectHistoryDetailResponse)
+async def get_subject_history(
+    job_id: str,
     user_id: str = Depends(get_current_user),
 ):
-    """Get full persisted state for a session."""
-    doc = await mongo_store.load_session_doc_for_user(session_id, user_id)
-    if not doc:
-        # Fallback to active memory session
-        mem_session = manager.get_session(session_id)
-        if mem_session and getattr(mem_session, "user_id", None) == user_id:
-            env = mem_session.env
-            bloom_mastery = env.get_mastery_matrix()
-            concept_mastery = env.get_concept_mastery()
-            env_stats = env.get_session_stats()
+    """Get subject-level learning history for one pipeline job."""
+    job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+    if not job_doc:
+        raise PipelineNotFoundError(job_id)
 
-            history = [
-                {
-                    "exercise_id": ex.exercise_id,
-                    "concept_idx": ex.concept_idx,
-                    "concept_name": ex.concept_name,
-                    "bloom_level": ex.bloom_level,
-                    "question": ex.question,
-                    "options": ex.options,
-                    "correct_option": ex.correct_option,
-                    "explanation": ex.explanation,
-                    "user_answer": ex.user_answer,
-                    "is_correct": ex.is_correct,
-                    "timestamp": ex.timestamp,
-                }
-                for ex in mem_session.exercise_history
-            ]
-
-            return {
-                "session_id": mem_session.session_id,
-                "job_id": getattr(mem_session, "job_id", None),
-                "status": mem_session.status,
-                "total_correct": mem_session.total_correct,
-                "total_answered": mem_session.total_answered,
-                "accuracy": mem_session.total_correct / max(mem_session.total_answered, 1),
-                "step": env_stats.get("step", 0),
-                "max_steps": env_stats.get("max_steps", 9999),
-                "avg_mastery": float(np.mean(concept_mastery)),
-                "concept_mastery": concept_mastery.tolist(),
-                "bloom_mastery": bloom_mastery.tolist(),
-                "concept_names": list(mem_session.concept_names.values()),
-                "exercise_history": history,
-                "created_at": mem_session.created_at,
-                "updated_at": mem_session.created_at,
-            }
-
-        raise SessionNotFoundError(session_id)
-
-    return doc
+    progress_doc = await mongo_store.load_subject_progress_for_user(job_id, user_id)
+    return _build_subject_progress_detail(job_doc, progress_doc)
 
 
 @router.get("/pipeline-jobs")

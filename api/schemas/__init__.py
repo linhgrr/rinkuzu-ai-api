@@ -24,6 +24,13 @@ from .knowledge import (
     ConceptPrereq,
     ConceptDetailResponse,
 )
+from .history import (
+    SubjectHistoryResponse,
+    SubjectHistoryListResponse,
+    SubjectProgressSummaryResponse,
+    SubjectProgressListResponse,
+    SubjectHistoryDetailResponse,
+)
 
 __all__ = [
     "SessionCreateRequest",
@@ -42,4 +49,9 @@ __all__ = [
     "MasteryMatrixResponse",
     "ConceptPrereq",
     "ConceptDetailResponse",
+    "SubjectHistoryResponse",
+    "SubjectHistoryListResponse",
+    "SubjectProgressSummaryResponse",
+    "SubjectProgressListResponse",
+    "SubjectHistoryDetailResponse",
 ]

@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-import requests
+import httpx
 
 from fastapi import APIRouter, Form, HTTPException, Depends
 from loguru import logger
@@ -114,7 +114,7 @@ def _extract_llm_content(payload: dict) -> str:
     return ""
 
 
-def _invoke_pdf_extract_llm(
+async def _invoke_pdf_extract_llm(
     *,
     pdf_url: str,
     prompt: str,
@@ -161,8 +161,9 @@ def _invoke_pdf_extract_llm(
     )
 
     llm_start = time.perf_counter()
-    response = requests.post(endpoint, headers=headers, json=payload, timeout=300)
-    response.raise_for_status()
+    async with httpx.AsyncClient(timeout=300) as client:
+        response = await client.post(endpoint, headers=headers, json=payload)
+        response.raise_for_status()
     llm_duration_ms = int((time.perf_counter() - llm_start) * 1000)
 
     logger.info(
@@ -268,15 +269,15 @@ async def extract_quiz(
         )
 
         try:
-            questions = _invoke_pdf_extract_llm(
+            questions = await _invoke_pdf_extract_llm(
                 pdf_url=pdf_url,
                 prompt=prompt,
                 model=settings.llm_model,
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
             )
-        except requests.HTTPError as e:
-            body = e.response.text if e.response is not None else str(e)
+        except httpx.HTTPStatusError as e:
+            body = e.response.text if hasattr(e, "response") and e.response is not None else str(e)
             logger.error(
                 "[quiz_extract] llm_http_error request_id={} key={} error_body={}",
                 request_id,

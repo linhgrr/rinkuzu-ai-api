@@ -16,6 +16,7 @@ from loguru import logger
 
 from ..core.agent import select_action, decode_action
 from ..core.exercise_gen import generate_exercise, generate_theory
+from ..exceptions import ExerciseGenerationError
 
 
 BLOOM_LABELS = {
@@ -27,8 +28,8 @@ BLOOM_LABELS = {
 class ExerciseService:
     """Business logic for exercise generation, submission, and prefetching."""
 
-    def __init__(self, session_repo=None):
-        self._session_repo = session_repo
+    def __init__(self, session_manager=None):
+        self._session_manager = session_manager
         max_workers = int(os.getenv("ADAPTIVE_LLM_MAX_WORKERS", "8"))
         max_concurrency = int(os.getenv("ADAPTIVE_LLM_MAX_CONCURRENCY", str(max_workers)))
         self._llm_timeout_sec = float(os.getenv("ADAPTIVE_LLM_TIMEOUT_SEC", "120"))
@@ -40,18 +41,6 @@ class ExerciseService:
     @staticmethod
     def _build_id_to_concept_map(session) -> Dict[int, str]:
         return {v: k for k, v in session.concept_map.items()}
-
-    @staticmethod
-    def _schedule_background_task(coro, label: str) -> None:
-        task = asyncio.create_task(coro)
-
-        def _done_callback(done_task: asyncio.Task):
-            try:
-                done_task.result()
-            except Exception as exc:
-                logger.warning(f"[Background] {label} failed: {exc}")
-
-        task.add_done_callback(_done_callback)
 
     async def _run_llm_call(self, func, *args):
         loop = asyncio.get_running_loop()
@@ -194,7 +183,7 @@ class ExerciseService:
         session.concept_theories[concept_id] = theory_data
         return theory_data
 
-    async def generate_exercise(self, session):
+    async def generate_exercise(self, session, background_tasks=None):
         """Generate exercise from prefetch cache or LLM."""
         from ..core.session import ExerciseRecord
 
@@ -258,63 +247,65 @@ class ExerciseService:
 
         # Fire background prefetch
         try:
-            self._schedule_background_task(
-                self._prefetch_next_exercises(session),
-                f"prefetch session={session.session_id}",
-            )
+            if background_tasks:
+                background_tasks.add_task(self._prefetch_next_exercises, session)
+            else:
+                asyncio.create_task(self._prefetch_next_exercises(session))
         except Exception as e:
             logger.warning(f"[Prefetch] Failed to schedule: {e}")
 
         return exercise
 
-    async def submit_answer(self, session, answer: str) -> Optional[Dict[str, Any]]:
+    async def submit_answer(self, session, answer: str, background_tasks=None) -> Optional[Dict[str, Any]]:
         """Process user's answer, update environment, return result."""
-        if not session.current_exercise:
-            return None
+        
+        async with session._lock:
+            if not session.current_exercise:
+                return None
 
-        exercise = session.current_exercise
-        is_correct = answer.strip().upper() == exercise.correct_option.strip().upper()
-        verdict = "✓ ĐÚNG" if is_correct else "✗ SAI"
+            exercise = session.current_exercise
+            is_correct = answer.strip().upper() == exercise.correct_option.strip().upper()
+            verdict = "✓ ĐÚNG" if is_correct else "✗ SAI"
 
-        logger.info(f"[Exercise] 📝 {exercise.concept_name} | Answer: {answer} → {verdict}")
+            logger.info(f"[Exercise] 📝 {exercise.concept_name} | Answer: {answer} → {verdict}")
 
-        # Use pre-generated explanations
-        explanation = exercise.explanation_correct if is_correct else exercise.explanation_incorrect
+            # Use pre-generated explanations
+            explanation = exercise.explanation_correct if is_correct else exercise.explanation_incorrect
 
-        exercise.explanation = explanation
-        exercise.user_answer = answer
-        exercise.is_correct = is_correct
-        session.exercise_history.append(exercise)
+            exercise.explanation = explanation
+            exercise.user_answer = answer
+            exercise.is_correct = is_correct
+            session.exercise_history.append(exercise)
 
-        if is_correct:
-            session.total_correct += 1
-        session.total_answered += 1
+            if is_correct:
+                session.total_correct += 1
+            session.total_answered += 1
 
-        # Step environment
-        action_id = getattr(session, "_pending_action", 0)
-        obs, reward, terminated, truncated, info = session.env.step(action_id, human_correct=is_correct)
-        session.current_obs = obs
-        session.current_exercise = None
+            # Step environment
+            action_id = getattr(session, "_pending_action", 0)
+            obs, reward, terminated, truncated, info = session.env.step(action_id, human_correct=is_correct)
+            session.current_obs = obs
+            session.current_exercise = None
 
-        if terminated:
-            session.status = "completed"
+            if terminated:
+                session.status = "completed"
 
-        # Get updated mastery
-        concept_mastery = session.env.get_concept_mastery()
-        mastery_val = float(concept_mastery[exercise.concept_idx])
-        avg_mastery = float(np.mean(concept_mastery))
+            concept_mastery = session.env.get_concept_mastery()
+            mastery_val = float(concept_mastery[exercise.concept_idx])
+            avg_mastery = float(np.mean(concept_mastery))
 
         logger.info(f"[Exercise] Mastery: {mastery_val:.3f} | Avg: {avg_mastery:.3f} | Step: {info['step']} | Status: {session.status}")
 
-        # Persist to MongoDB (fire-and-forget)
-        if self._session_repo:
+        if self._session_manager:
             try:
-                self._schedule_background_task(
-                    self._session_repo.save(session),
-                    f"save session={session.session_id}",
-                )
+                subject_saved = await self._session_manager.persist_subject_progress(session)
             except Exception as e:
-                logger.warning(f"[Exercise] MongoDB save schedule error: {e}")
+                subject_saved = False
+                logger.warning(f"[Exercise] Subject progress save error: {e}")
+
+            if not subject_saved:
+                self._session_manager.remove_session(session.session_id)
+                raise ExerciseGenerationError("Failed to persist subject progress")
 
         return {
             "is_correct": is_correct,

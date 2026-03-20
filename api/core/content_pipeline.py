@@ -62,14 +62,6 @@ class PipelineJob:
     completed_at: Optional[float] = None
 
 
-# In-memory job store
-_jobs: Dict[str, PipelineJob] = {}
-
-
-def get_job(job_id: str) -> Optional[PipelineJob]:
-    return _jobs.get(job_id)
-
-
 def _populate_job_metrics_from_result(job: PipelineJob) -> None:
     if not isinstance(job.result, dict):
         return
@@ -137,6 +129,50 @@ def _sanitize_concept_relations(all_concepts: List[Any]) -> Tuple[int, int]:
     return kept, dropped
 
 
+def _build_partial_graph(graph, all_concepts: List[Any]) -> Dict[str, Any]:
+    concept_map = {
+        getattr(concept, "concept_id", ""): getattr(concept, "name", "")
+        for concept in all_concepts
+    }
+    return {
+        "nodes": [
+            {"id": node_id, "name": concept_map.get(node_id, str(node_id))}
+            for node_id in graph.nodes()
+        ],
+        "edges": [{"source": src, "target": tgt} for src, tgt in graph.edges()],
+    }
+
+
+def _remove_invalid_graph_members(graph, concept_ids: set[str]) -> None:
+    edges_to_remove = []
+    for src, tgt, data in list(graph.edges(data=True)):
+        rel_type = str(data.get("relation_type", "PREREQUISITE")).upper()
+        if rel_type != "PREREQUISITE" or src not in concept_ids or tgt not in concept_ids:
+            edges_to_remove.append((src, tgt))
+    if edges_to_remove:
+        graph.remove_edges_from(edges_to_remove)
+
+    orphan_nodes = [node_id for node_id in list(graph.nodes()) if node_id not in concept_ids]
+    if orphan_nodes:
+        graph.remove_nodes_from(orphan_nodes)
+
+
+async def _persist_job_state(
+    job: PipelineJob,
+    status: PipelineStatus,
+    step: str,
+    progress: float,
+) -> None:
+    job.status = status
+    job.current_step = step
+    job.progress = progress
+    saved = await mongo_store.save_pipeline_job(job)
+    if not saved:
+        raise RuntimeError(
+            f"Failed to persist pipeline job {job.job_id} at status={status.value}"
+        )
+
+
 def get_s3_client():
     settings = get_settings()
     if not settings.s3_available:
@@ -192,6 +228,7 @@ async def process_pdf(
     min_confidence: float = 0.6,
     apply_reduction: bool = True,
     user_id: Optional[str] = None,
+    background_tasks: Optional[Any] = None,
 ) -> PipelineJob:
     job_id = str(uuid.uuid4())[:8]
     filename = Path(file_path).name
@@ -204,7 +241,6 @@ async def process_pdf(
         subject_id=subject_id,
         user_id=user_id,
     )
-    _jobs[job_id] = job
 
     if not CONTENT_PROCESSOR_AVAILABLE:
         job.status = PipelineStatus.FAILED
@@ -214,8 +250,29 @@ async def process_pdf(
         )
         return job
 
-    asyncio.create_task(_run_pipeline(job, file_path, prs_threshold, min_confidence, apply_reduction))
+    persisted = await mongo_store.save_pipeline_job(job)
+    if not persisted:
+        raise RuntimeError(f"Failed to persist pipeline job {job.job_id}")
+
+    if background_tasks:
+        background_tasks.add_task(
+            _run_pipeline_and_cleanup, job, file_path, prs_threshold, min_confidence, apply_reduction
+        )
+    else:
+        asyncio.create_task(_run_pipeline_and_cleanup(job, file_path, prs_threshold, min_confidence, apply_reduction))
+
     return job
+
+async def _run_pipeline_and_cleanup(job, file_path, *args, **kwargs):
+    try:
+        await _run_pipeline(job, file_path, *args, **kwargs)
+    finally:
+        try:
+            p = Path(file_path)
+            if p.exists():
+                p.unlink()
+        except:
+            pass
 
 
 async def _run_pipeline(
@@ -303,19 +360,15 @@ async def _run_pipeline(
                 logger.debug(f"[Pipeline] Cache miss: {cache_key}")
 
         # Step 1: Load & Chunk PDF
-        job.status = PipelineStatus.LOADING
-        job.current_step = "Loading PDF..."
-        job.progress = 0.05
+        await _persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.05)
         chunks = await loop.run_in_executor(
             None, FileLoaderFactory.load_and_chunk, file_path, job.subject_id
         )
         job.total_chunks = len(chunks)
-        job.progress = 0.10
+        await _persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.10)
 
         # Step 2: Extract concepts via LLM
-        job.status = PipelineStatus.EXTRACTING
-        job.current_step = "Extracting concepts with LLM..."
-        job.progress = 0.15
+        await _persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.15)
 
         llm_client = get_llm(temperature=0.1)
         extraction_chain = ExtractionChain(client=llm_client)
@@ -339,12 +392,10 @@ async def _run_pipeline(
             "nodes": [{"id": getattr(c, "concept_id", ""), "name": getattr(c, "name", "")} for c in all_concepts],
             "edges": []
         }
-        job.progress = 0.30
+        await _persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.30)
 
         # Step 3: Compute embeddings
-        job.status = PipelineStatus.EMBEDDING
-        job.current_step = "Computing embeddings..."
-        job.progress = 0.35
+        await _persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.35)
 
         # Assuming config.settings from content_processor has defaults
         try:
@@ -359,12 +410,10 @@ async def _run_pipeline(
         await loop.run_in_executor(
             None, compute_embedding_for_concepts, all_concepts, embed_client
         )
-        job.progress = 0.45
+        await _persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.45)
 
         # Step 4: Merge & Deduplicate
-        job.status = PipelineStatus.MERGING
-        job.current_step = "Merging duplicate concepts..."
-        job.progress = 0.50
+        await _persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.50)
 
         all_concepts = await loop.run_in_executor(None, merge_by_name, all_concepts)
         job.concepts_after_merge = len(all_concepts)
@@ -372,22 +421,18 @@ async def _run_pipeline(
             "nodes": [{"id": getattr(c, "concept_id", ""), "name": getattr(c, "name", "")} for c in all_concepts],
             "edges": []
         }
-        job.progress = 0.55
+        await _persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.55)
 
         # Step 5: Prerequisite ranking
-        job.status = PipelineStatus.RANKING
-        job.current_step = "Ranking prerequisites..."
-        job.progress = 0.60
+        await _persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
 
         candidate_pairs = await loop.run_in_executor(
             None, rank_prerequisites, all_concepts, prs_threshold
         )
-        job.progress = 0.65
+        await _persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.65)
 
         # Step 6: Verify relations via LLM
-        job.status = PipelineStatus.VERIFYING
-        job.current_step = "Verifying relations with LLM..."
-        job.progress = 0.70
+        await _persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.70)
 
         concept_name_map = {c.concept_id: c.name for c in all_concepts}
         pairs_to_verify = [
@@ -405,12 +450,10 @@ async def _run_pipeline(
                     verified.append((cid_a, cid_b, ev))
 
         job.relations_verified = len(verified)
-        job.progress = 0.80
+        await _persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.80)
 
         # Step 7: Build knowledge graph
-        job.status = PipelineStatus.BUILDING_GRAPH
-        job.current_step = "Building knowledge graph..."
-        job.progress = 0.85
+        await _persist_job_state(job, PipelineStatus.BUILDING_GRAPH, "Building knowledge graph...", 0.85)
 
         concept_ids_set = {
             str(getattr(c, "concept_id", "")).strip()
@@ -426,18 +469,7 @@ async def _run_pipeline(
         builder = KnowledgeGraphBuilder(subject_id=job.subject_id)
         builder.add_concepts(all_concepts)
         graph = builder.get_graph()
-
-        edges_to_remove = []
-        for src, tgt, data in list(graph.edges(data=True)):
-            rel_type = str(data.get("relation_type", "PREREQUISITE")).upper()
-            if rel_type != "PREREQUISITE" or src not in concept_ids_set or tgt not in concept_ids_set:
-                edges_to_remove.append((src, tgt))
-        if edges_to_remove:
-            graph.remove_edges_from(edges_to_remove)
-
-        orphan_nodes = [node_id for node_id in list(graph.nodes()) if node_id not in concept_ids_set]
-        if orphan_nodes:
-            graph.remove_nodes_from(orphan_nodes)
+        _remove_invalid_graph_members(graph, concept_ids_set)
 
         existing_edges = set(graph.edges())
         logger.debug(f"[Pipeline] Added {extracted_relation_count} relations from extraction")
@@ -460,47 +492,27 @@ async def _run_pipeline(
                         existing_edges.add(edge)
                         verified_relation_count += 1
 
-        edges_to_remove = []
-        for src, tgt, data in list(graph.edges(data=True)):
-            rel_type = str(data.get("relation_type", "PREREQUISITE")).upper()
-            if rel_type != "PREREQUISITE" or src not in concept_ids_set or tgt not in concept_ids_set:
-                edges_to_remove.append((src, tgt))
-        if edges_to_remove:
-            graph.remove_edges_from(edges_to_remove)
-
-        orphan_nodes = [node_id for node_id in list(graph.nodes()) if node_id not in concept_ids_set]
-        if orphan_nodes:
-            graph.remove_nodes_from(orphan_nodes)
-
-        def _update_partial_from_nx(nx_graph, c_list):
-            c_map = {getattr(c, "concept_id", ""): getattr(c, "name", "") for c in c_list}
-            job.partial_graph = {
-                "nodes": [{"id": n, "name": c_map.get(n, str(n))} for n in nx_graph.nodes()],
-                "edges": [{"source": u, "target": v} for u, v, _ in nx_graph.edges(data=True)]
-            }
-        
-        _update_partial_from_nx(graph, all_concepts)
+        _remove_invalid_graph_members(graph, concept_ids_set)
+        job.partial_graph = _build_partial_graph(graph, all_concepts)
 
         # Step 8: Make DAG
-        job.status = PipelineStatus.OPTIMIZING
-        job.current_step = "Removing cycles, building DAG..."
-        job.progress = 0.90
+        await _persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.90)
 
         import networkx as nx
         if not nx.is_directed_acyclic_graph(graph):
             graph, cycle_stats = await loop.run_in_executor(
                 None, make_dag_with_llm, graph
             )
-            _update_partial_from_nx(graph, all_concepts)
+            job.partial_graph = _build_partial_graph(graph, all_concepts)
 
         # Step 9: Transitive reduction
         if apply_reduction:
             graph = await loop.run_in_executor(
                 None, apply_transitive_reduction, graph
             )
-            _update_partial_from_nx(graph, all_concepts)
+            job.partial_graph = _build_partial_graph(graph, all_concepts)
 
-        job.progress = 0.95
+        await _persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.95)
 
         stats = builder.get_stats()
         stats["num_nodes"] = graph.number_of_nodes()
@@ -539,8 +551,12 @@ async def _run_pipeline(
                 prereq_edges.append({"source": src, "target": tgt})
 
         # --- Generate concept embeddings for SAINT ---
-        job.current_step = "Generating concept embeddings for SAINT..."
-        job.progress = 0.92
+        await _persist_job_state(
+            job,
+            PipelineStatus.OPTIMIZING,
+            "Generating concept embeddings for SAINT...",
+            0.92,
+        )
         try:
             from sentence_transformers import SentenceTransformer
             text_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
@@ -563,8 +579,12 @@ async def _run_pipeline(
             concept_embeddings_list = None
 
         # --- Generate concept theories ---
-        job.current_step = "Generating concept theories..."
-        job.progress = 0.93
+        await _persist_job_state(
+            job,
+            PipelineStatus.OPTIMIZING,
+            "Generating concept theories...",
+            0.93,
+        )
         try:
             from .exercise_gen import generate_theory
             sem = asyncio.Semaphore(5)
@@ -613,14 +633,8 @@ async def _run_pipeline(
         }
         _populate_job_metrics_from_result(job)
 
-        job.status = PipelineStatus.COMPLETED
-        job.current_step = "Processing complete!"
-        job.progress = 1.0
         job.completed_at = time.time()
-
-        saved = await mongo_store.save_pipeline_job(job)
-        if not saved:
-            raise RuntimeError("Failed to persist pipeline result to MongoDB")
+        await _persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", 1.0)
 
         if s3_client and bucket_name:
             try:
@@ -643,7 +657,17 @@ async def _run_pipeline(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        job.status = PipelineStatus.FAILED
         job.error_message = str(e)
-        job.current_step = f"Error: {e}"
         logger.error(f"[Pipeline] Job {job.job_id} failed: {e}")
+        job.status = PipelineStatus.FAILED
+        job.current_step = f"Error: {e}"
+        try:
+            saved = await mongo_store.save_pipeline_job(job)
+            if not saved:
+                logger.error(
+                    f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}"
+                )
+        except Exception as persist_exc:
+            logger.error(
+                f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}: {persist_exc}"
+            )

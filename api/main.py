@@ -2,7 +2,6 @@
 main.py — FastAPI app entry point for Adaptive Learning Demo.
 """
 
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -42,9 +41,6 @@ async def lifespan(app: FastAPI):
     logger.info("[0/2] Connecting to MongoDB...")
     await mongo_store.init_mongo(mongo_url=settings.mongo_url)
 
-    # Create session repo reference for ExerciseService
-    session_repo = mongo_store.get_session_repo()
-
     if settings.load_models:
         logger.info("[1/2] Loading SAINT + DQN models...")
         manager = SessionManager(
@@ -55,7 +51,7 @@ async def lifespan(app: FastAPI):
         logger.info("  DQN loaded: ready for action selection")
 
         # Create ExerciseService with repository dependency
-        exercise_service = ExerciseService(session_repo=session_repo)
+        exercise_service = ExerciseService(session_manager=manager)
     else:
         logger.info("[1/2] Model loading DISABLED — skipping")
         manager = None
@@ -86,9 +82,10 @@ app = FastAPI(
 register_exception_handlers(app)
 
 # CORS
+settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,7 +101,11 @@ app.include_router(quiz_extract_router.router)
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "models_loaded": True}
+    return {
+        "status": "ok",
+        "models_loaded": getattr(app.state, "session_manager", None) is not None,
+        "mongo_available": mongo_store.is_available(),
+    }
 
 
 @app.get("/api/info")
