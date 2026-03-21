@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     llm_embedding_model: str = "text-embedding-3-small"
     llm_timeout_sec: float = 150
     llm_max_retries: int = 2
+    adaptive_llm_max_workers: int = 8
+    adaptive_llm_max_concurrency: Optional[int] = None
+    adaptive_llm_timeout_sec: float = 120
+    adaptive_prefetch_llm_timeout_sec: Optional[float] = None
     adaptive_llm_retry_attempts: int = 3
     adaptive_llm_retry_backoff_sec: float = 1.0
 

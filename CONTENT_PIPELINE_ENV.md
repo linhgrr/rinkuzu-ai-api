@@ -15,6 +15,10 @@ The unified content pipeline now reads runtime configuration from [api/config.py
 | `llm_embedding_model` | `LLM_EMBEDDING_MODEL` | `text-embedding-3-small` |
 | `llm_timeout_sec` | `LLM_TIMEOUT_SEC` | `150` |
 | `llm_max_retries` | `LLM_MAX_RETRIES` | `2` |
+| `adaptive_llm_max_workers` | `ADAPTIVE_LLM_MAX_WORKERS` | `8` |
+| `adaptive_llm_max_concurrency` | `ADAPTIVE_LLM_MAX_CONCURRENCY` | `None` |
+| `adaptive_llm_timeout_sec` | `ADAPTIVE_LLM_TIMEOUT_SEC` | `120` |
+| `adaptive_prefetch_llm_timeout_sec` | `ADAPTIVE_PREFETCH_LLM_TIMEOUT_SEC` | `None` |
 | `adaptive_llm_retry_attempts` | `ADAPTIVE_LLM_RETRY_ATTEMPTS` | `3` |
 | `adaptive_llm_retry_backoff_sec` | `ADAPTIVE_LLM_RETRY_BACKOFF_SEC` | `1.0` |
 | `google_api_key` | `GOOGLE_API_KEY` | `None` |
@@ -24,6 +28,7 @@ Notes:
 - `get_llm()` falls back from `llm_api_key` to `gemini_api_key` to `google_api_key`.
 - If no API key is configured, the local compatibility default key is still used for OpenAI-compatible local gateways.
 - `adaptive_exercise_llm_model` lets the adaptive exercise/theory flow use a different model than the shared `llm_model`.
+- `adaptive_prefetch_llm_timeout_sec` lets exercise prefetch run with a different wall-clock timeout than the foreground exercise request path.
 
 ## Embedding And Chunking
 

@@ -7,7 +7,6 @@ answer submission, and prefetch caching.
 
 import uuid
 import asyncio
-import os
 from typing import Optional, Dict, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
@@ -16,6 +15,7 @@ from loguru import logger
 
 from ..core.agent import select_action, decode_action
 from ..core.exercise_gen import generate_exercise, generate_theory
+from ..config import settings
 from ..exceptions import ExerciseGenerationError
 
 
@@ -30,9 +30,14 @@ class ExerciseService:
 
     def __init__(self, session_manager=None):
         self._session_manager = session_manager
-        max_workers = int(os.getenv("ADAPTIVE_LLM_MAX_WORKERS", "8"))
-        max_concurrency = int(os.getenv("ADAPTIVE_LLM_MAX_CONCURRENCY", str(max_workers)))
-        self._llm_timeout_sec = float(os.getenv("ADAPTIVE_LLM_TIMEOUT_SEC", "120"))
+        max_workers = max(1, int(settings.adaptive_llm_max_workers))
+        max_concurrency = settings.adaptive_llm_max_concurrency or max_workers
+        self._request_llm_timeout_sec = max(0.0, float(settings.adaptive_llm_timeout_sec))
+        self._prefetch_llm_timeout_sec = (
+            self._request_llm_timeout_sec
+            if settings.adaptive_prefetch_llm_timeout_sec is None
+            else max(0.0, float(settings.adaptive_prefetch_llm_timeout_sec))
+        )
         self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)
         self._exercise_inflight: Dict[Tuple[str, int, int], asyncio.Future] = {}
@@ -42,12 +47,13 @@ class ExerciseService:
     def _build_id_to_concept_map(session) -> Dict[int, str]:
         return {v: k for k, v in session.concept_map.items()}
 
-    async def _run_llm_call(self, func, *args):
+    async def _run_llm_call(self, func, *args, timeout_sec: Optional[float] = None):
         loop = asyncio.get_running_loop()
+        timeout = self._request_llm_timeout_sec if timeout_sec is None else timeout_sec
         async with self._llm_semaphore:
             return await asyncio.wait_for(
                 loop.run_in_executor(self._llm_executor, func, *args),
-                timeout=self._llm_timeout_sec,
+                timeout=timeout,
             )
 
     async def _generate_exercise_dedup(
@@ -57,6 +63,7 @@ class ExerciseService:
         bloom_level: int,
         concept_name: str,
         concept_def: str,
+        timeout_sec: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         key = (session.session_id, concept_idx, bloom_level)
         existing = self._exercise_inflight.get(key)
@@ -69,6 +76,7 @@ class ExerciseService:
                 concept_name,
                 concept_def,
                 bloom_level,
+                timeout_sec=timeout_sec,
             )
 
         task = asyncio.create_task(_run())
@@ -84,6 +92,7 @@ class ExerciseService:
         concept_id: str,
         concept_name: str,
         concept_def: str,
+        timeout_sec: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         key = (session.session_id, concept_id)
         existing = self._theory_inflight.get(key)
@@ -95,6 +104,7 @@ class ExerciseService:
                 generate_theory,
                 concept_name,
                 concept_def,
+                timeout_sec=timeout_sec,
             )
 
         task = asyncio.create_task(_run())
@@ -354,6 +364,7 @@ class ExerciseService:
                 bloom_level=bloom_level,
                 concept_name=concept_name,
                 concept_def=concept_def,
+                timeout_sec=self._prefetch_llm_timeout_sec,
             )
 
             if exercise_data:
@@ -401,6 +412,7 @@ class ExerciseService:
                     bloom_level=next_bloom,
                     concept_name=next_concept_name,
                     concept_def=next_concept_def,
+                    timeout_sec=self._prefetch_llm_timeout_sec,
                 )
 
                 if ex_data:
