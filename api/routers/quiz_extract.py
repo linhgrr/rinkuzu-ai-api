@@ -34,6 +34,9 @@ Important Instructions:
 2. **IGNORE IMAGES ENTIRELY.** Do not describe, summarize, or attempt to interpret any image content. Only process the visible text — even if it partially depends on an image.
 3. Every question must have EXACTLY 4 to 5 options. If there are fewer, you must logically create plausible distractors to reach at least 4.
 4. Provide the correct answer using a zero-based index (`correctIndex` or an array of `correctIndexes`).
+5. **PRESERVE THE ORIGINAL LANGUAGE.** If questions are in Vietnamese, keep ALL text in Vietnamese. Do NOT translate.
+6. **OPEN-ENDED QUESTIONS:** If a question is essay-style or open-ended, convert it into a multiple-choice format if possible. If not convertible, skip it entirely.
+7. **MATH FORMATTING:** All mathematical expressions MUST use LaTeX notation. Inline: $...$ (e.g., $x^2 + 1$). Display: $$...$$ (e.g., $$\\Delta = b^2 - 4ac$$). Do NOT write formulas as plain text.
 
 Return ONLY a JSON array in the following format. Ensure the JSON is valid.
 
