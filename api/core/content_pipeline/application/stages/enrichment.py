@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable
 from loguru import logger
 
 from ...domain.jobs import PipelineJob, PipelineStatus
+from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -46,10 +47,12 @@ async def generate_saint_concept_embeddings(
     try:
         text_model = text_model_factory()
         ordered_texts = build_ordered_embedding_texts(concepts_data, concept_map)
-        loop = asyncio.get_running_loop()
-        embeddings = await loop.run_in_executor(
-            None,
-            lambda: text_model.encode(ordered_texts, show_progress_bar=False, batch_size=32),
+        embeddings = await run_blocking_stage(
+            text_model.encode,
+            ordered_texts,
+            show_progress_bar=False,
+            batch_size=32,
+            stage_name="saint_embedding_generation",
         )
         logger.info(f"[Pipeline] ✓ Generated embeddings for {len(ordered_texts)} concepts")
         return embeddings.tolist()
@@ -75,11 +78,15 @@ async def generate_concept_theories(
     )
     try:
         semaphore = asyncio.Semaphore(concurrency)
-        loop = asyncio.get_running_loop()
 
         async def generate_one(concept_id: str, name: str, definition: str):
             async with semaphore:
-                theory = await loop.run_in_executor(None, generate_theory, name, definition)
+                theory = await run_blocking_stage(
+                    generate_theory,
+                    name,
+                    definition,
+                    stage_name="concept_theory_generation",
+                )
                 return concept_id, theory
 
         tasks = [

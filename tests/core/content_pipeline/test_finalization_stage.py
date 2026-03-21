@@ -1,10 +1,13 @@
 import asyncio
 
+from api.core.content_pipeline.application.stages.execution import resolve_timeout_policy
 from api.core.content_pipeline.application.stages.finalization import (
+    classify_terminal_failure,
     complete_pipeline_job,
     persist_terminal_failure,
     upload_result_cache,
 )
+from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
@@ -76,6 +79,39 @@ def test_persist_terminal_failure_updates_job_and_saves_once():
     assert job.status == PipelineStatus.FAILED
     assert job.current_step == "Error: boom"
     assert job.error_message == "boom"
+    assert job.error_code == "pipeline_failed"
+    assert job.user_message == "We could not finish processing this document. Please try again."
+    assert job.retryable is False
     assert saved_states == [
         (PipelineStatus.FAILED, "Error: boom", "boom"),
     ]
+
+
+def test_classify_terminal_failure_marks_timeouts_as_retryable():
+    job = PipelineJob(job_id="job-3", filename="lesson.pdf", subject_id="algebra")
+    details = classify_terminal_failure(
+        job,
+        PipelineStageTimeoutError("concept_extraction", 30),
+    )
+
+    assert details.status == PipelineStatus.FAILED
+    assert details.error_code == "pipeline_timeout"
+    assert details.retryable is True
+    assert "taking longer than expected" in details.user_message
+    assert "concept extraction" in details.current_step
+
+
+def test_classify_terminal_failure_maps_cancelled_jobs_to_terminal_cancelled():
+    job = PipelineJob(job_id="job-4", filename="lesson.pdf", subject_id="algebra")
+    details = classify_terminal_failure(job, asyncio.CancelledError())
+
+    assert details.status == PipelineStatus.CANCELLED
+    assert details.error_code == "pipeline_cancelled"
+    assert details.retryable is True
+
+
+def test_timeout_policy_defaults_are_positive():
+    job_timeout_sec, stage_timeout_sec = resolve_timeout_policy()
+
+    assert job_timeout_sec and job_timeout_sec > 0
+    assert stage_timeout_sec and stage_timeout_sec > 0

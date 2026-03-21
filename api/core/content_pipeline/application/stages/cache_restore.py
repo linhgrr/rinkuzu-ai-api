@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from typing import Awaitable, Callable
@@ -10,6 +9,7 @@ from typing import Awaitable, Callable
 from loguru import logger
 
 from ...domain.jobs import PipelineJob, PipelineStatus
+from .execution import run_blocking_stage
 
 
 LoadMongoJobFn = Callable[[str], Awaitable[dict | None]]
@@ -69,14 +69,15 @@ async def try_restore_completed_job_from_s3(
     if not s3_client or not bucket_name:
         return cache_key
 
-    loop = asyncio.get_running_loop()
     job.status = PipelineStatus.LOADING
     job.current_step = "Kiểm tra cache trên S3..."
     job.progress = 0.02
     try:
-        response = await loop.run_in_executor(
-            None,
-            lambda: s3_client.get_object(Bucket=bucket_name, Key=cache_key),
+        response = await run_blocking_stage(
+            s3_client.get_object,
+            Bucket=bucket_name,
+            Key=cache_key,
+            stage_name="s3_cache_restore",
         )
         cache_content = response["Body"].read().decode("utf-8")
         job.result = json.loads(cache_content)

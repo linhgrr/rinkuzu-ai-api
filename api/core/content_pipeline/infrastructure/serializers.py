@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from ..domain.jobs import PipelineJob
@@ -31,7 +30,10 @@ def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
         "current_step": job.current_step,
         "progress": job.progress,
         "error_message": job.error_message,
+        "error_code": job.error_code,
+        "user_message": job.user_message,
+        "retryable": job.retryable,
         "partial_graph": job.partial_graph,
         "created_at": job.created_at,
-        "completed_at": job.completed_at or time.time(),
+        "completed_at": job.completed_at if job.status.is_terminal else None,
     }

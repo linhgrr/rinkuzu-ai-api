@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable
 from loguru import logger
 
 from ...domain.jobs import PipelineJob, PipelineStatus
+from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -106,7 +107,11 @@ async def build_knowledge_graph(
         logger.info(f"[Pipeline] Dropped {dropped_relation_count} invalid extracted relations")
 
     builder = knowledge_graph_builder_factory(job.subject_id)
-    builder.add_concepts(concepts)
+    await run_blocking_stage(
+        builder.add_concepts,
+        concepts,
+        stage_name="graph_building",
+    )
     graph = builder.get_graph()
     remove_invalid_graph_members(graph, concept_ids)
 
@@ -127,14 +132,27 @@ async def build_knowledge_graph(
             edge = (target_id, source_id)
 
         if edge and edge not in existing_edges:
-            builder.add_relation(edge[0], edge[1], "PREREQUISITE")
+            await run_blocking_stage(
+                builder.add_relation,
+                edge[0],
+                edge[1],
+                "PREREQUISITE",
+                stage_name="graph_relation_insertion",
+            )
             existing_edges.add(edge)
             verified_relation_count += 1
 
     remove_invalid_graph_members(graph, concept_ids)
     job.partial_graph = build_partial_graph(graph, concepts)
 
-    builder_stats = dict(builder.get_stats()) if hasattr(builder, "get_stats") else {}
+    builder_stats = {}
+    if hasattr(builder, "get_stats"):
+        builder_stats = dict(
+            await run_blocking_stage(
+                builder.get_stats,
+                stage_name="graph_stats_collection",
+            )
+        )
 
     return graph, {
         "base_graph_stats": builder_stats,

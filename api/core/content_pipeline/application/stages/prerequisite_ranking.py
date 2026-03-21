@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Awaitable, Callable
 
 from ...domain.jobs import PipelineJob, PipelineStatus
+from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -22,12 +22,11 @@ async def rank_candidate_prerequisites(
     """Rank candidate prerequisite pairs and persist stage progress."""
     await persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
 
-    loop = asyncio.get_running_loop()
-    candidate_pairs = await loop.run_in_executor(
-        None,
+    candidate_pairs = await run_blocking_stage(
         rank_prerequisites,
         concepts,
         prs_threshold,
+        stage_name="prerequisite_ranking",
     )
 
     await persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.65)

@@ -1,6 +1,6 @@
 """Compatibility entrypoints for the unified content pipeline."""
 
-from typing import Any, Optional
+from typing import Optional
 
 from .. import mongo_store
 from .application.pipeline_runner import PipelineRunner
@@ -18,7 +18,6 @@ async def process_pdf(
     min_confidence: float = 0.6,
     apply_reduction: bool = True,
     user_id: Optional[str] = None,
-    background_tasks: Optional[Any] = None,
 ) -> PipelineJob:
     return await get_pipeline_service().start_job(
         file_path=file_path,
@@ -27,7 +26,6 @@ async def process_pdf(
         min_confidence=min_confidence,
         apply_reduction=apply_reduction,
         user_id=user_id,
-        background_tasks=background_tasks,
         content_processor_available=CONTENT_PROCESSOR_AVAILABLE,
         content_processor_src=CONTENT_PROCESSOR_SRC,
     )

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Awaitable, Callable
 
 from api.config import get_settings
 from ...domain.jobs import PipelineJob, PipelineStatus
+from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -32,12 +32,11 @@ async def compute_concept_embeddings(
     await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.35)
 
     embed_client = embedding_client_factory(model_name, batch_size)
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
-        None,
+    await run_blocking_stage(
         compute_embedding_for_concepts,
         concepts,
         embed_client,
+        stage_name="embedding",
     )
 
     await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.45)

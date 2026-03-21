@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Awaitable, Callable
 
 from ...domain.jobs import PipelineJob, PipelineStatus
+from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -42,12 +42,11 @@ async def extract_concepts_from_chunks(
     )
 
     chunk_texts = [chunk.page_content for chunk in chunks]
-    loop = asyncio.get_running_loop()
-    extractions = await loop.run_in_executor(
-        None,
+    extractions = await run_blocking_stage(
         extraction_chain.extract_from_batch,
         chunk_texts,
         job.subject_id,
+        stage_name="concept_extraction",
     )
 
     all_concepts: list[Any] = []

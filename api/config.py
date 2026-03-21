@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     # ── Content Pipeline ───────────────────────────────────
     embedding_model: str = "keepitreal/vietnamese-sbert"
     embedding_batch_size: int = 32
+    content_pipeline_job_timeout_sec: float = 1800
+    content_pipeline_stage_timeout_sec: float = 300
 
     # ── S3 Cache ────────────────────────────────────────────
     s3_endpoint_url: Optional[str] = None

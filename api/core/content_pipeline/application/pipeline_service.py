@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Awaitable, Callable
 
 from ..domain.jobs import PipelineJob, PipelineStatus
 
@@ -25,6 +25,7 @@ class PipelineService:
     def __init__(self, save_job: SaveJobFn, run_pipeline: RunPipelineFn):
         self._save_job = save_job
         self._run_pipeline = run_pipeline
+        self._scheduled_tasks: set[asyncio.Task[None]] = set()
 
     async def persist_job_state(
         self,
@@ -51,16 +52,17 @@ class PipelineService:
         min_confidence: float,
         apply_reduction: bool,
         user_id: str | None,
-        background_tasks: Any = None,
         content_processor_available: bool,
         content_processor_src: str,
     ) -> PipelineJob:
         job = self._build_job(file_path=file_path, subject_id=subject_id, user_id=user_id)
 
         if not content_processor_available:
+            job.error_code = "pipeline_unavailable"
+            job.user_message = "Processing is temporarily unavailable. Please try again later."
             job.mark_failed(
-                "Content processor modules not available. "
-                f"Expected at: {content_processor_src}"
+                "Content pipeline modules not available. "
+                f"Expected runtime root: {content_processor_src}"
             )
             return job
 
@@ -75,25 +77,13 @@ class PipelineService:
             0.01,
         )
 
-        if background_tasks:
-            background_tasks.add_task(
-                self.run_job_and_cleanup,
-                job,
-                file_path,
-                prs_threshold,
-                min_confidence,
-                apply_reduction,
-            )
-        else:
-            asyncio.create_task(
-                self.run_job_and_cleanup(
-                    job,
-                    file_path,
-                    prs_threshold,
-                    min_confidence,
-                    apply_reduction,
-                )
-            )
+        self._schedule_background_run(
+            job,
+            file_path=file_path,
+            prs_threshold=prs_threshold,
+            min_confidence=min_confidence,
+            apply_reduction=apply_reduction,
+        )
 
         return job
 
@@ -140,3 +130,24 @@ class PipelineService:
                 path.unlink()
         except OSError:
             pass
+
+    def _schedule_background_run(
+        self,
+        job: PipelineJob,
+        *,
+        file_path: str,
+        prs_threshold: float,
+        min_confidence: float,
+        apply_reduction: bool,
+    ) -> None:
+        task = asyncio.create_task(
+            self.run_job_and_cleanup(
+                job,
+                file_path,
+                prs_threshold,
+                min_confidence,
+                apply_reduction,
+            )
+        )
+        self._scheduled_tasks.add(task)
+        task.add_done_callback(self._scheduled_tasks.discard)

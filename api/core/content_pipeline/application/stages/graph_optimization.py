@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Awaitable, Callable
 
 from ...domain.jobs import PipelineJob, PipelineStatus
 from .graph_building import build_partial_graph
+from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -32,14 +32,21 @@ async def optimize_graph(
 
     import networkx as nx
 
-    loop = asyncio.get_running_loop()
     cycle_stats: dict[str, Any] | None = None
     if not nx.is_directed_acyclic_graph(graph):
-        graph, cycle_stats = await loop.run_in_executor(None, make_dag_with_llm, graph)
+        graph, cycle_stats = await run_blocking_stage(
+            make_dag_with_llm,
+            graph,
+            stage_name="graph_cycle_removal",
+        )
         job.partial_graph = build_partial_graph(graph, concepts)
 
     if apply_reduction:
-        graph = await loop.run_in_executor(None, apply_transitive_reduction, graph)
+        graph = await run_blocking_stage(
+            apply_transitive_reduction,
+            graph,
+            stage_name="graph_reduction",
+        )
         job.partial_graph = build_partial_graph(graph, concepts)
 
     await persist_job_state(

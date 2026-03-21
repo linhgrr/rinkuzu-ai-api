@@ -17,6 +17,9 @@ def test_pipeline_job_to_document_matches_repository_shape():
         relations_verified=2,
         graph_stats={"num_nodes": 8},
         error_message=None,
+        error_code=None,
+        user_message=None,
+        retryable=False,
         result={"concept_map": {}},
         partial_graph={"nodes": [], "edges": []},
         created_at=123.0,
@@ -30,4 +33,4 @@ def test_pipeline_job_to_document_matches_repository_shape():
     assert doc["current_step"] == "Extracting concepts"
     assert doc["progress"] == 0.25
     assert doc["created_at"] == 123.0
-    assert doc["completed_at"] is not None
+    assert doc["completed_at"] is None

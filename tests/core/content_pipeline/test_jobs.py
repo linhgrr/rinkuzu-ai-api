@@ -25,3 +25,12 @@ def test_pipeline_job_mark_failed_sets_status_and_message():
 
     assert job.status == PipelineStatus.FAILED
     assert job.error_message == "boom"
+
+
+def test_pipeline_job_mark_cancelled_sets_status_and_message():
+    job = PipelineJob(job_id="job-3", filename="lesson.pdf", subject_id="math")
+
+    job.mark_cancelled("cancelled")
+
+    assert job.status == PipelineStatus.CANCELLED
+    assert job.error_message == "cancelled"

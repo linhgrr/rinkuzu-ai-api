@@ -52,6 +52,9 @@ class PipelineJob:
     relations_verified: int = 0
     graph_stats: dict[str, Any] = field(default_factory=dict)
     error_message: str | None = None
+    error_code: str | None = None
+    user_message: str | None = None
+    retryable: bool = False
     result: dict[str, Any] | None = None
     partial_graph: dict[str, Any] | None = None
     created_at: float = field(default_factory=time.time)
@@ -64,4 +67,8 @@ class PipelineJob:
 
     def mark_failed(self, message: str) -> None:
         self.status = PipelineStatus.FAILED
+        self.error_message = message
+
+    def mark_cancelled(self, message: str) -> None:
+        self.status = PipelineStatus.CANCELLED
         self.error_message = message

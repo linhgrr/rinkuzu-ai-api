@@ -1,11 +1,10 @@
 """Document loading stage for the content pipeline."""
 
 from __future__ import annotations
-
-import asyncio
 from typing import Any, Awaitable, Callable
 
 from ...domain.jobs import PipelineJob, PipelineStatus
+from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -22,12 +21,11 @@ async def load_document_chunks(
     """Load and chunk a source document while persisting job progress."""
     await persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.05)
 
-    loop = asyncio.get_running_loop()
-    chunks = await loop.run_in_executor(
-        None,
+    chunks = await run_blocking_stage(
         load_and_chunk,
         file_path,
         job.subject_id,
+        stage_name="document_loading",
     )
     job.total_chunks = len(chunks)
 

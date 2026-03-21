@@ -52,7 +52,6 @@ async def pipeline_status(availability: dict = Depends(get_content_pipeline_avai
 
 @router.post("/process")
 async def process_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     subject_id: Optional[str] = Form(None),
     prs_threshold: float = Form(0.75),
@@ -88,7 +87,6 @@ async def process_document(
             min_confidence=min_confidence,
             apply_reduction=apply_reduction,
             user_id=user_id,
-            background_tasks=background_tasks,
             content_processor_available=availability["available"],
             content_processor_src=availability["src"] or "",
         )
@@ -131,6 +129,14 @@ async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
         "relations_verified": job_doc.get("relations_verified", 0),
         "graph_stats": job_doc.get("graph_stats", {}),
         "error_message": job_doc.get("error_message"),
+        "error_code": job_doc.get("error_code"),
+        "user_message": job_doc.get("user_message"),
+        "retryable": bool(job_doc.get("retryable", False)),
+        "is_terminal": job_doc.get("status") in {
+            PipelineStatus.COMPLETED.value,
+            PipelineStatus.FAILED.value,
+            PipelineStatus.CANCELLED.value,
+        },
         "partial_graph": job_doc.get("partial_graph"),
     }
     if job_doc.get("status") == PipelineStatus.COMPLETED.value and result:
