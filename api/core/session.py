@@ -20,10 +20,13 @@ import numpy as np
 import torch
 from loguru import logger
 
+from ..config import get_settings
 from .models import load_saint_model, load_dqn_model, DuelingQNetwork, SaintModel
 from .environment import AdaptiveLearningEnv
 from . import mongo_store
 from .subject_progress_snapshot import build_subject_progress_snapshot
+
+_MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
 
 
 @dataclass
@@ -100,6 +103,7 @@ class SessionManager:
         # Load models once
         self._saint_model, self._concept_map, self._saint_config = load_saint_model(saint_path, self._device)
         self._q_net, self._dqn_info = load_dqn_model(dqn_path, self._device)
+        self._mastery_threshold = _MASTERY_THRESHOLD
 
         self._concepts_data = concepts_data or {}
         self._prereq_data = prereq_data or []
@@ -256,7 +260,7 @@ class SessionManager:
             concept_map=self._concept_map,
             prereq_graph=self._prereq_graph,
             max_steps=max_steps,
-            mastery_threshold=0.75,
+            mastery_threshold=self._mastery_threshold,
             deterministic_train=False,
             device=str(self._device),
         )
@@ -338,7 +342,7 @@ class SessionManager:
             concept_map=concept_map,
             prereq_graph=prereq_graph,
             max_steps=max_steps,
-            mastery_threshold=0.75,
+            mastery_threshold=self._mastery_threshold,
             deterministic_train=False,
             device=str(self._device),
             external_embeddings=external_embeddings,
@@ -537,7 +541,7 @@ class SessionManager:
         """Status priority: prerequisite lock > mastered > in-progress > available."""
         if not prereq_ok:
             return "locked"
-        if mastery >= 0.75:
+        if mastery >= _MASTERY_THRESHOLD:
             return "mastered"
         if visited:
             return "in_progress"
@@ -551,7 +555,7 @@ class SessionManager:
 
         concept_mastery = session.env.get_concept_mastery()
         id_to_concept = {v: k for k, v in session.concept_map.items()}
-        prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=0.75)
+        prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=self._mastery_threshold)
 
         nodes = []
         for idx in range(len(session.concept_map)):
@@ -612,7 +616,7 @@ class SessionManager:
         idx = session.concept_map[concept_id]
         concept_mastery = session.env.get_concept_mastery()
         bloom_mastery = session.env.get_mastery_matrix()
-        prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=0.75)
+        prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=self._mastery_threshold)
         id_to_concept = {v: k for k, v in session.concept_map.items()}
 
         prereqs = [

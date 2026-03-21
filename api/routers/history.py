@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
+from ..config import get_settings
 from ..core import mongo_store
 from ..dependencies import get_current_user
 from ..exceptions import PipelineNotFoundError
@@ -16,6 +17,7 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api/history", tags=["history"])
+_MASTERED_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
 
 
 def _to_progress_percent(mastered_concept: int, all_concept: int) -> int:
@@ -24,7 +26,10 @@ def _to_progress_percent(mastered_concept: int, all_concept: int) -> int:
     return max(0, min(100, round((mastered_concept / all_concept) * 100)))
 
 
-def _count_mastered_concepts(concept_mastery: list[float], threshold: float = 0.6) -> int:
+def _count_mastered_concepts(
+    concept_mastery: list[float],
+    threshold: float = _MASTERED_THRESHOLD,
+) -> int:
     return int(sum(1 for value in concept_mastery if value >= threshold))
 
 

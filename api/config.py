@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
     prs_threshold: float = 0.75
+    adaptive_mastery_threshold: float = 0.75
     similarity_threshold: float = 0.9
     pdf_ocr_concurrency: int = 5
     vision_pdf_request_timeout_sec: float = 120
