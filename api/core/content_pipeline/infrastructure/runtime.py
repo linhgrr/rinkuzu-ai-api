@@ -75,9 +75,9 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
     from .embed.embeddings import compute_embedding_for_concepts
     from .embed.prereq_ranking import rank_prerequisites
     from .merge.name_merge import merge_by_name
-    from graph.builder import KnowledgeGraphBuilder
-    from graph.cycle_removal import make_dag_with_llm
-    from graph.reduction import apply_transitive_reduction
+    from .graph.builder import KnowledgeGraphBuilder
+    from .graph.cycle_removal import make_dag_with_llm
+    from .graph.reduction import apply_transitive_reduction
     from sentence_transformers import SentenceTransformer
 
     return ContentProcessorBindings(
