@@ -1,28 +1,22 @@
-"""
-content_pipeline.py — Content processor integration
-"""
+"""Legacy content processor orchestration entrypoints."""
 
-import sys
 import time
 import asyncio
-import hashlib
 import json
-import boto3
-from botocore.client import Config
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 from loguru import logger
 
 from .. import mongo_store
-from ...config import get_settings
 from .application.pipeline_service import PipelineService
 from .domain.jobs import PipelineJob, PipelineStatus
-
-CONTENT_PROCESSOR_SRC = str(
-    Path(__file__).resolve().parents[3] / "content-processor" / "src"
+from .infrastructure.runtime import (
+    CONTENT_PROCESSOR_AVAILABLE,
+    CONTENT_PROCESSOR_ERROR,
+    CONTENT_PROCESSOR_SRC,
+    calculate_file_hash,
+    get_s3_client,
 )
-if CONTENT_PROCESSOR_SRC not in sys.path:
-    sys.path.insert(0, CONTENT_PROCESSOR_SRC)
 
 
 def _populate_job_metrics_from_result(job: PipelineJob) -> None:
@@ -120,54 +114,6 @@ def _remove_invalid_graph_members(graph, concept_ids: set[str]) -> None:
         graph.remove_nodes_from(orphan_nodes)
 
 
-def get_s3_client():
-    settings = get_settings()
-    if not settings.s3_available:
-        return None
-        
-    return boto3.client(
-        's3',
-        endpoint_url=settings.s3_endpoint_url,
-        aws_access_key_id=settings.s3_access_key_id,
-        aws_secret_access_key=settings.s3_secret_access_key,
-        config=Config(s3={'addressing_style': 'path'})
-    )
-
-
-def calculate_file_hash(file_path: str) -> str:
-    hasher = hashlib.sha256()
-    with open(file_path, 'rb') as f:
-        while chunk := f.read(8192):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-
-def _try_import_content_processor():
-    try:
-        from processors.factory import FileLoaderFactory
-        from processors.chunkers.text_chunker import TextChunker
-        from llm.extract_chain import ExtractionChain
-        from llm.postprocess import postprocess_concepts
-        from embed.embedding_client import EmbeddingClient
-        from embed.embeddings import compute_embedding_for_concepts
-        from embed.prereq_ranking import rank_prerequisites
-        from merge.name_merge import merge_by_name
-        from graph.builder import KnowledgeGraphBuilder
-        from graph.cycle_removal import make_dag_with_llm
-        from graph.reduction import apply_transitive_reduction
-        return True, None
-    except ImportError as e:
-        import traceback
-        err = f"{e}\n\nsys.path: {sys.path}\n\nTraceback:\n{traceback.format_exc()}"
-        logger.warning(f"Content processor not available: {err}")
-        return False, str(e)
-
-
-_cp_result = _try_import_content_processor()
-CONTENT_PROCESSOR_AVAILABLE = _cp_result[0]
-CONTENT_PROCESSOR_ERROR = _cp_result[1]
-
-
 async def process_pdf(
     file_path: str,
     subject_id: Optional[str] = None,
@@ -245,6 +191,8 @@ async def _run_pipeline(
         # Check S3 Cache
         file_hash = calculate_file_hash(file_path)
         s3_client = get_s3_client()
+        from ...config import get_settings
+
         settings = get_settings()
         bucket_name = settings.s3_bucket_name
         cache_key = f"cache/{file_hash}.json"
