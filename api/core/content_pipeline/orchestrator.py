@@ -20,6 +20,7 @@ from .application.stages.embedding import (
     resolve_embedding_settings,
 )
 from .application.stages.prerequisite_ranking import rank_candidate_prerequisites
+from .application.stages.relation_verification import verify_candidate_relations
 from .domain.jobs import PipelineJob, PipelineStatus
 from .infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -240,26 +241,14 @@ async def _run_pipeline(
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
-        # Step 6: Verify relations via LLM
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.70)
-
-        concept_name_map = {c.concept_id: c.name for c in all_concepts}
-        pairs_to_verify = [
-            (concept_name_map.get(a, a), concept_name_map.get(b, b))
-            for a, b in candidate_pairs
-        ]
-
-        verified = []
-        if pairs_to_verify:
-            verifications = await loop.run_in_executor(
-                None, extraction_chain.verify_relations_batch, pairs_to_verify
-            )
-            for (cid_a, cid_b), ev in zip(candidate_pairs, verifications):
-                if ev and ev.has_relation and ev.confidence >= min_confidence:
-                    verified.append((cid_a, cid_b, ev))
-
-        job.relations_verified = len(verified)
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.80)
+        verified = await verify_candidate_relations(
+            job,
+            concepts=all_concepts,
+            candidate_pairs=candidate_pairs,
+            min_confidence=min_confidence,
+            verify_relations_batch=extraction_chain.verify_relations_batch,
+            persist_job_state=get_pipeline_service().persist_job_state,
+        )
 
         # Step 7: Build knowledge graph
         await get_pipeline_service().persist_job_state(job, PipelineStatus.BUILDING_GRAPH, "Building knowledge graph...", 0.85)
