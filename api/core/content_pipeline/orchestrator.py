@@ -14,6 +14,10 @@ from .application.stages.cache_restore import (
 )
 from .application.stages.concept_extraction import extract_concepts_from_chunks
 from .application.stages.document_loading import load_document_chunks
+from .application.stages.embedding import (
+    compute_concept_embeddings,
+    resolve_embedding_settings,
+)
 from .domain.jobs import PipelineJob, PipelineStatus
 from .infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -208,23 +212,16 @@ async def _run_pipeline(
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
-        # Step 3: Compute embeddings
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.35)
-
-        # Assuming config.settings from content_processor has defaults
-        try:
-            from config import settings as cp_settings
-            model_name = cp_settings.embedding_model
-            batch_size = cp_settings.embedding_batch_size
-        except ImportError:
-            model_name = "keepitreal/vietnamese-sbert"
-            batch_size = 32
-            
-        embed_client = EmbeddingClient(model_name=model_name, batch_size=batch_size)
-        await loop.run_in_executor(
-            None, compute_embedding_for_concepts, all_concepts, embed_client
+        model_name, batch_size = resolve_embedding_settings()
+        await compute_concept_embeddings(
+            job,
+            concepts=all_concepts,
+            embedding_client_factory=EmbeddingClient,
+            compute_embedding_for_concepts=compute_embedding_for_concepts,
+            persist_job_state=get_pipeline_service().persist_job_state,
+            model_name=model_name,
+            batch_size=batch_size,
         )
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.45)
 
         # Step 4: Merge & Deduplicate
         await get_pipeline_service().persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.50)
