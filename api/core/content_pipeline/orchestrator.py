@@ -3,12 +3,16 @@
 import time
 import asyncio
 import json
-from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 from loguru import logger
 
 from .. import mongo_store
 from .application.pipeline_service import PipelineService
+from .application.stages.cache_restore import (
+    try_restore_completed_job_from_mongo,
+    try_restore_completed_job_from_s3,
+)
+from .application.stages.document_loading import load_document_chunks
 from .domain.jobs import PipelineJob, PipelineStatus
 from .infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -161,74 +165,38 @@ async def _run_pipeline(
 
         loop = asyncio.get_event_loop()
 
-        # Check MongoDB first
-        mongo_doc = await mongo_store.load_pipeline_job(job.job_id)
-        if (
-            mongo_doc
-            and mongo_doc.get("status") == PipelineStatus.COMPLETED.value
-            and mongo_doc.get("result")
+        if await try_restore_completed_job_from_mongo(
+            job,
+            load_job=mongo_store.load_pipeline_job,
+            populate_metrics=_populate_job_metrics_from_result,
         ):
-            job.filename = mongo_doc.get("filename", job.filename)
-            job.subject_id = mongo_doc.get("subject_id", job.subject_id)
-            job.total_chunks = int(mongo_doc.get("total_chunks", 0) or 0)
-            job.result = mongo_doc["result"]
-            job.concepts_extracted = int(mongo_doc.get("concepts_extracted", 0) or 0)
-            job.concepts_after_merge = int(mongo_doc.get("concepts_after_merge", 0) or 0)
-            job.relations_verified = int(mongo_doc.get("relations_verified", 0) or 0)
-            job.graph_stats = (
-                mongo_doc.get("graph_stats")
-                if isinstance(mongo_doc.get("graph_stats"), dict)
-                else {}
-            )
-            _populate_job_metrics_from_result(job)
-            job.status = PipelineStatus.COMPLETED
-            job.current_step = "Loaded from MongoDB"
-            job.progress = 1.0
-            job.completed_at = mongo_doc.get("completed_at", time.time())
-            logger.info(f"[Pipeline] Job {job.job_id} restored from MongoDB")
             return
 
         # Check S3 Cache
-        file_hash = calculate_file_hash(file_path)
         s3_client = get_s3_client()
         from ...config import get_settings
 
         settings = get_settings()
         bucket_name = settings.s3_bucket_name
-        cache_key = f"cache/{file_hash}.json"
-        
-        if s3_client and bucket_name:
-            job.status = PipelineStatus.LOADING
-            job.current_step = "Kiểm tra cache trên S3..."
-            job.progress = 0.02
-            try:
-                response = await loop.run_in_executor(
-                    None, 
-                    lambda: s3_client.get_object(Bucket=bucket_name, Key=cache_key)
-                )
-                cache_content = response['Body'].read().decode('utf-8')
-                job.result = json.loads(cache_content)
-                _populate_job_metrics_from_result(job)
-                job.status = PipelineStatus.COMPLETED
-                job.current_step = "Loaded from S3 cache"
-                job.progress = 1.0
-                job.completed_at = time.time()
-                logger.info(f"[Pipeline] Job {job.job_id} loaded from S3 cache {cache_key}")
-                
-                saved = await mongo_store.save_pipeline_job(job)
-                if not saved:
-                    raise RuntimeError("Failed to persist S3-cached pipeline result to MongoDB")
-                return
-            except Exception:
-                logger.debug(f"[Pipeline] Cache miss: {cache_key}")
+        cache_key = await try_restore_completed_job_from_s3(
+            job,
+            file_path=file_path,
+            s3_client=s3_client,
+            bucket_name=bucket_name,
+            hash_file=calculate_file_hash,
+            save_job=mongo_store.save_pipeline_job,
+            populate_metrics=_populate_job_metrics_from_result,
+        )
+        if job.status == PipelineStatus.COMPLETED:
+            return
 
         # Step 1: Load & Chunk PDF
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.05)
-        chunks = await loop.run_in_executor(
-            None, FileLoaderFactory.load_and_chunk, file_path, job.subject_id
+        chunks = await load_document_chunks(
+            job,
+            file_path=file_path,
+            load_and_chunk=FileLoaderFactory.load_and_chunk,
+            persist_job_state=get_pipeline_service().persist_job_state,
         )
-        job.total_chunks = len(chunks)
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.10)
 
         # Step 2: Extract concepts via LLM
         await get_pipeline_service().persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.15)
