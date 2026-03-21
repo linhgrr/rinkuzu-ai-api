@@ -56,5 +56,5 @@ Notes:
 ## Compatibility Status
 
 - New implementation modules under `api/core/content_pipeline/infrastructure/` import `api.config` directly.
-- Root-level legacy packages such as `llm`, `embed`, `graph`, `merge`, `processors`, and `storage` are compatibility shims only.
+- Legacy root packages from the old content-processor layout have been removed from the backend repo.
 - `PDFLoader` still exports `VISION_AGENT_API_KEY` into `os.environ` because the Landing AI client expects that process-level variable.
