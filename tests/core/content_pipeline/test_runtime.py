@@ -1,3 +1,5 @@
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 from api.core.content_pipeline.infrastructure import runtime
@@ -36,3 +38,25 @@ def test_get_content_processor_llm_factory_uses_cached_factory(monkeypatch):
 def test_runtime_root_no_longer_points_to_content_processor_folder():
     assert runtime.PROJECT_ROOT.name == "rinkuzu-ai-api"
     assert "content-processor" not in runtime.CONTENT_PROCESSOR_SRC
+
+
+def test_generate_theory_helper_imports_exercise_gen_lazily(monkeypatch):
+    module_name = "api.core.exercise_gen"
+    original_module = sys.modules.get(module_name)
+    fake_module = SimpleNamespace(
+        generate_theory=lambda name, definition: {
+            "content": f"{name}: {definition}",
+            "examples": [],
+        },
+    )
+    monkeypatch.setitem(sys.modules, module_name, fake_module)
+
+    try:
+        result = runtime._generate_theory_via_exercise_gen("Algebra", "Sets and equations")
+    finally:
+        if original_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = original_module
+
+    assert result["content"] == "Algebra: Sets and equations"

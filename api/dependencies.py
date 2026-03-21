@@ -59,4 +59,5 @@ def get_content_pipeline_availability(request: Request) -> dict:
         "available": bool(getattr(request.app.state, "content_processor_available", False)),
         "error": getattr(request.app.state, "content_processor_error", None),
         "src": getattr(request.app.state, "content_processor_src", None),
+        "service_initialized": getattr(request.app.state, "content_pipeline_service", None) is not None,
     }

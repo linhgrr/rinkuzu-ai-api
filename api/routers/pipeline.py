@@ -40,6 +40,8 @@ async def pipeline_status(availability: dict = Depends(get_content_pipeline_avai
     import sys
     return {
         "available": availability["available"],
+        "error": availability["error"],
+        "service_initialized": availability["service_initialized"],
         "message": (
             "Content pipeline ready"
             if availability["available"]
@@ -63,7 +65,21 @@ async def process_document(
 ):
     """Upload a PDF and run the full content processing pipeline."""
     if not availability["available"]:
-        raise ServiceUnavailableError("ContentPipeline")
+        logger.error(
+            "[PipelineRouter] Content pipeline unavailable",
+            user_id=user_id,
+            error=availability["error"],
+            src=availability["src"],
+            service_initialized=availability["service_initialized"],
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"ContentPipeline unavailable: {availability['error']}"
+                if availability["error"]
+                else "ContentPipeline unavailable: unknown startup error"
+            ),
+        )
     if not mongo_store.is_available():
         raise ServiceUnavailableError("MongoDB persistence")
 

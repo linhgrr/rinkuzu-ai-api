@@ -71,6 +71,14 @@ async def lifespan(app: FastAPI):
     app.state.content_processor_error = CONTENT_PROCESSOR_ERROR
     app.state.content_processor_src = CONTENT_PROCESSOR_SRC
 
+    if CONTENT_PROCESSOR_AVAILABLE:
+        logger.info("[PipelineRuntime] Content pipeline runtime available")
+    else:
+        logger.warning(
+            "[PipelineRuntime] Content pipeline runtime unavailable: {}",
+            CONTENT_PROCESSOR_ERROR or "unknown error",
+        )
+
     pipeline_service: PipelineService | None = None
 
     async def persist_pipeline_job_state(job, status, step, progress):

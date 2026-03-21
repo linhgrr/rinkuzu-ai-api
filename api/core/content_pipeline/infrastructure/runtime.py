@@ -37,6 +37,13 @@ class ContentProcessorBindings:
     generate_theory: Callable[[str, str], Any]
 
 
+def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str):
+    """Import theory generation lazily to avoid runtime circular imports."""
+    from ...exercise_gen import generate_theory
+
+    return generate_theory(concept_name, concept_definition)
+
+
 def get_s3_client():
     settings = get_settings()
     if not settings.s3_available:
@@ -73,8 +80,6 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
     from graph.reduction import apply_transitive_reduction
     from sentence_transformers import SentenceTransformer
 
-    from ...exercise_gen import generate_theory
-
     return ContentProcessorBindings(
         file_loader_factory=FileLoaderFactory,
         extraction_chain_cls=ExtractionChain,
@@ -88,7 +93,7 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
         make_dag_with_llm=make_dag_with_llm,
         apply_transitive_reduction=apply_transitive_reduction,
         saint_text_model_factory=lambda: SentenceTransformer("paraphrase-multilingual-mpnet-base-v2"),
-        generate_theory=generate_theory,
+        generate_theory=_generate_theory_via_exercise_gen,
     )
 
 
@@ -118,7 +123,7 @@ def try_import_content_processor() -> tuple[bool, str | None]:
     try:
         _build_content_processor_bindings()
         return True, None
-    except ImportError as exc:
+    except Exception as exc:
         logger.warning(f"Content pipeline modules not available: {exc}")
         return False, str(exc)
 

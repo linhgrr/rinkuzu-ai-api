@@ -40,4 +40,5 @@ def test_get_content_pipeline_availability_reads_app_state():
         "available": True,
         "error": "boom",
         "src": "/tmp/content-pipeline-runtime",
+        "service_initialized": False,
     }
