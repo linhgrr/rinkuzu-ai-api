@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Protocol
 
-from ..domain.jobs import PipelineJob
+from ..domain.jobs import PipelineJob, PipelineStatus
+
+
+PersistJobStateFn = Callable[
+    [PipelineJob, PipelineStatus, str, float],
+    Awaitable[None],
+]
+
+
+@dataclass(frozen=True)
+class RelationDiscoveryResult:
+    """Stable output contract for relation discovery implementations."""
+
+    candidate_pairs: list[tuple[str, str]]
+    verified_relations: list[tuple[str, str, Any]]
 
 
 class JobRepository(Protocol):
@@ -25,4 +40,19 @@ class JobRepository(Protocol):
         user_id: str | None = None,
         status: str | None = None,
     ) -> list[dict[str, Any]]:
+        ...
+
+
+class RelationEngine(Protocol):
+    """Application-facing contract for relation discovery algorithms."""
+
+    async def discover_relations(
+        self,
+        *,
+        job: PipelineJob,
+        concepts: list[Any],
+        prs_threshold: float,
+        min_confidence: float,
+        persist_job_state: PersistJobStateFn,
+    ) -> RelationDiscoveryResult:
         ...

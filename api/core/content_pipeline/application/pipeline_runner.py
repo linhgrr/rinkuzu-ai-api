@@ -32,8 +32,6 @@ from .stages.finalization import (
 )
 from .stages.graph_building import build_knowledge_graph
 from .stages.graph_optimization import optimize_graph
-from .stages.prerequisite_ranking import rank_candidate_prerequisites
-from .stages.relation_verification import verify_candidate_relations
 from .stages.result_assembly import (
     assemble_pipeline_result,
     serialize_concepts,
@@ -137,6 +135,9 @@ class PipelineRunner:
 
                 llm_client = bindings.llm_factory(temperature=0.1)
                 extraction_chain = bindings.extraction_chain_cls(client=llm_client)
+                relation_engine = bindings.relation_engine_factory(
+                    extraction_chain=extraction_chain,
+                )
                 all_concepts = await extract_concepts_from_chunks(
                     job,
                     chunks=chunks,
@@ -163,27 +164,18 @@ class PipelineRunner:
                     persist_job_state=self._persist_job_state,
                 )
 
-                candidate_pairs = await rank_candidate_prerequisites(
+                relation_result = await relation_engine.discover_relations(
                     job,
                     concepts=all_concepts,
                     prs_threshold=prs_threshold,
-                    rank_prerequisites=bindings.rank_prerequisites,
-                    persist_job_state=self._persist_job_state,
-                )
-
-                verified = await verify_candidate_relations(
-                    job,
-                    concepts=all_concepts,
-                    candidate_pairs=candidate_pairs,
                     min_confidence=min_confidence,
-                    verify_relations_batch=extraction_chain.verify_relations_batch,
                     persist_job_state=self._persist_job_state,
                 )
 
                 graph, graph_build_stats = await build_knowledge_graph(
                     job,
                     concepts=all_concepts,
-                    verified_relations=verified,
+                    verified_relations=relation_result.verified_relations,
                     knowledge_graph_builder_factory=bindings.knowledge_graph_builder_factory,
                     persist_job_state=self._persist_job_state,
                 )

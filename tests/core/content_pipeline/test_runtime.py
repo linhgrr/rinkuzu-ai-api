@@ -35,6 +35,17 @@ def test_get_content_processor_llm_factory_uses_cached_factory(monkeypatch):
     assert factory is sentinel
 
 
+def test_content_processor_bindings_can_build_relation_engine():
+    class _ExtractionChain:
+        def verify_relations_batch(self, pairs):
+            return pairs
+
+    bindings = runtime.get_content_processor_bindings()
+    engine = bindings.relation_engine_factory(extraction_chain=_ExtractionChain())
+
+    assert hasattr(engine, "discover_relations")
+
+
 def test_runtime_root_no_longer_points_to_content_processor_folder():
     assert runtime.PROJECT_ROOT.name == "rinkuzu-ai-api"
     assert "content-processor" not in runtime.CONTENT_PROCESSOR_SRC

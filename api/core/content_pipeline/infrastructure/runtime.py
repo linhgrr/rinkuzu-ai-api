@@ -12,6 +12,7 @@ from botocore.client import Config
 from loguru import logger
 
 from ....config import get_settings
+from ..application.ports import RelationEngine
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -28,8 +29,8 @@ class ContentProcessorBindings:
     llm_factory: Callable[..., Any]
     embedding_client_cls: Any
     compute_embedding_for_concepts: Callable[[list[Any], Any], Any]
-    rank_prerequisites: Callable[[list[Any], float], list[tuple[str, str]]]
     merge_by_name: Callable[[list[Any]], list[Any]]
+    relation_engine_factory: Callable[..., RelationEngine]
     knowledge_graph_builder_factory: Callable[[str], Any]
     make_dag_with_llm: Callable[[Any], tuple[Any, Any]]
     apply_transitive_reduction: Callable[[Any], Any]
@@ -67,6 +68,7 @@ def calculate_file_hash(file_path: str) -> str:
 
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:
+    from ..application.relation_engine import DefaultRelationEngine
     from .processors.factory import FileLoaderFactory
     from .llm.extract_chain import ExtractionChain
     from .llm.postprocess import postprocess_concepts
@@ -87,8 +89,11 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
         llm_factory=get_llm,
         embedding_client_cls=EmbeddingClient,
         compute_embedding_for_concepts=compute_embedding_for_concepts,
-        rank_prerequisites=rank_prerequisites,
         merge_by_name=merge_by_name,
+        relation_engine_factory=lambda *, extraction_chain: DefaultRelationEngine(
+            rank_prerequisites=rank_prerequisites,
+            verify_relations_batch=extraction_chain.verify_relations_batch,
+        ),
         knowledge_graph_builder_factory=lambda subject_id: KnowledgeGraphBuilder(subject_id=subject_id),
         make_dag_with_llm=make_dag_with_llm,
         apply_transitive_reduction=apply_transitive_reduction,
