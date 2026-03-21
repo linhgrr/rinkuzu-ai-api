@@ -3,7 +3,7 @@
 import time
 import asyncio
 import json
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional
 from loguru import logger
 
 from .. import mongo_store
@@ -19,6 +19,7 @@ from .application.stages.embedding import (
     compute_concept_embeddings,
     resolve_embedding_settings,
 )
+from .application.stages.graph_building import build_knowledge_graph, build_partial_graph
 from .application.stages.prerequisite_ranking import rank_candidate_prerequisites
 from .application.stages.relation_verification import verify_candidate_relations
 from .domain.jobs import PipelineJob, PipelineStatus
@@ -60,71 +61,6 @@ def _populate_job_metrics_from_result(job: PipelineJob) -> None:
     merged_stats["num_edges"] = num_edges
     merged_stats["is_dag"] = bool(stats.get("is_dag", True))
     job.graph_stats = merged_stats
-
-
-def _sanitize_concept_relations(all_concepts: List[Any]) -> Tuple[int, int]:
-    concept_ids = {
-        str(getattr(c, "concept_id", "")).strip()
-        for c in all_concepts
-        if getattr(c, "concept_id", None)
-    }
-    kept = 0
-    dropped = 0
-
-    for concept in all_concepts:
-        source_id = str(getattr(concept, "concept_id", "")).strip()
-        seen_targets = set()
-        cleaned_relations = []
-
-        for rel in getattr(concept, "relations", []) or []:
-            rel_type = str(getattr(rel, "type", "")).strip().upper()
-            target_id = str(getattr(rel, "target_id", "")).strip()
-
-            if rel_type != "PREREQUISITE" or not target_id or target_id == source_id:
-                dropped += 1
-                continue
-            if target_id not in concept_ids:
-                dropped += 1
-                continue
-            if target_id in seen_targets:
-                continue
-
-            seen_targets.add(target_id)
-            cleaned_relations.append(rel)
-            kept += 1
-
-        concept.relations = cleaned_relations
-
-    return kept, dropped
-
-
-def _build_partial_graph(graph, all_concepts: List[Any]) -> Dict[str, Any]:
-    concept_map = {
-        getattr(concept, "concept_id", ""): getattr(concept, "name", "")
-        for concept in all_concepts
-    }
-    return {
-        "nodes": [
-            {"id": node_id, "name": concept_map.get(node_id, str(node_id))}
-            for node_id in graph.nodes()
-        ],
-        "edges": [{"source": src, "target": tgt} for src, tgt in graph.edges()],
-    }
-
-
-def _remove_invalid_graph_members(graph, concept_ids: set[str]) -> None:
-    edges_to_remove = []
-    for src, tgt, data in list(graph.edges(data=True)):
-        rel_type = str(data.get("relation_type", "PREREQUISITE")).upper()
-        if rel_type != "PREREQUISITE" or src not in concept_ids or tgt not in concept_ids:
-            edges_to_remove.append((src, tgt))
-    if edges_to_remove:
-        graph.remove_edges_from(edges_to_remove)
-
-    orphan_nodes = [node_id for node_id in list(graph.nodes()) if node_id not in concept_ids]
-    if orphan_nodes:
-        graph.remove_nodes_from(orphan_nodes)
-
 
 async def process_pdf(
     file_path: str,
@@ -250,48 +186,15 @@ async def _run_pipeline(
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
-        # Step 7: Build knowledge graph
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.BUILDING_GRAPH, "Building knowledge graph...", 0.85)
-
-        concept_ids_set = {
-            str(getattr(c, "concept_id", "")).strip()
-            for c in all_concepts
-            if getattr(c, "concept_id", None)
-        }
-        extracted_relation_count, dropped_relation_count = _sanitize_concept_relations(all_concepts)
-        if dropped_relation_count:
-            logger.info(
-                f"[Pipeline] Dropped {dropped_relation_count} invalid extracted relations"
-            )
-
-        builder = KnowledgeGraphBuilder(subject_id=job.subject_id)
-        builder.add_concepts(all_concepts)
-        graph = builder.get_graph()
-        _remove_invalid_graph_members(graph, concept_ids_set)
-
-        existing_edges = set(graph.edges())
-        logger.debug(f"[Pipeline] Added {extracted_relation_count} relations from extraction")
-
-        verified_relation_count = 0
-        for cid_a, cid_b, ev in verified:
-            if cid_a not in concept_ids_set or cid_b not in concept_ids_set:
-                continue
-            if hasattr(ev, "direction"):
-                if ev.direction == "A_to_B":
-                    edge = (cid_a, cid_b)
-                    if edge not in existing_edges:
-                        builder.add_relation(cid_a, cid_b, "PREREQUISITE")
-                        existing_edges.add(edge)
-                        verified_relation_count += 1
-                elif ev.direction == "B_to_A":
-                    edge = (cid_b, cid_a)
-                    if edge not in existing_edges:
-                        builder.add_relation(cid_b, cid_a, "PREREQUISITE")
-                        existing_edges.add(edge)
-                        verified_relation_count += 1
-
-        _remove_invalid_graph_members(graph, concept_ids_set)
-        job.partial_graph = _build_partial_graph(graph, all_concepts)
+        graph, graph_build_stats = await build_knowledge_graph(
+            job,
+            concepts=all_concepts,
+            verified_relations=verified,
+            knowledge_graph_builder_factory=lambda subject_id: KnowledgeGraphBuilder(subject_id=subject_id),
+            persist_job_state=get_pipeline_service().persist_job_state,
+        )
+        extracted_relation_count = graph_build_stats["extracted_relation_count"]
+        verified_relation_count = graph_build_stats["verified_relation_count"]
 
         # Step 8: Make DAG
         await get_pipeline_service().persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.90)
@@ -301,14 +204,14 @@ async def _run_pipeline(
             graph, cycle_stats = await loop.run_in_executor(
                 None, make_dag_with_llm, graph
             )
-            job.partial_graph = _build_partial_graph(graph, all_concepts)
+            job.partial_graph = build_partial_graph(graph, all_concepts)
 
         # Step 9: Transitive reduction
         if apply_reduction:
             graph = await loop.run_in_executor(
                 None, apply_transitive_reduction, graph
             )
-            job.partial_graph = _build_partial_graph(graph, all_concepts)
+            job.partial_graph = build_partial_graph(graph, all_concepts)
 
         await get_pipeline_service().persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.95)
 
