@@ -71,10 +71,10 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
     from .llm.extract_chain import ExtractionChain
     from .llm.postprocess import postprocess_concepts
     from .llm import get_llm
-    from embed.embedding_client import EmbeddingClient
-    from embed.embeddings import compute_embedding_for_concepts
-    from embed.prereq_ranking import rank_prerequisites
-    from merge.name_merge import merge_by_name
+    from .embed.embedding_client import EmbeddingClient
+    from .embed.embeddings import compute_embedding_for_concepts
+    from .embed.prereq_ranking import rank_prerequisites
+    from .merge.name_merge import merge_by_name
     from graph.builder import KnowledgeGraphBuilder
     from graph.cycle_removal import make_dag_with_llm
     from graph.reduction import apply_transitive_reduction

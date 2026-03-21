@@ -1,9 +1,3 @@
-"""Concept merging and deduplication utilities."""
+"""Compatibility shim for legacy merge imports."""
 
-from .embed_dedupe import deduplicate_by_embedding  # deprecated: use LLM verification with same_concept
-from .name_merge import merge_by_name
-
-__all__ = [
-    "deduplicate_by_embedding",  # deprecated
-    "merge_by_name",
-]
+from api.core.content_pipeline.infrastructure.merge import *  # noqa: F403
