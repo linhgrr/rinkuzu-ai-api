@@ -217,6 +217,13 @@ async def process_pdf(
     if not persisted:
         raise RuntimeError(f"Failed to persist pipeline job {job.job_id}")
 
+    await _persist_job_state(
+        job,
+        PipelineStatus.QUEUED,
+        "Queued for processing",
+        0.01,
+    )
+
     if background_tasks:
         background_tasks.add_task(
             _run_pipeline_and_cleanup, job, file_path, prs_threshold, min_confidence, apply_reduction
