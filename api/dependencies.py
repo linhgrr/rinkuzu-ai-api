@@ -54,7 +54,7 @@ def get_content_pipeline_service(request: Request):
 
 
 def get_content_pipeline_availability(request: Request) -> dict:
-    """Expose runtime availability of the legacy content-processor bindings."""
+    """Expose runtime availability of the unified content pipeline modules."""
     return {
         "available": bool(getattr(request.app.state, "content_processor_available", False)),
         "error": getattr(request.app.state, "content_processor_error", None),

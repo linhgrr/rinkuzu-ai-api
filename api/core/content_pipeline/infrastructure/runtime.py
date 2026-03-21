@@ -1,9 +1,8 @@
-"""Runtime helpers for the legacy content-processor integration."""
+"""Runtime helpers for the unified content pipeline."""
 
 from __future__ import annotations
 
 import hashlib
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -15,16 +14,13 @@ from loguru import logger
 from ....config import get_settings
 
 
-CONTENT_PROCESSOR_SRC = str(
-    Path(__file__).resolve().parents[4] / "content-processor" / "src"
-)
-if CONTENT_PROCESSOR_SRC not in sys.path:
-    sys.path.insert(0, CONTENT_PROCESSOR_SRC)
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+CONTENT_PROCESSOR_SRC = str(PROJECT_ROOT)
 
 
 @dataclass(frozen=True)
 class ContentProcessorBindings:
-    """Imported content-processor collaborators used by the unified pipeline."""
+    """Imported collaborators used by the unified content pipeline."""
 
     file_loader_factory: Any
     extraction_chain_cls: Any
@@ -101,7 +97,7 @@ _content_processor_llm_factory = None
 
 
 def get_content_processor_bindings() -> ContentProcessorBindings:
-    """Load and cache the imported collaborators from the legacy content-processor."""
+    """Load and cache the imported collaborators for the content pipeline."""
     global _content_processor_bindings
     if _content_processor_bindings is None:
         _content_processor_bindings = _build_content_processor_bindings()
@@ -109,7 +105,7 @@ def get_content_processor_bindings() -> ContentProcessorBindings:
 
 
 def get_content_processor_llm_factory():
-    """Load and cache the legacy content-processor LLM factory."""
+    """Load and cache the content pipeline LLM factory."""
     global _content_processor_llm_factory
     if _content_processor_llm_factory is None:
         from llm import get_llm
@@ -123,10 +119,7 @@ def try_import_content_processor() -> tuple[bool, str | None]:
         _build_content_processor_bindings()
         return True, None
     except ImportError as exc:
-        import traceback
-
-        err = f"{exc}\n\nsys.path: {sys.path}\n\nTraceback:\n{traceback.format_exc()}"
-        logger.warning(f"Content processor not available: {err}")
+        logger.warning(f"Content pipeline modules not available: {exc}")
         return False, str(exc)
 
 

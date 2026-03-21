@@ -35,7 +35,7 @@ WORKDIR /home/user/app
 COPY --chown=user . .
 
 # CRITICAL: Hardcoded absolute paths (no shell variable expansion)
-ENV PYTHONPATH=/home/user/app:/home/user/app/api:/home/user/app/content-processor/src
+ENV PYTHONPATH=/home/user/app:/home/user/app/api
 ENV HF_HOME=/app/model_cache
 ENV TRANSFORMERS_CACHE=/app/model_cache
 

@@ -66,6 +66,5 @@ def get_settings() -> Settings:
     return _settings
 
 
-# Module-level alias so `from config import settings` works
-# (content-processor modules expect this name)
+# Module-level alias for code importing `api.config.settings` directly.
 settings = get_settings()

@@ -36,12 +36,12 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 @router.get("/status")
 async def pipeline_status(availability: dict = Depends(get_content_pipeline_availability)):
-    """Check if content processor is available."""
+    """Check if content pipeline runtime modules are available."""
     import sys
     return {
         "available": availability["available"],
         "message": (
-            "Content processor ready"
+            "Content pipeline ready"
             if availability["available"]
             else f"Import error: {availability['error']}"
         ),
@@ -64,7 +64,7 @@ async def process_document(
 ):
     """Upload a PDF and run the full content processing pipeline."""
     if not availability["available"]:
-        raise ServiceUnavailableError("Content processor")
+        raise ServiceUnavailableError("ContentPipeline")
     if not mongo_store.is_available():
         raise ServiceUnavailableError("MongoDB persistence")
 

@@ -31,3 +31,8 @@ def test_get_content_processor_llm_factory_uses_cached_factory(monkeypatch):
     factory = runtime.get_content_processor_llm_factory()
 
     assert factory is sentinel
+
+
+def test_runtime_root_no_longer_points_to_content_processor_folder():
+    assert runtime.PROJECT_ROOT.name == "rinkuzu-ai-api"
+    assert "content-processor" not in runtime.CONTENT_PROCESSOR_SRC
