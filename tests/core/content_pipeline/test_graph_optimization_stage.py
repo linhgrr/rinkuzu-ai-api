@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import networkx as nx
 
+from api.core.content_pipeline.application.stages import graph_optimization
 from api.core.content_pipeline.application.stages.graph_optimization import optimize_graph
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
@@ -101,3 +102,51 @@ def test_optimize_graph_skips_cycle_removal_for_existing_dag():
     assert set(optimized_graph.edges()) == {("c1", "c2")}
     assert stats["is_dag"] is True
     assert stats["cycle_stats"] is None
+
+
+def test_optimize_graph_uses_extended_cycle_timeout(monkeypatch):
+    graph = nx.DiGraph()
+    graph.add_edge("c1", "c2")
+    graph.add_edge("c2", "c1")
+    concepts = [
+        SimpleNamespace(concept_id="c1", name="Alpha"),
+        SimpleNamespace(concept_id="c2", name="Beta"),
+    ]
+    job = PipelineJob(job_id="job-3", filename="lesson.pdf", subject_id="algebra")
+    captured = {}
+
+    async def persist_job_state(*_args, **_kwargs):
+        return None
+
+    async def fake_run_blocking_stage(func, *args, stage_name, timeout_sec=None, **kwargs):
+        captured["stage_name"] = stage_name
+        captured["timeout_sec"] = timeout_sec
+        dag = nx.DiGraph()
+        dag.add_edge("c1", "c2")
+        return dag, {"removed_cycles": 1}
+
+    monkeypatch.setattr(
+        graph_optimization,
+        "get_settings",
+        lambda: SimpleNamespace(content_pipeline_graph_cycle_timeout_sec=900),
+    )
+    monkeypatch.setattr(graph_optimization, "run_blocking_stage", fake_run_blocking_stage)
+
+    optimized_graph, stats = asyncio.run(
+        optimize_graph(
+            job,
+            graph=graph,
+            concepts=concepts,
+            apply_reduction=False,
+            make_dag_with_llm=lambda _: (_ for _ in ()).throw(AssertionError("unused")),
+            apply_transitive_reduction=lambda input_graph: input_graph,
+            persist_job_state=persist_job_state,
+        )
+    )
+
+    assert set(optimized_graph.edges()) == {("c1", "c2")}
+    assert stats["cycle_stats"] == {"removed_cycles": 1}
+    assert captured == {
+        "stage_name": "graph_cycle_removal",
+        "timeout_sec": 900.0,
+    }

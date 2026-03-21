@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     vision_agent_api_key: Optional[str] = None
     content_pipeline_job_timeout_sec: float = 1800
     content_pipeline_stage_timeout_sec: float = 300
+    content_pipeline_graph_cycle_timeout_sec: float = 900
 
     # ── S3 Cache ────────────────────────────────────────────
     s3_endpoint_url: Optional[str] = None

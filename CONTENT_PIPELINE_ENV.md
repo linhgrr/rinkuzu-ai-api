@@ -40,6 +40,7 @@ Notes:
 | --- | --- | --- |
 | `content_pipeline_job_timeout_sec` | `CONTENT_PIPELINE_JOB_TIMEOUT_SEC` | `1800` |
 | `content_pipeline_stage_timeout_sec` | `CONTENT_PIPELINE_STAGE_TIMEOUT_SEC` | `300` |
+| `content_pipeline_graph_cycle_timeout_sec` | `CONTENT_PIPELINE_GRAPH_CYCLE_TIMEOUT_SEC` | `900` |
 | `vision_pdf_request_timeout_sec` | `VISION_PDF_REQUEST_TIMEOUT_SEC` | `120` |
 
 ## OCR And S3

@@ -4,12 +4,23 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
+from api.config import get_settings
+
 from ...domain.jobs import PipelineJob, PipelineStatus
 from .graph_building import build_partial_graph
 from .execution import run_blocking_stage
 
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
+
+
+def _resolve_cycle_removal_timeout() -> float | None:
+    settings = get_settings()
+    raw_timeout = settings.content_pipeline_graph_cycle_timeout_sec
+    if raw_timeout is None:
+        return None
+    timeout = float(raw_timeout)
+    return timeout if timeout > 0 else None
 
 
 async def optimize_graph(
@@ -38,6 +49,7 @@ async def optimize_graph(
             make_dag_with_llm,
             graph,
             stage_name="graph_cycle_removal",
+            timeout_sec=_resolve_cycle_removal_timeout(),
         )
         job.partial_graph = build_partial_graph(graph, concepts)
 
