@@ -56,6 +56,6 @@ Notes:
 ## Compatibility Status
 
 - New implementation modules under `api/core/content_pipeline/infrastructure/` import `api.config` directly.
-- Root-level `config.py` still exists as a compatibility shim for legacy callers.
 - Root-level legacy packages such as `llm`, `embed`, `graph`, `merge`, `processors`, and `storage` are compatibility shims only.
-- Removing the remaining compatibility fallbacks should be done only after local and staging verification.
+- The remaining compatibility surface is limited to targeted env fallbacks such as `VISION_AGENT_API_KEY` for `PDFLoader`.
+- Removing the last env fallbacks should be done only after local and staging verification.
