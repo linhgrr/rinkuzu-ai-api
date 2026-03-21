@@ -49,8 +49,7 @@ def deduplicate_by_embedding(
     if not concepts:
         return []
 
-    threshold = similarity_threshold or getattr(
-        settings, "similarity_threshold", 0.9)
+    threshold = similarity_threshold or settings.similarity_threshold
 
     # Validate threshold
     if not (0 < threshold <= 1):

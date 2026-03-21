@@ -51,8 +51,7 @@ class TextChunker:
         self.chunk_size = chunk_size or settings.chunk_size
         self.chunk_overlap = chunk_overlap or settings.chunk_overlap
         self.use_hf_tokenizer = use_hf_tokenizer
-        self.hf_model_name = hf_model_name or getattr(
-            settings, "embedding_model", None)
+        self.hf_model_name = hf_model_name or settings.embedding_model
         self.markdown_headers = markdown_headers or [
             ("#", "Header 1"),
             ("##", "Header 2"),

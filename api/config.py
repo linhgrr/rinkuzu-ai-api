@@ -35,10 +35,22 @@ class Settings(BaseSettings):
     llm_api_key: Optional[str] = None
     llm_base_url: Optional[str] = None
     llm_model: Optional[str] = None
+    llm_embedding_model: str = "text-embedding-3-small"
+    llm_timeout_sec: float = 150
+    llm_max_retries: int = 2
 
     # ── Content Pipeline ───────────────────────────────────
     embedding_model: str = "keepitreal/vietnamese-sbert"
     embedding_batch_size: int = 32
+    use_vi_tokenizer: bool = False
+    max_seq_length: Optional[int] = None
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    prs_threshold: float = 0.75
+    similarity_threshold: float = 0.9
+    pdf_ocr_concurrency: int = 5
+    vision_pdf_request_timeout_sec: float = 120
+    vision_agent_api_key: Optional[str] = None
     content_pipeline_job_timeout_sec: float = 1800
     content_pipeline_stage_timeout_sec: float = 300
 

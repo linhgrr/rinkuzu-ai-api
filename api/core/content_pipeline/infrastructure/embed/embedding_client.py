@@ -39,13 +39,13 @@ class EmbeddingClient(Embeddings):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = SentenceTransformer(self.model_name, device=self.device)
 
-        self.use_vi_tokenizer = use_vi_tokenizer if use_vi_tokenizer is not None else getattr(
-            settings, "use_vi_tokenizer", False)
+        self.use_vi_tokenizer = (
+            use_vi_tokenizer if use_vi_tokenizer is not None else settings.use_vi_tokenizer
+        )
 
-        self.batch_size = batch_size or getattr(
-            settings, "embedding_batch_size", 32)
+        self.batch_size = batch_size or settings.embedding_batch_size
 
-        if hasattr(settings, "max_seq_length") and settings.max_seq_length:
+        if settings.max_seq_length:
             try:
                 self.model.max_seq_length = settings.max_seq_length
             except Exception as e:

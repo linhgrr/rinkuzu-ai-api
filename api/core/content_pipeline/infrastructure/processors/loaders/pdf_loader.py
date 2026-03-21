@@ -5,18 +5,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from loguru import logger
 
+from ......config import get_settings
+
 try:
     from agentic_doc.parse import parse
     AGENTIC_DOC_AVAILABLE = True
 except ImportError:
     AGENTIC_DOC_AVAILABLE = False
 
-from dotenv import load_dotenv
-
 from ...utils import timeit
 from .base import BaseLoader
-
-load_dotenv()
 
 class PDFLoader(BaseLoader):
     """Loader for PDF documents using Landing AI."""
@@ -27,7 +25,7 @@ class PDFLoader(BaseLoader):
 
         Args:
             api_key: Landing AI API key. If not provided, will try to load from 
-                    VISION_AGENT_API_KEY environment variable.
+                    unified backend settings first, then VISION_AGENT_API_KEY.
 
         Raises:
             ValueError: If API key is not provided and not in environment
@@ -39,11 +37,12 @@ class PDFLoader(BaseLoader):
                 "Install it with: pip install agentic-doc"
             )
 
-        self.api_key = api_key or os.getenv("VISION_AGENT_API_KEY")
+        settings = get_settings()
+        self.api_key = api_key or settings.vision_agent_api_key or os.getenv("VISION_AGENT_API_KEY")
         if not self.api_key:
             raise ValueError(
                 "Landing AI API key not provided. "
-                "Please set VISION_AGENT_API_KEY environment variable or pass it as parameter."
+                "Please set it in backend settings or pass it as parameter."
             )
 
         os.environ["VISION_AGENT_API_KEY"] = self.api_key

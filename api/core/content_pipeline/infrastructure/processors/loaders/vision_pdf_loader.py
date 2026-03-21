@@ -1,31 +1,24 @@
 """PDF loader using Vision LLM endpoint for OCR text extraction.
 
 Splits PDF into individual pages, uploads each to S3, then uses
-an OpenAI-compatible chat completions endpoint (localhost:6969) with
-image_url to perform OCR on each page in parallel.
+an OpenAI-compatible chat completions endpoint with image_url to
+perform OCR on each page in parallel.
 """
 
-import os
-import io
 import time
-import json
 import uuid
-import requests
-from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from loguru import logger
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import fitz  # pymupdf
 import boto3
+import requests
 from botocore.client import Config
-from dotenv import load_dotenv
+from loguru import logger
 
+from ......config import get_settings
 from .base import BaseLoader
-
-# Load .env from project root (full-demo/)
-_ENV_PATH = Path(__file__).resolve().parents[4] / ".env"
-load_dotenv(_ENV_PATH)
 
 # ── OCR prompt ─────────────────────────────────────────────────────────
 OCR_PROMPT = (
@@ -45,15 +38,16 @@ OCR_PROMPT = (
 
 
 def _get_s3_client():
-    """Create boto3 S3 client from env vars."""
-    endpoint_url = os.getenv("S3_ENDPOINT_URL")
-    access_key = os.getenv("S3_ACCESS_KEY_ID")
-    secret_key = os.getenv("S3_SECRET_ACCESS_KEY")
+    """Create boto3 S3 client from unified settings."""
+    settings = get_settings()
+    endpoint_url = settings.s3_endpoint_url
+    access_key = settings.s3_access_key_id
+    secret_key = settings.s3_secret_access_key
 
     if not all([endpoint_url, access_key, secret_key]):
         raise ValueError(
             "S3 credentials not configured. "
-            "Set S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY in .env"
+            "Set S3 endpoint and credentials in backend settings."
         )
 
     return boto3.client(
@@ -86,6 +80,7 @@ def _split_pdf_to_pages(file_path: str) -> List[bytes]:
 def _upload_page_to_s3(
     s3_client,
     bucket_name: str,
+    endpoint_url: str,
     page_bytes: bytes,
     page_num: int,
     job_id: str,
@@ -102,8 +97,8 @@ def _upload_page_to_s3(
         ContentDisposition="inline",
     )
 
-    endpoint_url = os.getenv("S3_ENDPOINT_URL", "").rstrip("/")
-    url = f"{endpoint_url}/{bucket_name}/{key}"
+    base_url = endpoint_url.rstrip("/")
+    url = f"{base_url}/{bucket_name}/{key}"
     logger.debug(f"[VisionPDFLoader] Uploaded page {page_num} → {url}")
     return url
 
@@ -114,6 +109,7 @@ def _ocr_page_via_llm(
     base_url: str,
     model: str,
     api_key: str,
+    request_timeout_sec: float,
     max_retries: int = 2,
 ) -> Tuple[int, str]:
     """Call LLM chat completions endpoint to OCR a single page.
@@ -152,7 +148,7 @@ def _ocr_page_via_llm(
                 url,
                 headers=headers,
                 json=payload,
-                timeout=120,
+                timeout=request_timeout_sec,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -226,23 +222,29 @@ class VisionPDFLoader(BaseLoader):
     ):
         """
         Args:
-            concurrency: Max parallel OCR requests (default: env PDF_OCR_CONCURRENCY or 5)
+            concurrency: Max parallel OCR requests (default: backend settings)
             cleanup_s3: Whether to delete temp S3 page files after extraction
         """
-        self.concurrency = concurrency or int(
-            os.getenv("PDF_OCR_CONCURRENCY", "5")
-        )
+        settings = get_settings()
+        self.settings = settings
+        self.concurrency = concurrency or settings.pdf_ocr_concurrency
         self.cleanup_s3 = cleanup_s3
 
         # LLM config
-        self.base_url = os.getenv("LLM_BASE_URL", "http://localhost:6969")
-        self.model = os.getenv("LLM_MODEL", "gemini-3.0-pro")
-        self.api_key = os.getenv(
-            "LLM_API_KEY", "sk-41bb5a29c07d4b23ad5e8e54a658ce2b"
+        self.base_url = settings.llm_base_url or "http://localhost:6969"
+        self.model = settings.llm_model or "gemini-3.0-pro"
+        self.api_key = (
+            settings.llm_api_key
+            or settings.gemini_api_key
+            or settings.google_api_key
+            or "sk-41bb5a29c07d4b23ad5e8e54a658ce2b"
         )
+        self.request_timeout_sec = settings.vision_pdf_request_timeout_sec
+        self.max_retries = settings.llm_max_retries
 
         # S3 config
-        self.bucket_name = os.getenv("S3_BUCKET_NAME", "")
+        self.bucket_name = settings.s3_bucket_name or ""
+        self.s3_endpoint_url = settings.s3_endpoint_url or ""
         self.s3_client = _get_s3_client()
 
         logger.info(
@@ -295,7 +297,12 @@ class VisionPDFLoader(BaseLoader):
             page_urls: List[Tuple[int, str]] = []
             for i, page_bytes in enumerate(page_buffers):
                 url = _upload_page_to_s3(
-                    self.s3_client, self.bucket_name, page_bytes, i + 1, job_id
+                    self.s3_client,
+                    self.bucket_name,
+                    self.s3_endpoint_url,
+                    page_bytes,
+                    i + 1,
+                    job_id,
                 )
                 page_urls.append((i + 1, url))
 
@@ -315,6 +322,8 @@ class VisionPDFLoader(BaseLoader):
                         self.base_url,
                         self.model,
                         self.api_key,
+                        self.request_timeout_sec,
+                        self.max_retries,
                     ): page_num
                     for page_num, url in page_urls
                 }
