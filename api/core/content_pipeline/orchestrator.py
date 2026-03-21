@@ -19,6 +19,10 @@ from .application.stages.embedding import (
     compute_concept_embeddings,
     resolve_embedding_settings,
 )
+from .application.stages.enrichment import (
+    generate_concept_theories,
+    generate_saint_concept_embeddings,
+)
 from .application.stages.graph_building import build_knowledge_graph
 from .application.stages.graph_optimization import optimize_graph
 from .application.stages.prerequisite_ranking import rank_candidate_prerequisites
@@ -226,66 +230,22 @@ async def _run_pipeline(
         concepts_data, concept_map = serialize_concepts(all_concepts)
         prereq_edges = serialize_prerequisite_edges(graph, concept_map)
 
-        # --- Generate concept embeddings for SAINT ---
-        await get_pipeline_service().persist_job_state(
+        from sentence_transformers import SentenceTransformer
+        concept_embeddings_list = await generate_saint_concept_embeddings(
             job,
-            PipelineStatus.OPTIMIZING,
-            "Generating concept embeddings for SAINT...",
-            0.92,
+            concepts_data=concepts_data,
+            concept_map=concept_map,
+            text_model_factory=lambda: SentenceTransformer("paraphrase-multilingual-mpnet-base-v2"),
+            persist_job_state=get_pipeline_service().persist_job_state,
         )
-        try:
-            from sentence_transformers import SentenceTransformer
-            text_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
-            id_to_concept = {v: k for k, v in concept_map.items()}
-            ordered_texts = []
-            for idx in range(len(concept_map)):
-                cid = id_to_concept.get(idx, str(idx))
-                name = concepts_data[cid]["name"]
-                definition = concepts_data[cid].get("definition", "")
-                text = f"{name}: {definition}" if definition else name
-                ordered_texts.append(text)
-            concept_embeddings = await loop.run_in_executor(
-                None,
-                lambda: text_model.encode(ordered_texts, show_progress_bar=False, batch_size=32)
-            )
-            concept_embeddings_list = concept_embeddings.tolist()
-            logger.info(f"[Pipeline] ✓ Generated embeddings for {len(ordered_texts)} concepts")
-        except Exception as e:
-            logger.warning(f"[Pipeline] ⚠ Could not generate embeddings: {e}")
-            concept_embeddings_list = None
 
-        # --- Generate concept theories ---
-        await get_pipeline_service().persist_job_state(
+        from ..exercise_gen import generate_theory
+        await generate_concept_theories(
             job,
-            PipelineStatus.OPTIMIZING,
-            "Generating concept theories...",
-            0.93,
+            concepts_data=concepts_data,
+            generate_theory=generate_theory,
+            persist_job_state=get_pipeline_service().persist_job_state,
         )
-        try:
-            from ..exercise_gen import generate_theory
-            sem = asyncio.Semaphore(5)
-            
-            async def _generate_theory_wrapper(cid, name, definition):
-                async with sem:
-                    res = await loop.run_in_executor(
-                        None,
-                        generate_theory, name, definition
-                    )
-                    return cid, res
-                    
-            tasks = []
-            for cid, cdata in concepts_data.items():
-                if "theory" not in cdata:
-                    tasks.append(_generate_theory_wrapper(cid, cdata["name"], cdata.get("definition", "")))
-            
-            if tasks:
-                logger.info(f"[Pipeline] Generating theory for {len(tasks)} concepts...")
-                results = await asyncio.gather(*tasks)
-                for cid, theory in results:
-                    concepts_data[cid]["theory"] = theory
-                logger.info("[Pipeline] ✓ Theory generation complete")
-        except Exception as e:
-            logger.warning(f"[Pipeline] ⚠ Failed to pre-generate theory: {e}")
 
         job.result = assemble_pipeline_result(
             concepts_data=concepts_data,
