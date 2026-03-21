@@ -66,21 +66,6 @@ MATH_FORMAT_RULES = (
     "- Ví dụ đúng: $\\vec{n}_{\\alpha} \\cdot \\vec{n}_{\\eta} = 0$.\n"
 )
 
-_RETRYABLE_LLM_ERROR_FRAGMENTS = (
-    "<!doctype html",
-    "<html",
-    "huggingface",
-    "bad gateway",
-    "gateway timeout",
-    "service unavailable",
-    "temporarily unavailable",
-    "upstream connect error",
-    "timed out",
-    "timeout",
-    "connection reset",
-    "remote end closed connection",
-)
-
 
 def _resolve_retry_policy() -> tuple[int, float]:
     settings = get_settings()
@@ -90,11 +75,9 @@ def _resolve_retry_policy() -> tuple[int, float]:
     )
 
 
-def _is_retryable_llm_error(error: Exception) -> bool:
-    message = str(error).strip().lower()
-    if not message:
-        return False
-    return any(fragment in message for fragment in _RETRYABLE_LLM_ERROR_FRAGMENTS)
+def _resolve_exercise_llm_model(explicit_model: Optional[str]) -> Optional[str]:
+    settings = get_settings()
+    return settings.adaptive_exercise_llm_model or explicit_model
 
 
 def _sleep_before_retry(attempt: int, base_delay_sec: float) -> None:
@@ -112,7 +95,13 @@ def init_llm(
     global _llm, _structured_exercise_llm, _structured_theory_llm
 
     get_llm = get_content_processor_llm_factory()
-    _llm = get_llm(temperature=0.3, base_url=base_url, model=model, api_key=api_key)
+    selected_model = _resolve_exercise_llm_model(model)
+    _llm = get_llm(
+        temperature=0.3,
+        base_url=base_url,
+        model=selected_model,
+        api_key=api_key,
+    )
 
     logger.info(f"[LLM] Connecting with model={_llm.model_name}")
 
@@ -177,8 +166,6 @@ def generate_exercise(
 
     t0 = time.time()
     max_retries, backoff_sec = _resolve_retry_policy()
-    last_error: Exception | None = None
-
     for attempt in range(1, max_retries + 1):
         try:
             logger.debug(f"[LLM] ⏳ generate_exercise attempt {attempt}/{max_retries}")
@@ -192,20 +179,16 @@ def generate_exercise(
             return _exercise_to_dict(result)
 
         except Exception as e:
-            last_error = e
-            retryable = _is_retryable_llm_error(e)
             logger.warning(
                 f"[LLM] ⚠ generate_exercise attempt {attempt}/{max_retries} failed "
-                f"(retryable={retryable}): {e}"
+                f"(will_retry={attempt < max_retries}): {e}"
             )
             if attempt < max_retries:
                 _sleep_before_retry(attempt, backoff_sec)
 
     elapsed = time.time() - t0
     logger.error(f"[LLM] ✗ generate_exercise failed after {elapsed:.2f}s")
-    if last_error and _is_retryable_llm_error(last_error):
-        raise RuntimeError("Exercise generation service is temporarily unavailable")
-    raise RuntimeError("Failed to generate exercise after max retries")
+    raise RuntimeError("Exercise generation service is temporarily unavailable")
 
 
 def generate_theory(
@@ -252,10 +235,9 @@ def generate_theory(
             logger.info(f"[LLM] ✓ Theory generated in {elapsed:.2f}s")
             return result.model_dump()
         except Exception as e:
-            retryable = _is_retryable_llm_error(e)
             logger.warning(
                 f"[LLM] ⚠ generate_theory attempt {attempt}/{max_retries} failed "
-                f"(retryable={retryable}): {e}"
+                f"(will_retry={attempt < max_retries}): {e}"
             )
             if attempt < max_retries:
                 _sleep_before_retry(attempt, backoff_sec)

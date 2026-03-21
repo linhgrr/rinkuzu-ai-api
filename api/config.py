@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     llm_api_key: Optional[str] = None
     llm_base_url: Optional[str] = None
     llm_model: Optional[str] = None
+    adaptive_exercise_llm_model: Optional[str] = None
     llm_embedding_model: str = "text-embedding-3-small"
     llm_timeout_sec: float = 150
     llm_max_retries: int = 2
