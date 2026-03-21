@@ -15,12 +15,12 @@ from ..config import get_settings
 # Bloom's Taxonomy labels
 # ---------------------------------------------------------------------------
 BLOOM_VERBS = {
-    1: "Remember (Nho: Dinh nghia, liet ke, ghi nho)",
-    2: "Understand (Hieu: Giai thich, tom tat)",
-    3: "Apply (Van dung: Tinh toan, ap dung cong thuc)",
-    4: "Analyze (Phan tich: So sanh, doi chieu, chia nho van de)",
-    5: "Evaluate (Danh gia: Bien luan, phan xet tinh dung sai)",
-    6: "Create (Sang tao: Thiet ke, chung minh, tong hop)",
+    1: "Remember (Nhớ: Định nghĩa, liệt kê, ghi nhớ)",
+    2: "Understand (Hiểu: Giải thích, tóm tắt)",
+    3: "Apply (Vận dụng: Tính toán, áp dụng công thức)",
+    4: "Analyze (Phân tích: So sánh, đối chiếu, chia nhỏ vấn đề)",
+    5: "Evaluate (Đánh giá: Biện luận, phán xét tính đúng sai)",
+    6: "Create (Sáng tạo: Thiết kế, chứng minh, tổng hợp)",
 }
 
 
@@ -194,9 +194,19 @@ def generate_exercise(
         "  + Mỗi đáp án sai phải có lý do hợp lý mà học sinh hay nhầm.\n"
         "  + Không được có đáp án sai quá hiển nhiên hoặc vô nghĩa.\n"
         "  + Đáp án sai nên bắt nguồn từ lỗi khái niệm hoặc tính toán phổ biến.\n"
-        "- Giải thích chi tiết cho phương án đúng (explanation_correct) và gợi ý sửa sai cho phương án sai (explanation_incorrect).\n"
-        f"{MATH_FORMAT_RULES}"
+        "- explanation_correct: 1-3 câu, giọng thân thiện, có công thức LaTeX nếu cần.\n"
+        "- explanation_incorrect: 1-2 câu, chỉ ra lỗi sai điển hình mà học sinh hay mắc.\n"
         "- Có thể có xuống dòng, định dạng in đậm/nghiêng bằng Markdown nếu cần thiết.\n"
+        "\n---\n"
+        f"{MATH_FORMAT_RULES}"
+        "---\n\n"
+        "VÍ DỤ CÂU HỎI TỐT (Bloom 3 - Áp dụng):\n"
+        "question: Vật có khối lượng $m = 2$ kg chuyển động với vận tốc $v = 3$ m/s. "
+        "Động năng của vật là bao nhiêu?\n"
+        "options: A. $6$ J  B. $9$ J  C. $12$ J  D. $18$ J\n"
+        "correct_option: B\n"
+        "explanation_correct: Áp dụng $W_đ = \\frac{1}{2}mv^2 = \\frac{1}{2} \\cdot 2 \\cdot 3^2 = 9$ J.\n"
+        "explanation_incorrect: Lỗi thường gặp: quên bình phương $v$ (được $6$ J) hoặc quên hệ số $\\frac{1}{2}$ (được $18$ J).\n"
     )
 
     t0 = time.time()
@@ -253,8 +263,10 @@ def generate_theory(
         "   - Sắp xếp từ đơn giản đến phức tạp.\n"
         "   - Thể hiện cách áp dụng kiến thức vào bài toán thực.\n"
         "3. Ngôn ngữ: Tiếng Việt.\n"
-        f"4. {MATH_FORMAT_RULES}"
-        "5. Có thể dùng cú pháp Markdown cơ bản (*in nghiêng*, **in đậm**).\n"
+        "4. Có thể dùng cú pháp Markdown cơ bản (*in nghiêng*, **in đậm**).\n"
+        "\n---\n"
+        f"{MATH_FORMAT_RULES}"
+        "---\n"
     )
 
     t0 = time.time()
