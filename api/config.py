@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     llm_base_url: Optional[str] = None
     llm_model: Optional[str] = None
 
+    # ── Content Pipeline ───────────────────────────────────
+    embedding_model: str = "keepitreal/vietnamese-sbert"
+    embedding_batch_size: int = 32
+
     # ── S3 Cache ────────────────────────────────────────────
     s3_endpoint_url: Optional[str] = None
     s3_access_key_id: Optional[str] = None

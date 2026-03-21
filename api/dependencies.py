@@ -43,3 +43,20 @@ def get_session_service(request: Request):
     if service is None:
         raise ServiceUnavailableError("ExerciseService")
     return service
+
+
+def get_content_pipeline_service(request: Request):
+    """Provide PipelineService from app state, raise 503 if not ready."""
+    service = getattr(request.app.state, "content_pipeline_service", None)
+    if service is None:
+        raise ServiceUnavailableError("ContentPipelineService")
+    return service
+
+
+def get_content_pipeline_availability(request: Request) -> dict:
+    """Expose runtime availability of the legacy content-processor bindings."""
+    return {
+        "available": bool(getattr(request.app.state, "content_processor_available", False)),
+        "error": getattr(request.app.state, "content_processor_error", None),
+        "src": getattr(request.app.state, "content_processor_src", None),
+    }

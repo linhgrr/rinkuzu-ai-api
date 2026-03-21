@@ -13,6 +13,13 @@ from .exceptions import register_exception_handlers
 from .core.session import SessionManager
 from .core.exercise_gen import init_llm
 from .core import mongo_store
+from .core.content_pipeline.application.pipeline_runner import PipelineRunner
+from .core.content_pipeline.application.pipeline_service import PipelineService
+from .core.content_pipeline.infrastructure.runtime import (
+    CONTENT_PROCESSOR_AVAILABLE,
+    CONTENT_PROCESSOR_ERROR,
+    CONTENT_PROCESSOR_SRC,
+)
 from .services.exercise_service import ExerciseService
 from .routers import session as session_router
 from .routers import knowledge as knowledge_router
@@ -60,6 +67,38 @@ async def lifespan(app: FastAPI):
     # Store in app state — accessed by dependencies.py
     app.state.session_manager = manager
     app.state.exercise_service = exercise_service
+    app.state.content_processor_available = CONTENT_PROCESSOR_AVAILABLE
+    app.state.content_processor_error = CONTENT_PROCESSOR_ERROR
+    app.state.content_processor_src = CONTENT_PROCESSOR_SRC
+
+    pipeline_service: PipelineService | None = None
+
+    async def persist_pipeline_job_state(job, status, step, progress):
+        if pipeline_service is None:
+            raise RuntimeError("PipelineService is not initialized")
+        await pipeline_service.persist_job_state(job, status, step, progress)
+
+    pipeline_runner = PipelineRunner(
+        load_job=mongo_store.load_pipeline_job,
+        save_job=mongo_store.save_pipeline_job,
+        persist_job_state=persist_pipeline_job_state,
+    )
+
+    async def run_content_pipeline(job, file_path, prs_threshold, min_confidence, apply_reduction):
+        await pipeline_runner.run(
+            job,
+            file_path=file_path,
+            prs_threshold=prs_threshold,
+            min_confidence=min_confidence,
+            apply_reduction=apply_reduction,
+        )
+
+    pipeline_service = PipelineService(
+        save_job=mongo_store.save_pipeline_job,
+        run_pipeline=run_content_pipeline,
+    )
+    app.state.content_pipeline_runner = pipeline_runner
+    app.state.content_pipeline_service = pipeline_service
 
     logger.info("[2/2] Server ready!")
     logger.info("=" * 60)

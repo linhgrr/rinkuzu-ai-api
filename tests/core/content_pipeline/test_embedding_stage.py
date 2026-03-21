@@ -1,5 +1,6 @@
 import asyncio
 
+from api.core.content_pipeline.application.stages import embedding as embedding_stage
 from api.core.content_pipeline.application.stages.embedding import (
     compute_concept_embeddings,
     resolve_embedding_settings,
@@ -13,13 +14,17 @@ class _EmbeddingClientStub:
         self.batch_size = batch_size
 
 
-def test_resolve_embedding_settings_falls_back_to_legacy_defaults():
+def test_resolve_embedding_settings_reads_unified_backend_config(monkeypatch):
+    class _SettingsStub:
+        embedding_model = "model-from-settings"
+        embedding_batch_size = 48
+
+    monkeypatch.setattr(embedding_stage, "get_settings", lambda: _SettingsStub())
+
     model_name, batch_size = resolve_embedding_settings()
 
-    assert isinstance(model_name, str)
-    assert model_name
-    assert isinstance(batch_size, int)
-    assert batch_size > 0
+    assert model_name == "model-from-settings"
+    assert batch_size == 48
 
 
 def test_compute_concept_embeddings_updates_progress_and_uses_factory():

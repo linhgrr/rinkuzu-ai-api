@@ -12,13 +12,16 @@ from loguru import logger
 import aiofiles
 
 from ..core.content_pipeline import (
-    process_pdf,
     PipelineStatus,
-    CONTENT_PROCESSOR_AVAILABLE,
-    CONTENT_PROCESSOR_ERROR,
 )
 from ..core import mongo_store
-from ..dependencies import get_session_manager, get_session_service, get_current_user
+from ..dependencies import (
+    get_content_pipeline_availability,
+    get_content_pipeline_service,
+    get_current_user,
+    get_session_manager,
+    get_session_service,
+)
 from ..exceptions import (
     ServiceUnavailableError,
     PipelineNotFoundError,
@@ -32,16 +35,17 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 @router.get("/status")
-async def pipeline_status():
+async def pipeline_status(availability: dict = Depends(get_content_pipeline_availability)):
     """Check if content processor is available."""
     import sys
     return {
-        "available": CONTENT_PROCESSOR_AVAILABLE,
+        "available": availability["available"],
         "message": (
             "Content processor ready"
-            if CONTENT_PROCESSOR_AVAILABLE
-            else f"Import error: {CONTENT_PROCESSOR_ERROR}"
+            if availability["available"]
+            else f"Import error: {availability['error']}"
         ),
+        "content_processor_src": availability["src"],
         "sys_path": sys.path,
     }
 
@@ -55,9 +59,11 @@ async def process_document(
     min_confidence: float = Form(0.6),
     apply_reduction: bool = Form(True),
     user_id: str = Depends(get_current_user),
+    availability: dict = Depends(get_content_pipeline_availability),
+    pipeline_service=Depends(get_content_pipeline_service),
 ):
     """Upload a PDF and run the full content processing pipeline."""
-    if not CONTENT_PROCESSOR_AVAILABLE:
+    if not availability["available"]:
         raise ServiceUnavailableError("Content processor")
     if not mongo_store.is_available():
         raise ServiceUnavailableError("MongoDB persistence")
@@ -75,7 +81,7 @@ async def process_document(
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
     try:
-        job = await process_pdf(
+        job = await pipeline_service.start_job(
             file_path=str(save_path),
             subject_id=subject_id,
             prs_threshold=prs_threshold,
@@ -83,6 +89,8 @@ async def process_document(
             apply_reduction=apply_reduction,
             user_id=user_id,
             background_tasks=background_tasks,
+            content_processor_available=availability["available"],
+            content_processor_src=availability["src"] or "",
         )
     except Exception as exc:
         try:

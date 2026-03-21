@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Awaitable, Callable
 
+from api.config import get_settings
 from ...domain.jobs import PipelineJob, PipelineStatus
 
 
@@ -12,13 +13,9 @@ PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitabl
 
 
 def resolve_embedding_settings() -> tuple[str, int]:
-    """Preserve current embedding config fallback while isolating it from orchestration."""
-    try:
-        from config import settings as cp_settings
-
-        return cp_settings.embedding_model, cp_settings.embedding_batch_size
-    except ImportError:
-        return "keepitreal/vietnamese-sbert", 32
+    """Read embedding settings from the unified backend config."""
+    settings = get_settings()
+    return settings.embedding_model, settings.embedding_batch_size
 
 
 async def compute_concept_embeddings(
