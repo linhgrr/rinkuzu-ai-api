@@ -1,3 +1,3 @@
-from .chroma_store import ConceptChromaStore
+"""Compatibility shim for legacy storage imports."""
 
-__all__ = ["ConceptChromaStore"]
+from api.core.content_pipeline.infrastructure.storage import *  # noqa: F403
