@@ -5,6 +5,9 @@
 This document maps the legacy `content-processor` service structure into the
 new unified backend package under `api/core/content_pipeline/`.
 
+The legacy `content-processor/` folder has been removed from the repo. The old
+paths below are kept as historical migration references only.
+
 ## Target Backend Package
 
 ```text

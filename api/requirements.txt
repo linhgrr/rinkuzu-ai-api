@@ -12,17 +12,17 @@ numpy
 networkx
 scikit-learn
 
-# LLM / LangChain (content-processor)
+# LLM / LangChain (content pipeline)
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-community>=0.3.0
 langchain-openai>=0.1.0
 trustcall>=0.0.10
-# Embeddings (content-processor)
+# Embeddings (content pipeline)
 sentence-transformers>=2.2.0
 chromadb>=0.5.0
 
-# NLP Vietnamese (content-processor)
+# NLP Vietnamese (content pipeline)
 underthesea
 pyvi
 

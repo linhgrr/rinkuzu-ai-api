@@ -35,7 +35,7 @@ async def test_start_job_persists_pending_then_queued_and_schedules_background_t
         user_id="user-1",
         background_tasks=background_tasks,
         content_processor_available=True,
-        content_processor_src="/tmp/content-processor/src",
+        content_processor_src="/tmp/content-pipeline-runtime",
     )
 
     assert job.filename == "algebra.pdf"
@@ -64,7 +64,7 @@ async def test_start_job_returns_failed_job_when_content_processor_is_unavailabl
         user_id="user-1",
         background_tasks=None,
         content_processor_available=False,
-        content_processor_src="/tmp/content-processor/src",
+        content_processor_src="/tmp/content-pipeline-runtime",
     )
 
     assert job.status == PipelineStatus.FAILED

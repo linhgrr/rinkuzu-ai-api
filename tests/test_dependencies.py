@@ -29,7 +29,7 @@ def test_get_content_pipeline_availability_reads_app_state():
             state=SimpleNamespace(
                 content_processor_available=True,
                 content_processor_error="boom",
-                content_processor_src="/tmp/content-processor/src",
+                content_processor_src="/tmp/content-pipeline-runtime",
             )
         )
     )
@@ -39,5 +39,5 @@ def test_get_content_pipeline_availability_reads_app_state():
     assert availability == {
         "available": True,
         "error": "boom",
-        "src": "/tmp/content-processor/src",
+        "src": "/tmp/content-pipeline-runtime",
     }

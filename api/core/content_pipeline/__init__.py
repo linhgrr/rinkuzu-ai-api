@@ -1,6 +1,6 @@
 """Unified content pipeline package.
 
-This package is the landing zone for merging the legacy `content-processor`
+This package is the landing zone for merging the legacy content pipeline
 service into the main backend. It intentionally preserves the old import
 surface of `api.core.content_pipeline` while allowing internal modules to move
 into domain/application/infrastructure/interfaces layers.
