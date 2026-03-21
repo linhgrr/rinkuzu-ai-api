@@ -1,7 +1,16 @@
 """Text processing utilities."""
 
 import re
-from underthesea import text_normalize
+
+from loguru import logger
+
+try:
+    from underthesea import text_normalize as _text_normalize
+except ImportError:
+    _text_normalize = None
+    logger.warning(
+        "underthesea is not installed; falling back to regex-only text normalization",
+    )
 
 def clean_text(text: str) -> str:
     """
@@ -20,6 +29,7 @@ def clean_text(text: str) -> str:
     
     text = re.sub(r"\s+", " ", text).strip()
     
-    text = text_normalize(text)
-    
+    if _text_normalize is not None:
+        text = _text_normalize(text)
+
     return text
