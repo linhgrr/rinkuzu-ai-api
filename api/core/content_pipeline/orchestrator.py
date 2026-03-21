@@ -13,6 +13,7 @@ from .application.stages.cache_restore import (
     try_restore_completed_job_from_s3,
 )
 from .application.stages.concept_extraction import extract_concepts_from_chunks
+from .application.stages.concept_merge import merge_duplicate_concepts
 from .application.stages.document_loading import load_document_chunks
 from .application.stages.embedding import (
     compute_concept_embeddings,
@@ -223,16 +224,12 @@ async def _run_pipeline(
             batch_size=batch_size,
         )
 
-        # Step 4: Merge & Deduplicate
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.50)
-
-        all_concepts = await loop.run_in_executor(None, merge_by_name, all_concepts)
-        job.concepts_after_merge = len(all_concepts)
-        job.partial_graph = {
-            "nodes": [{"id": getattr(c, "concept_id", ""), "name": getattr(c, "name", "")} for c in all_concepts],
-            "edges": []
-        }
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.55)
+        all_concepts = await merge_duplicate_concepts(
+            job,
+            concepts=all_concepts,
+            merge_by_name=merge_by_name,
+            persist_job_state=get_pipeline_service().persist_job_state,
+        )
 
         # Step 5: Prerequisite ranking
         await get_pipeline_service().persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
