@@ -50,17 +50,7 @@ class TheoryOutput(BaseModel):
 # ---------------------------------------------------------------------------
 # Global LLM instances
 # ---------------------------------------------------------------------------
-import sys
-from pathlib import Path
-
-# Add content-processor src to sys.path so we can reuse llm module
-CONTENT_PROCESSOR_SRC = str(
-    Path(__file__).resolve().parents[2] / "content-processor" / "src"
-)
-if CONTENT_PROCESSOR_SRC not in sys.path:
-    sys.path.insert(0, CONTENT_PROCESSOR_SRC)
-
-from llm import get_llm
+from .content_pipeline.infrastructure.runtime import get_content_processor_llm_factory
 
 _llm: Optional[ChatOpenAI] = None          # plain text invocation
 _structured_exercise_llm = None            # with_structured_output for exercise
@@ -83,7 +73,7 @@ def init_llm(
     """Initialize ChatOpenAI pointing to an OpenAI-compatible endpoint."""
     global _llm, _structured_exercise_llm, _structured_theory_llm
 
-    # get_llm already handles normalization
+    get_llm = get_content_processor_llm_factory()
     _llm = get_llm(temperature=0.3, base_url=base_url, model=model, api_key=api_key)
 
     logger.info(f"[LLM] Connecting with model={_llm.model_name}")

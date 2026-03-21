@@ -3,12 +3,10 @@ routers/quiz_extract.py — Quiz extraction endpoints via LLM.
 """
 
 import os
-import sys
 import json
 import re
 import time
 import uuid
-from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -18,16 +16,7 @@ from loguru import logger
 
 from ..config import get_settings
 from ..dependencies import get_current_user
-
-# Setup sys path for content-processor so loaders can be imported
-CONTENT_PROCESSOR_SRC = str(
-    Path(__file__).resolve().parents[3] / "content-processor" / "src"
-)
-if CONTENT_PROCESSOR_SRC not in sys.path:
-    sys.path.insert(0, CONTENT_PROCESSOR_SRC)
-
-# S3 Client util from content_pipeline
-from ..core.content_pipeline import get_s3_client
+from ..core.content_pipeline.infrastructure.runtime import get_s3_client
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 MAX_PDF_BYTES = 50 * 1024 * 1024
@@ -326,4 +315,3 @@ async def extract_quiz(
             total_duration_ms,
         )
         raise HTTPException(status_code=500, detail="Quiz extraction internal error")
-

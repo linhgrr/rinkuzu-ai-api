@@ -97,6 +97,7 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
 
 
 _content_processor_bindings: ContentProcessorBindings | None = None
+_content_processor_llm_factory = None
 
 
 def get_content_processor_bindings() -> ContentProcessorBindings:
@@ -105,6 +106,16 @@ def get_content_processor_bindings() -> ContentProcessorBindings:
     if _content_processor_bindings is None:
         _content_processor_bindings = _build_content_processor_bindings()
     return _content_processor_bindings
+
+
+def get_content_processor_llm_factory():
+    """Load and cache the legacy content-processor LLM factory."""
+    global _content_processor_llm_factory
+    if _content_processor_llm_factory is None:
+        from llm import get_llm
+
+        _content_processor_llm_factory = get_llm
+    return _content_processor_llm_factory
 
 
 def try_import_content_processor() -> tuple[bool, str | None]:

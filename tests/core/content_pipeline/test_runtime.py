@@ -22,3 +22,12 @@ def test_get_content_processor_bindings_uses_cached_bindings(monkeypatch):
     bindings = runtime.get_content_processor_bindings()
 
     assert bindings is sentinel
+
+
+def test_get_content_processor_llm_factory_uses_cached_factory(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(runtime, "_content_processor_llm_factory", sentinel)
+
+    factory = runtime.get_content_processor_llm_factory()
+
+    assert factory is sentinel
