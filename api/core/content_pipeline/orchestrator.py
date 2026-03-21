@@ -12,6 +12,7 @@ from .application.stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
 )
+from .application.stages.concept_extraction import extract_concepts_from_chunks
 from .application.stages.document_loading import load_document_chunks
 from .domain.jobs import PipelineJob, PipelineStatus
 from .infrastructure.runtime import (
@@ -149,7 +150,6 @@ async def _run_pipeline(
 ):
     try:
         from processors.factory import FileLoaderFactory
-        from processors.chunkers.text_chunker import TextChunker
         from llm.extract_chain import ExtractionChain
         from llm.postprocess import postprocess_concepts
         from llm import get_llm
@@ -198,32 +198,15 @@ async def _run_pipeline(
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
-        # Step 2: Extract concepts via LLM
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.15)
-
         llm_client = get_llm(temperature=0.1)
         extraction_chain = ExtractionChain(client=llm_client)
-
-        chunk_texts = [c.page_content for c in chunks]
-        extractions = await loop.run_in_executor(
-            None,
-            extraction_chain.extract_from_batch,
-            chunk_texts,
-            job.subject_id,
+        all_concepts = await extract_concepts_from_chunks(
+            job,
+            chunks=chunks,
+            extraction_chain=extraction_chain,
+            postprocess_concepts=postprocess_concepts,
+            persist_job_state=get_pipeline_service().persist_job_state,
         )
-
-        all_concepts = []
-        for ext in extractions:
-            if ext and hasattr(ext, "concepts"):
-                all_concepts.extend(ext.concepts)
-
-        all_concepts = postprocess_concepts(all_concepts)
-        job.concepts_extracted = len(all_concepts)
-        job.partial_graph = {
-            "nodes": [{"id": getattr(c, "concept_id", ""), "name": getattr(c, "name", "")} for c in all_concepts],
-            "edges": []
-        }
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.30)
 
         # Step 3: Compute embeddings
         await get_pipeline_service().persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.35)
