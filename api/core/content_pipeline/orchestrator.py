@@ -3,7 +3,6 @@ content_pipeline.py — Content processor integration
 """
 
 import sys
-import uuid
 import time
 import asyncio
 import hashlib
@@ -16,6 +15,7 @@ from loguru import logger
 
 from .. import mongo_store
 from ...config import get_settings
+from .application.pipeline_service import PipelineService
 from .domain.jobs import PipelineJob, PipelineStatus
 
 CONTENT_PROCESSOR_SRC = str(
@@ -120,22 +120,6 @@ def _remove_invalid_graph_members(graph, concept_ids: set[str]) -> None:
         graph.remove_nodes_from(orphan_nodes)
 
 
-async def _persist_job_state(
-    job: PipelineJob,
-    status: PipelineStatus,
-    step: str,
-    progress: float,
-) -> None:
-    job.status = status
-    job.current_step = step
-    job.progress = progress
-    saved = await mongo_store.save_pipeline_job(job)
-    if not saved:
-        raise RuntimeError(
-            f"Failed to persist pipeline job {job.job_id} at status={status.value}"
-        )
-
-
 def get_s3_client():
     settings = get_settings()
     if not settings.s3_available:
@@ -193,56 +177,17 @@ async def process_pdf(
     user_id: Optional[str] = None,
     background_tasks: Optional[Any] = None,
 ) -> PipelineJob:
-    job_id = str(uuid.uuid4())[:8]
-    filename = Path(file_path).name
-    if not subject_id:
-        subject_id = Path(file_path).stem
-
-    job = PipelineJob(
-        job_id=job_id,
-        filename=filename,
+    return await get_pipeline_service().start_job(
+        file_path=file_path,
         subject_id=subject_id,
+        prs_threshold=prs_threshold,
+        min_confidence=min_confidence,
+        apply_reduction=apply_reduction,
         user_id=user_id,
+        background_tasks=background_tasks,
+        content_processor_available=CONTENT_PROCESSOR_AVAILABLE,
+        content_processor_src=CONTENT_PROCESSOR_SRC,
     )
-
-    if not CONTENT_PROCESSOR_AVAILABLE:
-        job.status = PipelineStatus.FAILED
-        job.error_message = (
-            "Content processor modules not available. "
-            f"Expected at: {CONTENT_PROCESSOR_SRC}"
-        )
-        return job
-
-    persisted = await mongo_store.save_pipeline_job(job)
-    if not persisted:
-        raise RuntimeError(f"Failed to persist pipeline job {job.job_id}")
-
-    await _persist_job_state(
-        job,
-        PipelineStatus.QUEUED,
-        "Queued for processing",
-        0.01,
-    )
-
-    if background_tasks:
-        background_tasks.add_task(
-            _run_pipeline_and_cleanup, job, file_path, prs_threshold, min_confidence, apply_reduction
-        )
-    else:
-        asyncio.create_task(_run_pipeline_and_cleanup(job, file_path, prs_threshold, min_confidence, apply_reduction))
-
-    return job
-
-async def _run_pipeline_and_cleanup(job, file_path, *args, **kwargs):
-    try:
-        await _run_pipeline(job, file_path, *args, **kwargs)
-    finally:
-        try:
-            p = Path(file_path)
-            if p.exists():
-                p.unlink()
-        except:
-            pass
 
 
 async def _run_pipeline(
@@ -330,15 +275,15 @@ async def _run_pipeline(
                 logger.debug(f"[Pipeline] Cache miss: {cache_key}")
 
         # Step 1: Load & Chunk PDF
-        await _persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.05)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.05)
         chunks = await loop.run_in_executor(
             None, FileLoaderFactory.load_and_chunk, file_path, job.subject_id
         )
         job.total_chunks = len(chunks)
-        await _persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.10)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.10)
 
         # Step 2: Extract concepts via LLM
-        await _persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.15)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.15)
 
         llm_client = get_llm(temperature=0.1)
         extraction_chain = ExtractionChain(client=llm_client)
@@ -362,10 +307,10 @@ async def _run_pipeline(
             "nodes": [{"id": getattr(c, "concept_id", ""), "name": getattr(c, "name", "")} for c in all_concepts],
             "edges": []
         }
-        await _persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.30)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.30)
 
         # Step 3: Compute embeddings
-        await _persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.35)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.35)
 
         # Assuming config.settings from content_processor has defaults
         try:
@@ -380,10 +325,10 @@ async def _run_pipeline(
         await loop.run_in_executor(
             None, compute_embedding_for_concepts, all_concepts, embed_client
         )
-        await _persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.45)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.45)
 
         # Step 4: Merge & Deduplicate
-        await _persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.50)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.50)
 
         all_concepts = await loop.run_in_executor(None, merge_by_name, all_concepts)
         job.concepts_after_merge = len(all_concepts)
@@ -391,18 +336,18 @@ async def _run_pipeline(
             "nodes": [{"id": getattr(c, "concept_id", ""), "name": getattr(c, "name", "")} for c in all_concepts],
             "edges": []
         }
-        await _persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.55)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.55)
 
         # Step 5: Prerequisite ranking
-        await _persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
 
         candidate_pairs = await loop.run_in_executor(
             None, rank_prerequisites, all_concepts, prs_threshold
         )
-        await _persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.65)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.65)
 
         # Step 6: Verify relations via LLM
-        await _persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.70)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.70)
 
         concept_name_map = {c.concept_id: c.name for c in all_concepts}
         pairs_to_verify = [
@@ -420,10 +365,10 @@ async def _run_pipeline(
                     verified.append((cid_a, cid_b, ev))
 
         job.relations_verified = len(verified)
-        await _persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.80)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.80)
 
         # Step 7: Build knowledge graph
-        await _persist_job_state(job, PipelineStatus.BUILDING_GRAPH, "Building knowledge graph...", 0.85)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.BUILDING_GRAPH, "Building knowledge graph...", 0.85)
 
         concept_ids_set = {
             str(getattr(c, "concept_id", "")).strip()
@@ -466,7 +411,7 @@ async def _run_pipeline(
         job.partial_graph = _build_partial_graph(graph, all_concepts)
 
         # Step 8: Make DAG
-        await _persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.90)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.90)
 
         import networkx as nx
         if not nx.is_directed_acyclic_graph(graph):
@@ -482,7 +427,7 @@ async def _run_pipeline(
             )
             job.partial_graph = _build_partial_graph(graph, all_concepts)
 
-        await _persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.95)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.95)
 
         stats = builder.get_stats()
         stats["num_nodes"] = graph.number_of_nodes()
@@ -521,7 +466,7 @@ async def _run_pipeline(
                 prereq_edges.append({"source": src, "target": tgt})
 
         # --- Generate concept embeddings for SAINT ---
-        await _persist_job_state(
+        await get_pipeline_service().persist_job_state(
             job,
             PipelineStatus.OPTIMIZING,
             "Generating concept embeddings for SAINT...",
@@ -549,7 +494,7 @@ async def _run_pipeline(
             concept_embeddings_list = None
 
         # --- Generate concept theories ---
-        await _persist_job_state(
+        await get_pipeline_service().persist_job_state(
             job,
             PipelineStatus.OPTIMIZING,
             "Generating concept theories...",
@@ -604,7 +549,7 @@ async def _run_pipeline(
         _populate_job_metrics_from_result(job)
 
         job.completed_at = time.time()
-        await _persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", 1.0)
+        await get_pipeline_service().persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", 1.0)
 
         if s3_client and bucket_name:
             try:
@@ -641,3 +586,16 @@ async def _run_pipeline(
             logger.error(
                 f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}: {persist_exc}"
             )
+
+
+_pipeline_service: PipelineService | None = None
+
+
+def get_pipeline_service() -> PipelineService:
+    global _pipeline_service
+    if _pipeline_service is None:
+        _pipeline_service = PipelineService(
+            save_job=mongo_store.save_pipeline_job,
+            run_pipeline=_run_pipeline,
+        )
+    return _pipeline_service
