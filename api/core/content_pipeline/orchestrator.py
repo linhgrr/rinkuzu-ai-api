@@ -23,6 +23,11 @@ from .application.stages.graph_building import build_knowledge_graph
 from .application.stages.graph_optimization import optimize_graph
 from .application.stages.prerequisite_ranking import rank_candidate_prerequisites
 from .application.stages.relation_verification import verify_candidate_relations
+from .application.stages.result_assembly import (
+    assemble_pipeline_result,
+    serialize_concepts,
+    serialize_prerequisite_edges,
+)
 from .domain.jobs import PipelineJob, PipelineStatus
 from .infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -218,32 +223,8 @@ async def _run_pipeline(
             stats["cycle_stats"] = optimization_stats["cycle_stats"]
         job.graph_stats = stats
 
-        concepts_data = {}
-        concept_map = {}
-        for i, concept in enumerate(all_concepts):
-            cid = concept.concept_id
-            concept_map[cid] = i
-            concept_relations = []
-            if hasattr(concept, "relations") and concept.relations:
-                for rel in concept.relations:
-                    concept_relations.append({
-                        "type": rel.type,
-                        "target_id": rel.target_id,
-                        "confidence": rel.confidence,
-                        "evidence": rel.evidence,
-                    })
-            concepts_data[cid] = {
-                "name": concept.name,
-                "definition": concept.definition,
-                "examples": concept.examples if hasattr(concept, "examples") else [],
-                "relations": concept_relations,
-            }
-
-        prereq_edges = []
-        for src, tgt, data in graph.edges(data=True):
-            rel_type = data.get("relation_type", "PREREQUISITE")
-            if rel_type == "PREREQUISITE" and src in concept_map and tgt in concept_map:
-                prereq_edges.append({"source": src, "target": tgt})
+        concepts_data, concept_map = serialize_concepts(all_concepts)
+        prereq_edges = serialize_prerequisite_edges(graph, concept_map)
 
         # --- Generate concept embeddings for SAINT ---
         await get_pipeline_service().persist_job_state(
@@ -306,26 +287,13 @@ async def _run_pipeline(
         except Exception as e:
             logger.warning(f"[Pipeline] ⚠ Failed to pre-generate theory: {e}")
 
-        nodes = []
-        for cid, idx in concept_map.items():
-            nodes.append({
-                "id": cid,
-                "index": idx,
-                "name": concepts_data[cid]["name"],
-                "definition": concepts_data[cid].get("definition", ""),
-            })
-
-        job.result = {
-            "concepts_data": concepts_data,
-            "concept_map": concept_map,
-            "prereq_edges": prereq_edges,
-            "concept_embeddings": concept_embeddings_list,
-            "graph": {
-                "nodes": nodes,
-                "edges": prereq_edges,
-            },
-            "stats": stats,
-        }
+        job.result = assemble_pipeline_result(
+            concepts_data=concepts_data,
+            concept_map=concept_map,
+            prereq_edges=prereq_edges,
+            concept_embeddings=concept_embeddings_list,
+            stats=stats,
+        )
         _populate_job_metrics_from_result(job)
 
         job.completed_at = time.time()
