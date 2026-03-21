@@ -19,6 +19,7 @@ from .application.stages.embedding import (
     compute_concept_embeddings,
     resolve_embedding_settings,
 )
+from .application.stages.prerequisite_ranking import rank_candidate_prerequisites
 from .domain.jobs import PipelineJob, PipelineStatus
 from .infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -231,13 +232,13 @@ async def _run_pipeline(
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
-        # Step 5: Prerequisite ranking
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
-
-        candidate_pairs = await loop.run_in_executor(
-            None, rank_prerequisites, all_concepts, prs_threshold
+        candidate_pairs = await rank_candidate_prerequisites(
+            job,
+            concepts=all_concepts,
+            prs_threshold=prs_threshold,
+            rank_prerequisites=rank_prerequisites,
+            persist_job_state=get_pipeline_service().persist_job_state,
         )
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.65)
 
         # Step 6: Verify relations via LLM
         await get_pipeline_service().persist_job_state(job, PipelineStatus.VERIFYING, "Verifying relations with LLM...", 0.70)
