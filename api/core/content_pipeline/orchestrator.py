@@ -1,8 +1,6 @@
 """Legacy content processor orchestration entrypoints."""
 
 import time
-import asyncio
-import json
 from typing import Dict, Any, Optional
 from loguru import logger
 
@@ -18,6 +16,11 @@ from .application.stages.document_loading import load_document_chunks
 from .application.stages.embedding import (
     compute_concept_embeddings,
     resolve_embedding_settings,
+)
+from .application.stages.finalization import (
+    complete_pipeline_job,
+    persist_terminal_failure,
+    upload_result_cache,
 )
 from .application.stages.enrichment import (
     generate_concept_theories,
@@ -115,8 +118,6 @@ async def _run_pipeline(
         from graph.reduction import apply_transitive_reduction
         
         # from config import settings as cp_settings (if needed inside content_processor)
-
-        loop = asyncio.get_event_loop()
 
         if await try_restore_completed_job_from_mongo(
             job,
@@ -256,44 +257,25 @@ async def _run_pipeline(
         )
         _populate_job_metrics_from_result(job)
 
-        job.completed_at = time.time()
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", 1.0)
-
-        if s3_client and bucket_name:
-            try:
-                cache_data = json.dumps(job.result, ensure_ascii=False)
-                await loop.run_in_executor(
-                    None,
-                    lambda: s3_client.put_object(
-                        Bucket=bucket_name,
-                        Key=cache_key,
-                        Body=cache_data,
-                        ContentType='application/json'
-                    )
-                )
-                logger.info(f"[Pipeline] Uploaded result to S3 cache {cache_key}")
-            except Exception as e:
-                logger.warning(f"[Pipeline] Failed to save S3 cache: {e}")
-
-        logger.info(f"[Pipeline] Job {job.job_id} completed: {job.concepts_after_merge} concepts")
+        await complete_pipeline_job(
+            job,
+            persist_job_state=get_pipeline_service().persist_job_state,
+        )
+        await upload_result_cache(
+            result=job.result,
+            s3_client=s3_client,
+            bucket_name=bucket_name,
+            cache_key=cache_key,
+        )
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        job.error_message = str(e)
-        logger.error(f"[Pipeline] Job {job.job_id} failed: {e}")
-        job.status = PipelineStatus.FAILED
-        job.current_step = f"Error: {e}"
-        try:
-            saved = await mongo_store.save_pipeline_job(job)
-            if not saved:
-                logger.error(
-                    f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}"
-                )
-        except Exception as persist_exc:
-            logger.error(
-                f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}: {persist_exc}"
-            )
+        await persist_terminal_failure(
+            job,
+            error=e,
+            save_job=mongo_store.save_pipeline_job,
+        )
 
 
 _pipeline_service: PipelineService | None = None
