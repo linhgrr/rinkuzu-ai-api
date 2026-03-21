@@ -134,7 +134,10 @@ async def build_knowledge_graph(
     remove_invalid_graph_members(graph, concept_ids)
     job.partial_graph = build_partial_graph(graph, concepts)
 
+    builder_stats = dict(builder.get_stats()) if hasattr(builder, "get_stats") else {}
+
     return graph, {
+        "base_graph_stats": builder_stats,
         "extracted_relation_count": extracted_relation_count,
         "verified_relation_count": verified_relation_count,
     }

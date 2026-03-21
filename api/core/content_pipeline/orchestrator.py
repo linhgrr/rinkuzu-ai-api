@@ -19,7 +19,8 @@ from .application.stages.embedding import (
     compute_concept_embeddings,
     resolve_embedding_settings,
 )
-from .application.stages.graph_building import build_knowledge_graph, build_partial_graph
+from .application.stages.graph_building import build_knowledge_graph
+from .application.stages.graph_optimization import optimize_graph
 from .application.stages.prerequisite_ranking import rank_candidate_prerequisites
 from .application.stages.relation_verification import verify_candidate_relations
 from .domain.jobs import PipelineJob, PipelineStatus
@@ -196,32 +197,25 @@ async def _run_pipeline(
         extracted_relation_count = graph_build_stats["extracted_relation_count"]
         verified_relation_count = graph_build_stats["verified_relation_count"]
 
-        # Step 8: Make DAG
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.90)
+        graph, optimization_stats = await optimize_graph(
+            job,
+            graph=graph,
+            concepts=all_concepts,
+            apply_reduction=apply_reduction,
+            make_dag_with_llm=make_dag_with_llm,
+            apply_transitive_reduction=apply_transitive_reduction,
+            persist_job_state=get_pipeline_service().persist_job_state,
+        )
 
-        import networkx as nx
-        if not nx.is_directed_acyclic_graph(graph):
-            graph, cycle_stats = await loop.run_in_executor(
-                None, make_dag_with_llm, graph
-            )
-            job.partial_graph = build_partial_graph(graph, all_concepts)
-
-        # Step 9: Transitive reduction
-        if apply_reduction:
-            graph = await loop.run_in_executor(
-                None, apply_transitive_reduction, graph
-            )
-            job.partial_graph = build_partial_graph(graph, all_concepts)
-
-        await get_pipeline_service().persist_job_state(job, PipelineStatus.OPTIMIZING, "Removing cycles, building DAG...", 0.95)
-
-        stats = builder.get_stats()
-        stats["num_nodes"] = graph.number_of_nodes()
-        stats["num_edges"] = graph.number_of_edges()
-        stats["is_dag"] = nx.is_directed_acyclic_graph(graph)
+        stats = dict(graph_build_stats.get("base_graph_stats") or {})
+        stats["num_nodes"] = optimization_stats["num_nodes"]
+        stats["num_edges"] = optimization_stats["num_edges"]
+        stats["is_dag"] = optimization_stats["is_dag"]
         stats["relations_from_extraction"] = extracted_relation_count
         stats["relations_from_verification"] = verified_relation_count
         stats["relations_verified"] = job.relations_verified
+        if optimization_stats.get("cycle_stats") is not None:
+            stats["cycle_stats"] = optimization_stats["cycle_stats"]
         job.graph_stats = stats
 
         concepts_data = {}

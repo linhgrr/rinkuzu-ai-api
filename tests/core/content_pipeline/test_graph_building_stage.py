@@ -89,6 +89,9 @@ class _BuilderStub:
     def add_relation(self, source_id: str, target_id: str, relation_type: str):
         self._graph.add_edge(source_id, target_id, relation_type=relation_type)
 
+    def get_stats(self):
+        return {"builder_subject_id": self.subject_id}
+
 
 def test_build_knowledge_graph_updates_partial_graph_and_stats():
     concepts = [
@@ -127,6 +130,7 @@ def test_build_knowledge_graph_updates_partial_graph_and_stats():
     assert isinstance(graph, nx.DiGraph)
     assert set(graph.edges()) == {("c1", "c2"), ("c2", "c1")}
     assert stats == {
+        "base_graph_stats": {"builder_subject_id": "algebra"},
         "extracted_relation_count": 1,
         "verified_relation_count": 1,
     }
