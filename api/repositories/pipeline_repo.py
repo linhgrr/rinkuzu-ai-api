@@ -2,10 +2,12 @@
 repositories/pipeline_repo.py — MongoDB persistence for pipeline jobs.
 """
 
-import time
 from typing import Optional, Dict, Any, List
 
 from loguru import logger
+
+from ..core.content_pipeline.domain.jobs import PipelineJob
+from ..core.content_pipeline.infrastructure.serializers import pipeline_job_to_document
 
 
 class PipelineRepository:
@@ -34,28 +36,10 @@ class PipelineRepository:
             [("user_id", 1), ("status", 1), ("completed_at", -1)]
         )
 
-    async def save(self, job) -> bool:
-        """Persist a completed PipelineJob's result to MongoDB."""
+    async def save(self, job: PipelineJob) -> bool:
+        """Persist a pipeline job state to MongoDB."""
         try:
-            doc = {
-                "job_id": job.job_id,
-                "filename": job.filename,
-                "subject_id": job.subject_id,
-                "user_id": getattr(job, "user_id", None),
-                "status": job.status.value,
-                "total_chunks": job.total_chunks,
-                "concepts_extracted": job.concepts_extracted,
-                "concepts_after_merge": job.concepts_after_merge,
-                "relations_verified": job.relations_verified,
-                "graph_stats": job.graph_stats if isinstance(job.graph_stats, dict) else {},
-                "result": job.result,
-                "current_step": getattr(job, "current_step", ""),
-                "progress": getattr(job, "progress", 0.0),
-                "error_message": getattr(job, "error_message", None),
-                "partial_graph": getattr(job, "partial_graph", None),
-                "created_at": job.created_at,
-                "completed_at": job.completed_at or time.time(),
-            }
+            doc = pipeline_job_to_document(job)
             await self._db[self.COLLECTION].update_one(
                 {"job_id": job.job_id},
                 {"$set": doc},
