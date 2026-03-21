@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from loguru import logger
 
+from ..config import get_settings
+
 # ---------------------------------------------------------------------------
 # Bloom's Taxonomy labels
 # ---------------------------------------------------------------------------
@@ -63,6 +65,42 @@ MATH_FORMAT_RULES = (
     "- Chỉ số với chữ cái Hy Lạp phải viết đúng LaTeX, ví dụ: $n_{\\alpha}$, $n_{\\eta}$.\n"
     "- Ví dụ đúng: $\\vec{n}_{\\alpha} \\cdot \\vec{n}_{\\eta} = 0$.\n"
 )
+
+_RETRYABLE_LLM_ERROR_FRAGMENTS = (
+    "<!doctype html",
+    "<html",
+    "huggingface",
+    "bad gateway",
+    "gateway timeout",
+    "service unavailable",
+    "temporarily unavailable",
+    "upstream connect error",
+    "timed out",
+    "timeout",
+    "connection reset",
+    "remote end closed connection",
+)
+
+
+def _resolve_retry_policy() -> tuple[int, float]:
+    settings = get_settings()
+    return (
+        max(1, int(settings.adaptive_llm_retry_attempts)),
+        max(0.0, float(settings.adaptive_llm_retry_backoff_sec)),
+    )
+
+
+def _is_retryable_llm_error(error: Exception) -> bool:
+    message = str(error).strip().lower()
+    if not message:
+        return False
+    return any(fragment in message for fragment in _RETRYABLE_LLM_ERROR_FRAGMENTS)
+
+
+def _sleep_before_retry(attempt: int, base_delay_sec: float) -> None:
+    if base_delay_sec <= 0:
+        return
+    time.sleep(base_delay_sec * attempt)
 
 
 def init_llm(
@@ -138,7 +176,8 @@ def generate_exercise(
     )
 
     t0 = time.time()
-    max_retries = 3
+    max_retries, backoff_sec = _resolve_retry_policy()
+    last_error: Exception | None = None
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -153,10 +192,19 @@ def generate_exercise(
             return _exercise_to_dict(result)
 
         except Exception as e:
-            logger.warning(f"[LLM] ⚠ attempt {attempt} failed: {e}")
+            last_error = e
+            retryable = _is_retryable_llm_error(e)
+            logger.warning(
+                f"[LLM] ⚠ generate_exercise attempt {attempt}/{max_retries} failed "
+                f"(retryable={retryable}): {e}"
+            )
+            if attempt < max_retries:
+                _sleep_before_retry(attempt, backoff_sec)
 
     elapsed = time.time() - t0
     logger.error(f"[LLM] ✗ generate_exercise failed after {elapsed:.2f}s")
+    if last_error and _is_retryable_llm_error(last_error):
+        raise RuntimeError("Exercise generation service is temporarily unavailable")
     raise RuntimeError("Failed to generate exercise after max retries")
 
 
@@ -186,20 +234,32 @@ def generate_theory(
     )
 
     t0 = time.time()
-    try:
-        logger.debug(f"[LLM] ⏳ generate_theory request sent")
-        result = _structured_theory_llm.invoke(prompt)
-        
-        if not isinstance(result, TheoryOutput):
-            raise ValueError(f"LLM returned invalid type: {type(result)}")
+    max_retries, backoff_sec = _resolve_retry_policy()
+    fallback = {
+        "content": f"Lý thuyết cơ bản về {concept_name}: {concept_definition}",
+        "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."],
+    }
 
-        elapsed = time.time() - t0
-        logger.info(f"[LLM] ✓ Theory generated in {elapsed:.2f}s")
-        return result.model_dump()
-        
-    except Exception as e:
-        logger.error(f"[LLM] ✗ generate_theory failed: {e}")
-        return {
-            "content": f"Lý thuyết cơ bản về {concept_name}: {concept_definition}",
-            "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."]
-        }
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.debug(f"[LLM] ⏳ generate_theory attempt {attempt}/{max_retries}")
+            result = _structured_theory_llm.invoke(prompt)
+
+            if not isinstance(result, TheoryOutput):
+                raise ValueError(f"LLM returned invalid type: {type(result)}")
+
+            elapsed = time.time() - t0
+            logger.info(f"[LLM] ✓ Theory generated in {elapsed:.2f}s")
+            return result.model_dump()
+        except Exception as e:
+            retryable = _is_retryable_llm_error(e)
+            logger.warning(
+                f"[LLM] ⚠ generate_theory attempt {attempt}/{max_retries} failed "
+                f"(retryable={retryable}): {e}"
+            )
+            if attempt < max_retries:
+                _sleep_before_retry(attempt, backoff_sec)
+
+    elapsed = time.time() - t0
+    logger.error(f"[LLM] ✗ generate_theory failed after {elapsed:.2f}s")
+    return fallback

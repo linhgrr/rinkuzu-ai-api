@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     llm_embedding_model: str = "text-embedding-3-small"
     llm_timeout_sec: float = 150
     llm_max_retries: int = 2
+    adaptive_llm_retry_attempts: int = 3
+    adaptive_llm_retry_backoff_sec: float = 1.0
 
     # ── Content Pipeline ───────────────────────────────────
     embedding_model: str = "keepitreal/vietnamese-sbert"
