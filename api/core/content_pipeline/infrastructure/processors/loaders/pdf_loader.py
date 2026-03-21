@@ -25,7 +25,7 @@ class PDFLoader(BaseLoader):
 
         Args:
             api_key: Landing AI API key. If not provided, will try to load from 
-                    unified backend settings first, then VISION_AGENT_API_KEY.
+                    unified backend settings.
 
         Raises:
             ValueError: If API key is not provided and not in environment
@@ -38,7 +38,7 @@ class PDFLoader(BaseLoader):
             )
 
         settings = get_settings()
-        self.api_key = api_key or settings.vision_agent_api_key or os.getenv("VISION_AGENT_API_KEY")
+        self.api_key = api_key or settings.vision_agent_api_key
         if not self.api_key:
             raise ValueError(
                 "Landing AI API key not provided. "

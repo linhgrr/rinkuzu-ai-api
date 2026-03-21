@@ -57,5 +57,4 @@ Notes:
 
 - New implementation modules under `api/core/content_pipeline/infrastructure/` import `api.config` directly.
 - Root-level legacy packages such as `llm`, `embed`, `graph`, `merge`, `processors`, and `storage` are compatibility shims only.
-- The remaining compatibility surface is limited to targeted env fallbacks such as `VISION_AGENT_API_KEY` for `PDFLoader`.
-- Removing the last env fallbacks should be done only after local and staging verification.
+- `PDFLoader` still exports `VISION_AGENT_API_KEY` into `os.environ` because the Landing AI client expects that process-level variable.
