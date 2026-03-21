@@ -1,9 +1,13 @@
 """Embedding utilities for concepts and texts."""
 
+from typing import List
+
+from loguru import logger
+
+from .....config import settings
+
 from .embedding_client import EmbeddingClient
 from .embeddings import compute_embedding_for_concepts
-from typing import List
-from loguru import logger
 
 
 def compute_embeddings_batch(
@@ -24,8 +28,6 @@ def compute_embeddings_batch(
     Returns:
         List of embedding vectors
     """
-    from config import settings
-
     client = EmbeddingClient(
         model_name=settings.embedding_model,
         batch_size=batch_size,
@@ -56,4 +58,3 @@ __all__ = [
     "compute_embedding_for_concepts",
     "compute_embeddings_batch",
 ]
-

@@ -7,7 +7,7 @@ import numpy as np
 from loguru import logger
 from sklearn.metrics.pairwise import cosine_similarity
 
-from config import settings
+from .....config import settings
 
 from ..llm.schemas import Concept, Relation
 

@@ -18,8 +18,9 @@ try:
 except Exception:
     _HAS_TRANSFORMERS = False
 
-from config import settings
 from loguru import logger
+
+from ......config import settings
 
 
 class TextChunker:

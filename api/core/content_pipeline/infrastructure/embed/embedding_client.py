@@ -6,7 +6,8 @@ from pyvi import ViTokenizer
 from loguru import logger
 from typing import List, Optional
 from langchain_core.embeddings import Embeddings
-from config import settings
+
+from .....config import settings
 
 
 class EmbeddingClient(Embeddings):
