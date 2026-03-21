@@ -12,54 +12,17 @@ import boto3
 from botocore.client import Config
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
-from dataclasses import dataclass, field
-from enum import Enum
 from loguru import logger
 
-from . import mongo_store
-from ..config import get_settings
+from .. import mongo_store
+from ...config import get_settings
+from .domain.jobs import PipelineJob, PipelineStatus
 
 CONTENT_PROCESSOR_SRC = str(
-    Path(__file__).resolve().parents[2] / "content-processor" / "src"
+    Path(__file__).resolve().parents[3] / "content-processor" / "src"
 )
 if CONTENT_PROCESSOR_SRC not in sys.path:
     sys.path.insert(0, CONTENT_PROCESSOR_SRC)
-
-
-class PipelineStatus(str, Enum):
-    PENDING = "pending"
-    LOADING = "loading"
-    CHUNKING = "chunking"
-    EXTRACTING = "extracting"
-    EMBEDDING = "embedding"
-    MERGING = "merging"
-    RANKING = "ranking"
-    VERIFYING = "verifying"
-    BUILDING_GRAPH = "building_graph"
-    OPTIMIZING = "optimizing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-@dataclass
-class PipelineJob:
-    job_id: str
-    filename: str
-    subject_id: str
-    user_id: Optional[str] = None
-    status: PipelineStatus = PipelineStatus.PENDING
-    current_step: str = ""
-    progress: float = 0.0
-    total_chunks: int = 0
-    concepts_extracted: int = 0
-    concepts_after_merge: int = 0
-    relations_verified: int = 0
-    graph_stats: Dict[str, Any] = field(default_factory=dict)
-    error_message: Optional[str] = None
-    result: Optional[Dict[str, Any]] = None
-    partial_graph: Optional[Dict[str, Any]] = None
-    created_at: float = field(default_factory=time.time)
-    completed_at: Optional[float] = None
 
 
 def _populate_job_metrics_from_result(job: PipelineJob) -> None:
@@ -586,7 +549,7 @@ async def _run_pipeline(
             0.93,
         )
         try:
-            from .exercise_gen import generate_theory
+            from ..exercise_gen import generate_theory
             sem = asyncio.Semaphore(5)
             
             async def _generate_theory_wrapper(cid, name, definition):
