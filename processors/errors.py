@@ -1,16 +1,3 @@
-"""Custom exceptions for IO operations."""
+"""Compatibility shim for legacy processor errors."""
 
-
-class LoaderNotFoundError(Exception):
-    """Raised when no suitable loader is found for a file."""
-    pass
-
-
-class UnsupportedFormatError(Exception):
-    """Raised when file format is not supported."""
-    pass
-
-
-class ChunkingError(Exception):
-    """Raised when chunking fails."""
-    pass
+from api.core.content_pipeline.infrastructure.processors.errors import *  # noqa: F403

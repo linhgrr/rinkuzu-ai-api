@@ -1,5 +1,3 @@
-"""Content chunkers."""
+"""Compatibility shim for legacy chunker imports."""
 
-from .text_chunker import TextChunker
-
-__all__ = ["TextChunker"]
+from api.core.content_pipeline.infrastructure.processors.chunkers import *  # noqa: F403

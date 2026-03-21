@@ -67,7 +67,7 @@ def calculate_file_hash(file_path: str) -> str:
 
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:
-    from processors.factory import FileLoaderFactory
+    from .processors.factory import FileLoaderFactory
     from .llm.extract_chain import ExtractionChain
     from .llm.postprocess import postprocess_concepts
     from .llm import get_llm

@@ -1,6 +1,3 @@
-"""Document loaders."""
+"""Compatibility shim for legacy loader imports."""
 
-from .base import BaseLoader
-from .pdf_loader import PDFLoader
-
-__all__ = ["BaseLoader", "PDFLoader"]
+from api.core.content_pipeline.infrastructure.processors.loaders import *  # noqa: F403

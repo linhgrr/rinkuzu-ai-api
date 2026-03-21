@@ -1,11 +1,3 @@
-"""Document processors module."""
+"""Compatibility shim for legacy processor imports."""
 
-from processors.factory import FileLoaderFactory
-from processors.errors import LoaderNotFoundError, UnsupportedFormatError, ChunkingError
-
-__all__ = [
-    "FileLoaderFactory",
-    "LoaderNotFoundError",
-    "UnsupportedFormatError",
-    "ChunkingError",
-]
+from api.core.content_pipeline.infrastructure.processors import *  # noqa: F403
