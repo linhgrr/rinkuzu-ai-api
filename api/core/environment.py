@@ -333,11 +333,11 @@ class AdaptiveLearningEnv(gym.Env):
         bloom_levels: list,
         responses: list,
     ):
-        """Replay previous learning history into the environment.
-        
-        This feeds concept/bloom/response triples from a saved session
-        so SAINT can make predictions based on the full history context.
-        After injection, mastery and hidden state reflect the saved progress.
+        """Replay saved subject progress into the environment.
+
+        This feeds concept/bloom/response triples from persisted subject-level
+        history so SAINT can make predictions based on the full learning context.
+        After injection, mastery and hidden state reflect the restored subject progress.
         """
         assert len(concept_indices) == len(bloom_levels) == len(responses), \
             f"History length mismatch: {len(concept_indices)} concepts, {len(bloom_levels)} blooms, {len(responses)} responses"
@@ -357,7 +357,7 @@ class AdaptiveLearningEnv(gym.Env):
             self._mastery_dirty = True
             self._compute_mastery_vector()
 
-        print(f"[Env] Injected {len(concept_indices)} history interactions, "
+        print(f"[Env] Replayed {len(concept_indices)} subject-history interactions, "
               f"visited {len(self._visited)} concepts, "
               f"avg mastery: {float(np.mean(self._current_mastery)):.4f}")
 

@@ -345,7 +345,7 @@ class SessionManager:
         )
         obs, info = env.reset(seed=42)
 
-        # Load previous history from MongoDB
+        # Load saved subject progress from MongoDB
         prev_history = []
         total_correct = 0
         total_answered = 0
@@ -354,20 +354,22 @@ class SessionManager:
             total_correct = history_source_doc.get("total_correct", 0)
             total_answered = history_source_doc.get("total_answered", 0)
             logger.info(
-                f"[Session] Rehydrating from provided history doc with {len(prev_history)} exercises"
+                f"[Session] Rehydrating session from provided subject progress with {len(prev_history)} exercises"
             )
         elif job_id:
             try:
-                prev_session = await mongo_store.find_latest_session_for_job(job_id, user_id=user_id)
-                if prev_session and prev_session.get("exercise_history"):
-                    prev_history = prev_session["exercise_history"]
-                    total_correct = prev_session.get("total_correct", 0)
-                    total_answered = prev_session.get("total_answered", 0)
-                    logger.info(f"[Session] Found previous session with {len(prev_history)} exercises")
+                subject_progress = await mongo_store.find_latest_session_for_job(job_id, user_id=user_id)
+                if subject_progress and subject_progress.get("exercise_history"):
+                    prev_history = subject_progress["exercise_history"]
+                    total_correct = subject_progress.get("total_correct", 0)
+                    total_answered = subject_progress.get("total_answered", 0)
+                    logger.info(
+                        f"[Session] Found saved subject progress with {len(prev_history)} exercises for job {job_id}"
+                    )
                 else:
-                    logger.info(f"[Session] No previous session for job {job_id}, starting fresh")
+                    logger.info(f"[Session] No saved subject progress for job {job_id}, starting fresh")
             except Exception as e:
-                logger.warning(f"[Session] Error loading previous session: {e}, starting fresh")
+                logger.warning(f"[Session] Error loading saved subject progress: {e}, starting fresh")
 
         # Inject history into environment
         if prev_history:

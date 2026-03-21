@@ -102,7 +102,7 @@ async def find_latest_session_for_job(
     job_id: str,
     user_id: str,
 ) -> Optional[Dict[str, Any]]:
-    """Return the latest persisted session snapshot for a user's pipeline job."""
+    """Compatibility alias returning the latest saved subject-progress snapshot."""
     return await load_subject_progress_for_user(job_id, user_id)
 
 
