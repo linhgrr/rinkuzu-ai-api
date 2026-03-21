@@ -2,7 +2,6 @@
 
 import time
 from typing import Dict, Any, Optional
-from loguru import logger
 
 from .. import mongo_store
 from .application.pipeline_service import PipelineService
@@ -38,9 +37,9 @@ from .application.stages.result_assembly import (
 from .domain.jobs import PipelineJob, PipelineStatus
 from .infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
-    CONTENT_PROCESSOR_ERROR,
     CONTENT_PROCESSOR_SRC,
     calculate_file_hash,
+    get_content_processor_bindings,
     get_s3_client,
 )
 
@@ -105,19 +104,7 @@ async def _run_pipeline(
     apply_reduction: bool,
 ):
     try:
-        from processors.factory import FileLoaderFactory
-        from llm.extract_chain import ExtractionChain
-        from llm.postprocess import postprocess_concepts
-        from llm import get_llm
-        from embed.embedding_client import EmbeddingClient
-        from embed.embeddings import compute_embedding_for_concepts
-        from embed.prereq_ranking import rank_prerequisites
-        from merge.name_merge import merge_by_name
-        from graph.builder import KnowledgeGraphBuilder
-        from graph.cycle_removal import make_dag_with_llm
-        from graph.reduction import apply_transitive_reduction
-        
-        # from config import settings as cp_settings (if needed inside content_processor)
+        bindings = get_content_processor_bindings()
 
         if await try_restore_completed_job_from_mongo(
             job,
@@ -148,17 +135,17 @@ async def _run_pipeline(
         chunks = await load_document_chunks(
             job,
             file_path=file_path,
-            load_and_chunk=FileLoaderFactory.load_and_chunk,
+            load_and_chunk=bindings.file_loader_factory.load_and_chunk,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
-        llm_client = get_llm(temperature=0.1)
-        extraction_chain = ExtractionChain(client=llm_client)
+        llm_client = bindings.llm_factory(temperature=0.1)
+        extraction_chain = bindings.extraction_chain_cls(client=llm_client)
         all_concepts = await extract_concepts_from_chunks(
             job,
             chunks=chunks,
             extraction_chain=extraction_chain,
-            postprocess_concepts=postprocess_concepts,
+            postprocess_concepts=bindings.postprocess_concepts,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
@@ -166,8 +153,8 @@ async def _run_pipeline(
         await compute_concept_embeddings(
             job,
             concepts=all_concepts,
-            embedding_client_factory=EmbeddingClient,
-            compute_embedding_for_concepts=compute_embedding_for_concepts,
+            embedding_client_factory=bindings.embedding_client_cls,
+            compute_embedding_for_concepts=bindings.compute_embedding_for_concepts,
             persist_job_state=get_pipeline_service().persist_job_state,
             model_name=model_name,
             batch_size=batch_size,
@@ -176,7 +163,7 @@ async def _run_pipeline(
         all_concepts = await merge_duplicate_concepts(
             job,
             concepts=all_concepts,
-            merge_by_name=merge_by_name,
+            merge_by_name=bindings.merge_by_name,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
@@ -184,7 +171,7 @@ async def _run_pipeline(
             job,
             concepts=all_concepts,
             prs_threshold=prs_threshold,
-            rank_prerequisites=rank_prerequisites,
+            rank_prerequisites=bindings.rank_prerequisites,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
@@ -201,7 +188,7 @@ async def _run_pipeline(
             job,
             concepts=all_concepts,
             verified_relations=verified,
-            knowledge_graph_builder_factory=lambda subject_id: KnowledgeGraphBuilder(subject_id=subject_id),
+            knowledge_graph_builder_factory=bindings.knowledge_graph_builder_factory,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
         extracted_relation_count = graph_build_stats["extracted_relation_count"]
@@ -212,8 +199,8 @@ async def _run_pipeline(
             graph=graph,
             concepts=all_concepts,
             apply_reduction=apply_reduction,
-            make_dag_with_llm=make_dag_with_llm,
-            apply_transitive_reduction=apply_transitive_reduction,
+            make_dag_with_llm=bindings.make_dag_with_llm,
+            apply_transitive_reduction=bindings.apply_transitive_reduction,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
@@ -231,20 +218,18 @@ async def _run_pipeline(
         concepts_data, concept_map = serialize_concepts(all_concepts)
         prereq_edges = serialize_prerequisite_edges(graph, concept_map)
 
-        from sentence_transformers import SentenceTransformer
         concept_embeddings_list = await generate_saint_concept_embeddings(
             job,
             concepts_data=concepts_data,
             concept_map=concept_map,
-            text_model_factory=lambda: SentenceTransformer("paraphrase-multilingual-mpnet-base-v2"),
+            text_model_factory=bindings.saint_text_model_factory,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 
-        from ..exercise_gen import generate_theory
         await generate_concept_theories(
             job,
             concepts_data=concepts_data,
-            generate_theory=generate_theory,
+            generate_theory=bindings.generate_theory,
             persist_job_state=get_pipeline_service().persist_job_state,
         )
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Callable
 
 import boto3
 from botocore.client import Config
@@ -18,6 +20,25 @@ CONTENT_PROCESSOR_SRC = str(
 )
 if CONTENT_PROCESSOR_SRC not in sys.path:
     sys.path.insert(0, CONTENT_PROCESSOR_SRC)
+
+
+@dataclass(frozen=True)
+class ContentProcessorBindings:
+    """Imported content-processor collaborators used by the unified pipeline."""
+
+    file_loader_factory: Any
+    extraction_chain_cls: Any
+    postprocess_concepts: Callable[[list[Any]], list[Any]]
+    llm_factory: Callable[..., Any]
+    embedding_client_cls: Any
+    compute_embedding_for_concepts: Callable[[list[Any], Any], Any]
+    rank_prerequisites: Callable[[list[Any], float], list[tuple[str, str]]]
+    merge_by_name: Callable[[list[Any]], list[Any]]
+    knowledge_graph_builder_factory: Callable[[str], Any]
+    make_dag_with_llm: Callable[[Any], tuple[Any, Any]]
+    apply_transitive_reduction: Callable[[Any], Any]
+    saint_text_model_factory: Callable[[], Any]
+    generate_theory: Callable[[str, str], Any]
 
 
 def get_s3_client():
@@ -42,19 +63,53 @@ def calculate_file_hash(file_path: str) -> str:
     return hasher.hexdigest()
 
 
+def _build_content_processor_bindings() -> ContentProcessorBindings:
+    from processors.factory import FileLoaderFactory
+    from llm.extract_chain import ExtractionChain
+    from llm.postprocess import postprocess_concepts
+    from llm import get_llm
+    from embed.embedding_client import EmbeddingClient
+    from embed.embeddings import compute_embedding_for_concepts
+    from embed.prereq_ranking import rank_prerequisites
+    from merge.name_merge import merge_by_name
+    from graph.builder import KnowledgeGraphBuilder
+    from graph.cycle_removal import make_dag_with_llm
+    from graph.reduction import apply_transitive_reduction
+    from sentence_transformers import SentenceTransformer
+
+    from ...exercise_gen import generate_theory
+
+    return ContentProcessorBindings(
+        file_loader_factory=FileLoaderFactory,
+        extraction_chain_cls=ExtractionChain,
+        postprocess_concepts=postprocess_concepts,
+        llm_factory=get_llm,
+        embedding_client_cls=EmbeddingClient,
+        compute_embedding_for_concepts=compute_embedding_for_concepts,
+        rank_prerequisites=rank_prerequisites,
+        merge_by_name=merge_by_name,
+        knowledge_graph_builder_factory=lambda subject_id: KnowledgeGraphBuilder(subject_id=subject_id),
+        make_dag_with_llm=make_dag_with_llm,
+        apply_transitive_reduction=apply_transitive_reduction,
+        saint_text_model_factory=lambda: SentenceTransformer("paraphrase-multilingual-mpnet-base-v2"),
+        generate_theory=generate_theory,
+    )
+
+
+_content_processor_bindings: ContentProcessorBindings | None = None
+
+
+def get_content_processor_bindings() -> ContentProcessorBindings:
+    """Load and cache the imported collaborators from the legacy content-processor."""
+    global _content_processor_bindings
+    if _content_processor_bindings is None:
+        _content_processor_bindings = _build_content_processor_bindings()
+    return _content_processor_bindings
+
+
 def try_import_content_processor() -> tuple[bool, str | None]:
     try:
-        from processors.factory import FileLoaderFactory  # noqa: F401
-        from processors.chunkers.text_chunker import TextChunker  # noqa: F401
-        from llm.extract_chain import ExtractionChain  # noqa: F401
-        from llm.postprocess import postprocess_concepts  # noqa: F401
-        from embed.embedding_client import EmbeddingClient  # noqa: F401
-        from embed.embeddings import compute_embedding_for_concepts  # noqa: F401
-        from embed.prereq_ranking import rank_prerequisites  # noqa: F401
-        from merge.name_merge import merge_by_name  # noqa: F401
-        from graph.builder import KnowledgeGraphBuilder  # noqa: F401
-        from graph.cycle_removal import make_dag_with_llm  # noqa: F401
-        from graph.reduction import apply_transitive_reduction  # noqa: F401
+        _build_content_processor_bindings()
         return True, None
     except ImportError as exc:
         import traceback
