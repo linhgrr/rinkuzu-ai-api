@@ -358,7 +358,7 @@ class SessionManager:
             )
         elif job_id:
             try:
-                subject_progress = await mongo_store.find_latest_session_for_job(job_id, user_id=user_id)
+                subject_progress = await mongo_store.load_subject_progress_for_job(job_id, user_id=user_id)
                 if subject_progress and subject_progress.get("exercise_history"):
                     prev_history = subject_progress["exercise_history"]
                     total_correct = subject_progress.get("total_correct", 0)

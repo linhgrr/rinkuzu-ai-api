@@ -98,12 +98,20 @@ async def load_session_doc_for_user(
     return await load_subject_progress_by_session_for_user(session_id, user_id)
 
 
+async def load_subject_progress_for_job(
+    job_id: str,
+    user_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Load the saved subject-progress snapshot for a user's pipeline job."""
+    return await load_subject_progress_for_user(job_id, user_id)
+
+
 async def find_latest_session_for_job(
     job_id: str,
     user_id: str,
 ) -> Optional[Dict[str, Any]]:
-    """Compatibility alias returning the latest saved subject-progress snapshot."""
-    return await load_subject_progress_for_user(job_id, user_id)
+    """Backward-compatible alias for subject-progress loading."""
+    return await load_subject_progress_for_job(job_id, user_id)
 
 
 async def load_subject_progress_map(job_ids: list[str], user_id: str) -> Dict[str, Dict[str, Any]]:

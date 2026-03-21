@@ -19,7 +19,15 @@ def test_load_session_doc_for_user_uses_subject_progress_repo(monkeypatch):
     assert doc == {"session_id": "sess-1", "user_id": "user-1", "source": "session"}
 
 
-def test_find_latest_session_for_job_uses_subject_progress_repo(monkeypatch):
+def test_load_subject_progress_for_job_uses_subject_progress_repo(monkeypatch):
+    monkeypatch.setattr(mongo_store, "_subject_progress_repo", _SubjectProgressRepoStub())
+
+    doc = asyncio.run(mongo_store.load_subject_progress_for_job("job-1", "user-1"))
+
+    assert doc == {"job_id": "job-1", "user_id": "user-1", "source": "job"}
+
+
+def test_find_latest_session_for_job_remains_backward_compatible(monkeypatch):
     monkeypatch.setattr(mongo_store, "_subject_progress_repo", _SubjectProgressRepoStub())
 
     doc = asyncio.run(mongo_store.find_latest_session_for_job("job-1", "user-1"))
