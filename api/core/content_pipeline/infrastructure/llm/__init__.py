@@ -33,17 +33,16 @@ def get_llm(temperature=0.0, **kwargs):
 
     model = kwargs.pop("model", None) or settings.llm_model or "gemini-3.0-pro"
     api_key = kwargs.pop("api_key", None) or _resolve_llm_api_key()
-
-    # Remove kwargs that are specific to ChatGoogleGenerativeAI
-    kwargs.pop("max_retries", None)
+    timeout = kwargs.pop("timeout", settings.llm_timeout_sec)
+    max_retries = kwargs.pop("max_retries", settings.llm_max_retries)
 
     return ChatOpenAI(
         base_url=base_url,
         model=model,
         api_key=api_key,
         temperature=temperature,
-        max_retries=settings.llm_max_retries,
-        timeout=settings.llm_timeout_sec,
+        max_retries=max_retries,
+        timeout=timeout,
         **kwargs
     )
 
@@ -60,12 +59,13 @@ def get_embeddings(**kwargs):
 
     model = kwargs.pop("model", None) or settings.llm_embedding_model
     api_key = kwargs.pop("api_key", None) or _resolve_llm_api_key()
+    timeout = kwargs.pop("timeout", settings.llm_timeout_sec)
 
     return OpenAIEmbeddings(
         base_url=base_url,
         model=model,
         api_key=api_key,
-        timeout=settings.llm_timeout_sec,
+        timeout=timeout,
         **kwargs
     )
 

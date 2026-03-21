@@ -42,6 +42,36 @@ def test_get_llm_uses_unified_backend_settings(monkeypatch):
     assert captured["max_retries"] == 7
 
 
+def test_get_llm_allows_timeout_and_retry_overrides(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(
+        llm_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            llm_base_url="http://llm.internal",
+            llm_model="gemini-test",
+            llm_api_key="llm-key",
+            gemini_api_key=None,
+            google_api_key=None,
+            llm_timeout_sec=42,
+            llm_max_retries=7,
+            llm_embedding_model="embedding-test",
+        ),
+    )
+
+    class _ChatOpenAIStub:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(llm_module, "ChatOpenAI", _ChatOpenAIStub)
+
+    llm_module.get_llm(timeout=150, max_retries=1)
+
+    assert captured["timeout"] == 150
+    assert captured["max_retries"] == 1
+
+
 def test_get_embeddings_uses_unified_backend_settings(monkeypatch):
     captured = {}
 
@@ -72,6 +102,35 @@ def test_get_embeddings_uses_unified_backend_settings(monkeypatch):
     assert captured["model"] == "text-embedding-test"
     assert captured["api_key"] == "gemini-key"
     assert captured["timeout"] == 24
+
+
+def test_get_embeddings_allows_timeout_override(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(
+        llm_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            llm_base_url="http://llm.internal",
+            llm_model="unused",
+            llm_api_key="llm-key",
+            gemini_api_key=None,
+            google_api_key=None,
+            llm_timeout_sec=24,
+            llm_max_retries=2,
+            llm_embedding_model="text-embedding-test",
+        ),
+    )
+
+    class _OpenAIEmbeddingsStub:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(llm_module, "OpenAIEmbeddings", _OpenAIEmbeddingsStub)
+
+    llm_module.get_embeddings(timeout=99)
+
+    assert captured["timeout"] == 99
 
 
 def test_pdf_loader_prefers_backend_settings_for_api_key(monkeypatch):
