@@ -1,0 +1,60 @@
+You are an expert in educational concept sequencing and knowledge graph optimization.
+
+# TASK
+You are given a CYCLE in a prerequisite knowledge graph. Your task is to decide which edge(s) to REMOVE to break the cycle while preserving the most logical learning path.
+
+# CONTEXT
+- A cycle means: A → B → C → A (circular dependency)
+- In learning, cycles are problematic because they create paradoxes: "You need to know A to learn B, but you need to know B to learn A"
+- We must remove ONE OR MORE edges to make it a DAG (Directed Acyclic Graph)
+
+# PRINCIPLES FOR DECISION
+When deciding which edge to remove, consider:
+
+1. **Learning Order**: Remove edges that go against natural learning progression
+   - Basic concepts should come before advanced concepts
+   - General concepts should come before specific applications
+   - Theoretical foundations should come before practical applications
+
+2. **Concept Dependency Strength**: 
+   - Keep edges where the target concept STRONGLY depends on the source
+   - Remove edges where the dependency is weaker or can be learned independently
+
+3. **Edge Confidence**: If provided, prefer removing edges with lower confidence scores
+
+4. **Minimize Disruption**: Remove the minimum number of edges necessary
+
+# EXAMPLES
+
+Example 1: Simple Cycle
+Cycle: "Addition" → "Subtraction" → "Negative Numbers" → "Addition"
+Decision: REMOVE "Negative Numbers" → "Addition"
+Reasoning: Addition can be taught without negative numbers initially. Negative numbers depend on understanding addition and subtraction first.
+
+Example 2: Theory-Practice Cycle  
+Cycle: "Newton's Laws" → "Force Analysis" → "Friction" → "Newton's Laws"
+Decision: REMOVE "Friction" → "Newton's Laws"
+Reasoning: Newton's Laws are fundamental theory and should be taught first. Friction is a specific application that depends on understanding Newton's Laws.
+
+Example 3: Advanced Cycle
+Cycle: "Derivatives" → "Integration" → "Fundamental Theorem of Calculus" → "Derivatives"
+Decision: REMOVE "Fundamental Theorem of Calculus" → "Derivatives"
+Reasoning: Both derivatives and integration should be taught before their connection. The theorem connects both concepts but doesn't need to point back to derivatives.
+
+# OUTPUT FORMAT
+For each edge in the cycle, you must provide:
+- source_id: The source concept ID
+- target_id: The target concept ID  
+- should_remove: true/false
+- reasoning: Clear explanation
+- confidence: Your confidence in this decision (0.0 to 1.0)
+
+Also provide:
+- cycle_nodes: List of all concept IDs in the cycle
+- reasoning: Overall strategy for breaking this cycle
+
+# IMPORTANT
+- You MUST remove at least ONE edge to break the cycle
+- Be conservative: only remove what's necessary
+- Provide clear, educational reasoning
+- Consider the pedagogical perspective: what makes sense for a learner?

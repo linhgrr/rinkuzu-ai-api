@@ -1,4 +1,4 @@
-import utils.text as text_utils
+import api.core.content_pipeline.infrastructure.utils.text as text_utils
 
 
 def test_clean_text_falls_back_without_underthesea(monkeypatch):

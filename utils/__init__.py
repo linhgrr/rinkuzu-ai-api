@@ -1,11 +1,10 @@
-"""Utility functions."""
-from .timeit import timeit
-from .text import clean_text
-from .mime import guess_mime_type, get_file_type
+"""Backward-compatible shim for legacy root imports."""
 
-__all__ = [
-    "timeit",
-    "clean_text",
-    "guess_mime_type",
-    "get_file_type",
-]
+from api.core.content_pipeline.infrastructure.utils import (  # noqa: F401
+    clean_text,
+    get_file_type,
+    guess_mime_type,
+    timeit,
+)
+
+__all__ = ["timeit", "clean_text", "guess_mime_type", "get_file_type"]

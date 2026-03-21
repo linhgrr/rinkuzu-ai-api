@@ -68,9 +68,9 @@ def calculate_file_hash(file_path: str) -> str:
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:
     from processors.factory import FileLoaderFactory
-    from llm.extract_chain import ExtractionChain
-    from llm.postprocess import postprocess_concepts
-    from llm import get_llm
+    from .llm.extract_chain import ExtractionChain
+    from .llm.postprocess import postprocess_concepts
+    from .llm import get_llm
     from embed.embedding_client import EmbeddingClient
     from embed.embeddings import compute_embedding_for_concepts
     from embed.prereq_ranking import rank_prerequisites
@@ -113,7 +113,7 @@ def get_content_processor_llm_factory():
     """Load and cache the content pipeline LLM factory."""
     global _content_processor_llm_factory
     if _content_processor_llm_factory is None:
-        from llm import get_llm
+        from .llm import get_llm
 
         _content_processor_llm_factory = get_llm
     return _content_processor_llm_factory
