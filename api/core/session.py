@@ -345,20 +345,29 @@ class SessionManager:
         )
         obs, info = env.reset(seed=42)
 
-        history_doc = history_source_doc
-        if history_doc is None and job_id and user_id:
-            history_doc = await mongo_store.load_subject_progress_for_user(job_id, user_id)
-
+        # Load previous history from MongoDB
         prev_history = []
         total_correct = 0
         total_answered = 0
-        if history_doc:
-            prev_history = history_doc.get("exercise_history") or []
-            total_correct = history_doc.get("total_correct", 0)
-            total_answered = history_doc.get("total_answered", 0)
+        if history_source_doc:
+            prev_history = history_source_doc.get("exercise_history") or []
+            total_correct = history_source_doc.get("total_correct", 0)
+            total_answered = history_source_doc.get("total_answered", 0)
             logger.info(
-                f"[Session] Rehydrating subject history with {len(prev_history)} exercises"
+                f"[Session] Rehydrating from provided history doc with {len(prev_history)} exercises"
             )
+        elif job_id:
+            try:
+                prev_session = await mongo_store.find_latest_session_for_job(job_id, user_id=user_id)
+                if prev_session and prev_session.get("exercise_history"):
+                    prev_history = prev_session["exercise_history"]
+                    total_correct = prev_session.get("total_correct", 0)
+                    total_answered = prev_session.get("total_answered", 0)
+                    logger.info(f"[Session] Found previous session with {len(prev_history)} exercises")
+                else:
+                    logger.info(f"[Session] No previous session for job {job_id}, starting fresh")
+            except Exception as e:
+                logger.warning(f"[Session] Error loading previous session: {e}, starting fresh")
 
         # Inject history into environment
         if prev_history:
@@ -382,8 +391,8 @@ class SessionManager:
             total_correct=total_correct,
             total_answered=total_answered,
             job_id=job_id,
-            created_at=(history_doc or {}).get("created_at", time.time()),
-            status=(history_doc or {}).get("status", "active"),
+            created_at=(history_source_doc or {}).get("created_at", time.time()),
+            status=(history_source_doc or {}).get("status", "active"),
             concept_theories=theories,
         )
 
@@ -416,38 +425,58 @@ class SessionManager:
         session_id: str,
         user_id: str,
     ) -> Optional[SessionState]:
+        """Get active in-memory session; recover from MongoDB when missing.
+
+        Recovery path:
+        1) Load persisted session doc by session_id + user_id.
+        2) Load source pipeline result by job_id.
+        3) Rebuild environment and replay saved exercise history.
+        """
+        # Fast path
         active = self.get_session(session_id)
         if active and getattr(active, "user_id", None) == user_id:
             return active
 
-        lock = self._recovery_locks.setdefault(session_id, asyncio.Lock())
-        async with lock:
+        if session_id not in self._recovery_locks:
+            self._recovery_locks[session_id] = asyncio.Lock()
+
+        async with self._recovery_locks[session_id]:
+            # Double check after acquiring lock
             active = self.get_session(session_id)
             if active and getattr(active, "user_id", None) == user_id:
                 return active
 
-            progress_doc = await mongo_store.load_subject_progress_by_session_for_user(
-                session_id,
-                user_id,
+            session_doc = await mongo_store.load_session_doc_for_user(session_id, user_id)
+            if not session_doc:
+                return None
+
+        job_id = session_doc.get("job_id")
+        if not job_id:
+            logger.warning(
+                f"[Session] Cannot recover session={session_id}: missing job_id in persisted doc"
             )
-            if not progress_doc:
-                return None
+            return None
 
-            job_id = progress_doc.get("job_id")
-            if not job_id:
-                return None
+        job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+        if not job_doc:
+            logger.warning(
+                f"[Session] Cannot recover session={session_id}: pipeline job {job_id} not found"
+            )
+            return None
 
-            job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
-            if not job_doc:
-                return None
+        result = job_doc.get("result") or {}
+        if not all(key in result for key in ("concepts_data", "concept_map", "prereq_edges")):
+            logger.warning(
+                f"[Session] Cannot recover session={session_id}: incomplete pipeline result"
+            )
+            return None
 
-            result = job_doc.get("result") or {}
-            if not all(key in result for key in ("concepts_data", "concept_map", "prereq_edges")):
-                return None
+        max_steps = int(session_doc.get("max_steps") or 50)
+        if max_steps <= 50:
+            max_steps = 9999
 
-            max_steps = int(progress_doc.get("max_steps") or 9999)
-
-            return await self.create_session_from_pipeline(
+        try:
+            recovered = await self.create_session_from_pipeline(
                 concepts_data=result["concepts_data"],
                 concept_map=result["concept_map"],
                 prereq_edges=result["prereq_edges"],
@@ -456,8 +485,17 @@ class SessionManager:
                 job_id=job_id,
                 user_id=user_id,
                 session_id=session_id,
-                history_source_doc=progress_doc,
+                history_source_doc=session_doc,
             )
+            logger.info(
+                f"[Session] Recovered session={session_id} for user={user_id} from Mongo"
+            )
+            return recovered
+        except Exception as exc:
+            logger.warning(
+                f"[Session] Failed recovering session={session_id}: {exc}"
+            )
+            return None
 
     # ── Query Methods ───────────────────────────────────────
 

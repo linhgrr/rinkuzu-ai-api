@@ -90,6 +90,22 @@ async def load_subject_progress_by_session_for_user(
     return await _subject_progress_repo.load_by_session_for_user(session_id, user_id)
 
 
+async def load_session_doc_for_user(
+    session_id: str,
+    user_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Compatibility alias for persisted adaptive-learning session docs."""
+    return await load_subject_progress_by_session_for_user(session_id, user_id)
+
+
+async def find_latest_session_for_job(
+    job_id: str,
+    user_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Return the latest persisted session snapshot for a user's pipeline job."""
+    return await load_subject_progress_for_user(job_id, user_id)
+
+
 async def load_subject_progress_map(job_ids: list[str], user_id: str) -> Dict[str, Dict[str, Any]]:
     if not _subject_progress_repo:
         return {}
