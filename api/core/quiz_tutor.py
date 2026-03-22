@@ -41,7 +41,7 @@ def _build_headers(*, accept: str) -> Dict[str, str]:
 def _extract_completion_text(payload: Dict) -> str:
     choices = payload.get("choices") or []
     if not choices:
-      return ""
+        return ""
     message = choices[0].get("message") or {}
     return extract_llm_text(message.get("content"))
 
@@ -99,20 +99,20 @@ def _build_messages(
     *,
     question: str,
     options: List[str],
-    user_question: str,
+    user_question: Optional[str],
     chat_history: List[Dict[str, str]],
     question_image: Optional[str],
     option_images: Optional[List[Optional[str]]],
 ) -> List[Dict]:
     contextual_info = _build_contextual_info(chat_history)
-    sanitized_question = sanitize_chat_input(user_question)
+    sanitized_question = sanitize_chat_input(user_question) if user_question else ""
     prompt = (
         "CÂU HỎI QUIZ:\n"
         f"{question}\n\n"
         "ĐÁP ÁN:\n"
         f"{chr(10).join(f'{chr(65 + idx)}. {option}' for idx, option in enumerate(options))}\n"
         f"{contextual_info}\n"
-        f"CÂU HỎI MỚI CỦA HỌC SINH: {sanitized_question}\n\n"
+        f"{f'CÂU HỎI MỚI CỦA HỌC SINH: {sanitized_question}' if sanitized_question else 'HÃY GIẢI THÍCH TỔNG QUÁT CÂU HỎI NÀY CHO HỌC SINH.'}\n\n"
         "YÊU CẦU TRẢ LỜI:\n"
         "- Chỉ giải thích xoay quanh câu hỏi quiz hiện tại và kiến thức liên quan trực tiếp.\n"
         "- Trả lời bằng tiếng Việt tự nhiên, rõ ràng, thân thiện.\n"
@@ -154,7 +154,7 @@ def _build_payload(
     *,
     question: str,
     options: List[str],
-    user_question: str,
+    user_question: Optional[str],
     chat_history: List[Dict[str, str]],
     question_image: Optional[str],
     option_images: Optional[List[Optional[str]]],
@@ -179,14 +179,15 @@ def generate_quiz_tutor_response(
     *,
     question: str,
     options: List[str],
-    user_question: str,
+    user_question: Optional[str],
     chat_history: Optional[List[Dict[str, str]]] = None,
     question_image: Optional[str] = None,
     option_images: Optional[List[Optional[str]]] = None,
 ) -> Dict:
-    validation_error = validate_chat_input(user_question)
-    if validation_error:
-        raise ValueError(validation_error)
+    if user_question:
+        validation_error = validate_chat_input(user_question)
+        if validation_error:
+            raise ValueError(validation_error)
 
     settings = get_settings()
     endpoint = build_chat_completions_url(settings.llm_base_url)
@@ -243,14 +244,15 @@ async def create_quiz_tutor_stream(
     *,
     question: str,
     options: List[str],
-    user_question: str,
+    user_question: Optional[str],
     chat_history: Optional[List[Dict[str, str]]] = None,
     question_image: Optional[str] = None,
     option_images: Optional[List[Optional[str]]] = None,
 ) -> AsyncIterator[bytes]:
-    validation_error = validate_chat_input(user_question)
-    if validation_error:
-        raise ValueError(validation_error)
+    if user_question:
+        validation_error = validate_chat_input(user_question)
+        if validation_error:
+            raise ValueError(validation_error)
 
     settings = get_settings()
     endpoint = build_chat_completions_url(settings.llm_base_url)

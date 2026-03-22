@@ -17,7 +17,7 @@ class QuizTutorRequest(BaseModel):
 
     question: str = Field(..., min_length=1, max_length=12000)
     options: List[str] = Field(..., min_length=2, max_length=8)
-    user_question: str = Field(..., alias="userQuestion", min_length=1, max_length=1000)
+    user_question: Optional[str] = Field(default=None, alias="userQuestion", max_length=1000)
     question_image: Optional[str] = Field(default=None, alias="questionImage")
     option_images: List[Optional[str]] = Field(default_factory=list, alias="optionImages")
     chat_history: List[QuizTutorChatMessage] = Field(default_factory=list, alias="chatHistory")
