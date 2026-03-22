@@ -11,10 +11,10 @@ def test_exercise_service_uses_separate_request_and_prefetch_timeouts(monkeypatc
         exercise_service_module,
         "settings",
         SimpleNamespace(
-            adaptive_llm_max_workers=4,
-            adaptive_llm_max_concurrency=2,
-            adaptive_llm_timeout_sec=90,
-            adaptive_prefetch_llm_timeout_sec=210,
+            llm_max_workers=4,
+            llm_max_concurrency=2,
+            llm_request_timeout_sec=90,
+            llm_prefetch_timeout_sec=210,
         ),
     )
 
@@ -32,10 +32,10 @@ async def test_eager_prefetch_uses_prefetch_timeout(monkeypatch):
         exercise_service_module,
         "settings",
         SimpleNamespace(
-            adaptive_llm_max_workers=2,
-            adaptive_llm_max_concurrency=None,
-            adaptive_llm_timeout_sec=90,
-            adaptive_prefetch_llm_timeout_sec=210,
+            llm_max_workers=2,
+            llm_max_concurrency=None,
+            llm_request_timeout_sec=90,
+            llm_prefetch_timeout_sec=210,
         ),
     )
 

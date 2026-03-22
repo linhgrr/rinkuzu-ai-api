@@ -30,13 +30,13 @@ class ExerciseService:
 
     def __init__(self, session_manager=None):
         self._session_manager = session_manager
-        max_workers = max(1, int(settings.adaptive_llm_max_workers))
-        max_concurrency = settings.adaptive_llm_max_concurrency or max_workers
-        self._request_llm_timeout_sec = max(0.0, float(settings.adaptive_llm_timeout_sec))
+        max_workers = max(1, int(settings.llm_max_workers))
+        max_concurrency = settings.llm_max_concurrency or max_workers
+        self._request_llm_timeout_sec = max(0.0, float(settings.llm_request_timeout_sec))
         self._prefetch_llm_timeout_sec = (
             self._request_llm_timeout_sec
-            if settings.adaptive_prefetch_llm_timeout_sec is None
-            else max(0.0, float(settings.adaptive_prefetch_llm_timeout_sec))
+            if settings.llm_prefetch_timeout_sec is None
+            else max(0.0, float(settings.llm_prefetch_timeout_sec))
         )
         self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)

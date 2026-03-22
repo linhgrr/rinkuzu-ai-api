@@ -2,9 +2,9 @@
 schemas/exercise.py — Exercise-related Pydantic models.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ExerciseOption(BaseModel):
@@ -54,3 +54,19 @@ class SubmitAnswerResponse(BaseModel):
     step: int
     session_completed: bool
     stats: Dict[str, Any]
+
+
+class TutorChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
+class TutorChatRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    user_question: str = Field(..., alias="userQuestion", min_length=1, max_length=1000)
+    chat_history: List[TutorChatMessage] = Field(default_factory=list, alias="chatHistory")
+
+
+class TutorChatResponse(BaseModel):
+    explanation: str

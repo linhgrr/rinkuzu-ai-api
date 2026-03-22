@@ -18,6 +18,7 @@ from botocore.client import Config
 from loguru import logger
 
 from ......config import get_settings
+from .....llm import build_chat_completions_url, extract_llm_text
 from .base import BaseLoader
 
 # ── OCR prompt ─────────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ def _ocr_page_via_llm(
     Returns:
         Tuple of (page_num, extracted_text)
     """
-    url = f"{base_url.rstrip('/')}/v1/chat/completions"
+    url = build_chat_completions_url(base_url)
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -158,7 +159,7 @@ def _ocr_page_via_llm(
             data = resp.json()
 
             # Extract content from OpenAI-compatible response
-            content = (
+            content = extract_llm_text(
                 data.get("choices", [{}])[0]
                 .get("message", {})
                 .get("content", "")

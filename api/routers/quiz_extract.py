@@ -17,6 +17,7 @@ from loguru import logger
 from ..config import get_settings
 from ..dependencies import get_current_user
 from ..core.content_pipeline.infrastructure.runtime import get_s3_client
+from ..core.llm import build_chat_completions_url, extract_llm_text
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 MAX_PDF_BYTES = 50 * 1024 * 1024
@@ -88,24 +89,6 @@ def _build_s3_object_url(endpoint_url: str, bucket_name: str, object_key: str) -
     return f"{endpoint}/{bucket_name}/{key}"
 
 
-def _extract_llm_content(payload: dict) -> str:
-    content = payload.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-    if isinstance(content, str):
-        return content
-
-    if isinstance(content, list):
-        text_parts: list[str] = []
-        for part in content:
-            if isinstance(part, dict):
-                text_value = part.get("text")
-                if isinstance(text_value, str):
-                    text_parts.append(text_value)
-        return "\n".join(text_parts)
-
-    return ""
-
-
 async def _invoke_pdf_extract_llm(
     *,
     pdf_url: str,
@@ -114,15 +97,7 @@ async def _invoke_pdf_extract_llm(
     base_url: str,
     api_key: Optional[str],
 ) -> list:
-    api_base = (base_url or "").rstrip("/")
-    if not api_base:
-        raise RuntimeError("LLM base URL is not configured")
-
-    # Keep compatibility with OpenAI-like gateways that require /v1 suffix.
-    if not api_base.endswith("/v1"):
-        api_base = f"{api_base}/v1"
-
-    endpoint = f"{api_base}/chat/completions"
+    endpoint = build_chat_completions_url(base_url)
 
     headers = {
         "Content-Type": "application/json",
@@ -165,7 +140,9 @@ async def _invoke_pdf_extract_llm(
     )
 
     response_payload = response.json()
-    llm_text = _extract_llm_content(response_payload)
+    llm_text = extract_llm_text(
+        response_payload.get("choices", [{}])[0].get("message", {}).get("content", "")
+    )
     return _clean_json_response(llm_text)
 
 

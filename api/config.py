@@ -5,6 +5,7 @@ config.py — Centralized application settings using Pydantic BaseSettings.
 from pathlib import Path
 from typing import Optional
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,16 +36,37 @@ class Settings(BaseSettings):
     llm_api_key: Optional[str] = None
     llm_base_url: Optional[str] = None
     llm_model: Optional[str] = None
-    adaptive_exercise_llm_model: Optional[str] = None
+    exercise_llm_model: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("EXERCISE_LLM_MODEL", "ADAPTIVE_EXERCISE_LLM_MODEL"),
+    )
     llm_embedding_model: str = "text-embedding-3-small"
     llm_timeout_sec: float = 150
     llm_max_retries: int = 2
-    adaptive_llm_max_workers: int = 8
-    adaptive_llm_max_concurrency: Optional[int] = None
-    adaptive_llm_timeout_sec: float = 120
-    adaptive_prefetch_llm_timeout_sec: Optional[float] = None
-    adaptive_llm_retry_attempts: int = 3
-    adaptive_llm_retry_backoff_sec: float = 1.0
+    llm_max_workers: int = Field(
+        default=8,
+        validation_alias=AliasChoices("LLM_MAX_WORKERS", "ADAPTIVE_LLM_MAX_WORKERS"),
+    )
+    llm_max_concurrency: Optional[int] = Field(
+        default=None,
+        validation_alias=AliasChoices("LLM_MAX_CONCURRENCY", "ADAPTIVE_LLM_MAX_CONCURRENCY"),
+    )
+    llm_request_timeout_sec: float = Field(
+        default=120,
+        validation_alias=AliasChoices("LLM_REQUEST_TIMEOUT_SEC", "ADAPTIVE_LLM_TIMEOUT_SEC"),
+    )
+    llm_prefetch_timeout_sec: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("LLM_PREFETCH_TIMEOUT_SEC", "ADAPTIVE_PREFETCH_LLM_TIMEOUT_SEC"),
+    )
+    llm_retry_attempts: int = Field(
+        default=3,
+        validation_alias=AliasChoices("LLM_RETRY_ATTEMPTS", "ADAPTIVE_LLM_RETRY_ATTEMPTS"),
+    )
+    llm_retry_backoff_sec: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices("LLM_RETRY_BACKOFF_SEC", "ADAPTIVE_LLM_RETRY_BACKOFF_SEC"),
+    )
 
     # ── Content Pipeline ───────────────────────────────────
     embedding_model: str = "keepitreal/vietnamese-sbert"

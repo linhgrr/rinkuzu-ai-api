@@ -2,6 +2,8 @@
 Session router — Session lifecycle endpoints.
 """
 
+import asyncio
+
 from fastapi import APIRouter, Depends, BackgroundTasks
 from loguru import logger
 
@@ -10,9 +12,11 @@ from ..schemas import (
     NextConceptResponse, TheoryResponse, ExerciseResponse,
     SubmitAnswerRequest, SubmitAnswerResponse,
     SessionStatusResponse,
+    TutorChatRequest, TutorChatResponse,
 )
 from ..dependencies import get_session_manager, get_session_service, get_current_user
 from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
+from ..core.tutor_chat import generate_tutor_chat_response
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -145,6 +149,38 @@ async def submit_answer(
         raise ExerciseGenerationError("No pending exercise or session not found")
 
     return SubmitAnswerResponse(**result)
+
+
+@router.post("/{session_id}/chat", response_model=TutorChatResponse)
+async def chat_about_exercise(
+    session_id: str,
+    req: TutorChatRequest,
+    manager=Depends(get_session_manager),
+    user_id: str = Depends(get_current_user),
+):
+    session = await _resolve_user_session(manager, session_id, user_id)
+    exercise = session.current_exercise or (
+        session.exercise_history[-1] if session.exercise_history else None
+    )
+    if not exercise:
+        raise ExerciseGenerationError("No exercise context available for chat")
+
+    option_keys = sorted(exercise.options.keys())
+    options = [exercise.options[key] for key in option_keys if exercise.options.get(key)]
+    if not options:
+        raise ExerciseGenerationError("Exercise is missing answer options")
+
+    explanation = await asyncio.to_thread(
+        generate_tutor_chat_response,
+        question=exercise.question,
+        options=options,
+        user_question=req.user_question,
+        chat_history=[item.model_dump() for item in req.chat_history],
+        concept_name=exercise.concept_name,
+        bloom_level=exercise.bloom_level,
+    )
+
+    return TutorChatResponse(explanation=explanation)
 
 
 @router.get("/{session_id}/status", response_model=SessionStatusResponse)

@@ -6,10 +6,13 @@ import time
 from typing import Optional, Dict, Any, Literal, List
 
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI
 from loguru import logger
 
-from ..config import get_settings
+from .llm import (
+    get_structured_llm,
+    resolve_retry_policy,
+    sleep_before_retry,
+)
 
 # ---------------------------------------------------------------------------
 # Bloom's Taxonomy labels
@@ -49,15 +52,6 @@ class TheoryOutput(BaseModel):
     examples: List[str] = Field(..., description="2-3 illustrative examples in Vietnamese")
 
 
-# ---------------------------------------------------------------------------
-# Global LLM instances
-# ---------------------------------------------------------------------------
-from .content_pipeline.infrastructure.runtime import get_content_processor_llm_factory
-
-_llm: Optional[ChatOpenAI] = None          # plain text invocation
-_structured_exercise_llm = None            # with_structured_output for exercise
-_structured_theory_llm = None              # with_structured_output for theory
-
 MATH_FORMAT_RULES = (
     "Quy tắc định dạng toán BẮT BUỘC:\n"
     "- Mọi biểu thức toán inline PHẢI đặt trong $...$. Ví dụ: $x^2 + 1$.\n"
@@ -68,60 +62,6 @@ MATH_FORMAT_RULES = (
     "- KHÔNG viết công thức toán dạng text thuần. Ví dụ SAI: 'x^2 + 1 = 0'. Ví dụ ĐÚNG: '$x^2 + 1 = 0$'.\n"
     "- Ví dụ đúng hoàn chỉnh: $\\vec{n}_{\\alpha} \\cdot \\vec{n}_{\\eta} = 0$.\n"
 )
-
-
-def _resolve_retry_policy() -> tuple[int, float]:
-    settings = get_settings()
-    return (
-        max(1, int(settings.adaptive_llm_retry_attempts)),
-        max(0.0, float(settings.adaptive_llm_retry_backoff_sec)),
-    )
-
-
-def _resolve_exercise_llm_model(explicit_model: Optional[str]) -> Optional[str]:
-    settings = get_settings()
-    return settings.adaptive_exercise_llm_model or explicit_model
-
-
-def _sleep_before_retry(attempt: int, base_delay_sec: float) -> None:
-    if base_delay_sec <= 0:
-        return
-    time.sleep(base_delay_sec * attempt)
-
-
-def init_llm(
-    base_url: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
-):
-    """Initialize ChatOpenAI pointing to an OpenAI-compatible endpoint."""
-    global _llm, _structured_exercise_llm, _structured_theory_llm
-
-    get_llm = get_content_processor_llm_factory()
-    selected_model = _resolve_exercise_llm_model(model)
-    _llm = get_llm(
-        temperature=0.3,
-        base_url=base_url,
-        model=selected_model,
-        api_key=api_key,
-    )
-
-    logger.info(f"[LLM] Connecting with model={_llm.model_name}")
-
-    try:
-        _structured_exercise_llm = _llm.with_structured_output(ExerciseOutput, method="json_schema")
-        _structured_theory_llm = _llm.with_structured_output(TheoryOutput, method="json_schema")
-    except Exception as e:
-        logger.warning(f"[LLM] ⚠ Structured chain init failed: {e}")
-
-    logger.info("[LLM] ✓ Ready — structured chains initialized.")
-
-
-def init_gemini(api_key: Optional[str] = None):
-    """Backward-compatible wrapper — delegates to init_llm."""
-    init_llm(api_key=api_key)
-
-
 def _exercise_to_dict(result: ExerciseOutput) -> Dict[str, Any]:
     return {
         "question": result.question,
@@ -150,8 +90,7 @@ def generate_exercise(
     
     logger.info(f"[LLM-Gen] Concept: {concept_name} | Bloom: {bloom_label}")
 
-    if _structured_exercise_llm is None:
-        raise ValueError("[LLM] ⚠ LLM not initialized — generation failed")
+    structured_exercise_llm = get_structured_llm(ExerciseOutput)
 
     bloom_guidelines = {
         1: (
@@ -210,12 +149,12 @@ def generate_exercise(
     )
 
     t0 = time.time()
-    max_retries, backoff_sec = _resolve_retry_policy()
+    max_retries, backoff_sec = resolve_retry_policy()
     for attempt in range(1, max_retries + 1):
         try:
             logger.debug(f"[LLM] ⏳ generate_exercise attempt {attempt}/{max_retries}")
             
-            result = _structured_exercise_llm.invoke(prompt_base)
+            result = structured_exercise_llm.invoke(prompt_base)
             if not isinstance(result, ExerciseOutput):
                 raise ValueError(f"LLM returned invalid type: {type(result)}")
 
@@ -229,7 +168,7 @@ def generate_exercise(
                 f"(will_retry={attempt < max_retries}): {e}"
             )
             if attempt < max_retries:
-                _sleep_before_retry(attempt, backoff_sec)
+                sleep_before_retry(attempt, backoff_sec)
 
     elapsed = time.time() - t0
     logger.error(f"[LLM] ✗ generate_exercise failed after {elapsed:.2f}s")
@@ -243,11 +182,7 @@ def generate_theory(
     """Generate a concise theory summary and examples via LLM using robust json schema."""
     logger.info(f"[LLM-Theory] Concept: {concept_name}")
 
-    if _structured_theory_llm is None:
-        return {
-            "content": f"Lý thuyết về {concept_name}.",
-            "examples": [f"Ví dụ về {concept_name} 1", f"Ví dụ về {concept_name} 2"]
-        }
+    structured_theory_llm = get_structured_llm(TheoryOutput)
 
     prompt = (
         "Bạn là một giáo viên chuyên giải thích kiến thức một cách dễ hiểu, có hệ thống.\n"
@@ -270,7 +205,7 @@ def generate_theory(
     )
 
     t0 = time.time()
-    max_retries, backoff_sec = _resolve_retry_policy()
+    max_retries, backoff_sec = resolve_retry_policy()
     fallback = {
         "content": f"Lý thuyết cơ bản về {concept_name}: {concept_definition}",
         "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."],
@@ -279,7 +214,7 @@ def generate_theory(
     for attempt in range(1, max_retries + 1):
         try:
             logger.debug(f"[LLM] ⏳ generate_theory attempt {attempt}/{max_retries}")
-            result = _structured_theory_llm.invoke(prompt)
+            result = structured_theory_llm.invoke(prompt)
 
             if not isinstance(result, TheoryOutput):
                 raise ValueError(f"LLM returned invalid type: {type(result)}")
@@ -293,7 +228,7 @@ def generate_theory(
                 f"(will_retry={attempt < max_retries}): {e}"
             )
             if attempt < max_retries:
-                _sleep_before_retry(attempt, backoff_sec)
+                sleep_before_retry(attempt, backoff_sec)
 
     elapsed = time.time() - t0
     logger.error(f"[LLM] ✗ generate_theory failed after {elapsed:.2f}s")

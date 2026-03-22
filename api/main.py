@@ -11,7 +11,7 @@ from loguru import logger
 from .config import get_settings
 from .exceptions import register_exception_handlers
 from .core.session import SessionManager
-from .core.exercise_gen import init_llm
+from .core.llm import initialize_shared_llm
 from .core import mongo_store
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
 from .core.content_pipeline.application.pipeline_service import PipelineService
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     # Init LLM
-    init_llm(
+    initialize_shared_llm(
         base_url=settings.llm_base_url,
         model=settings.llm_model,
         api_key=settings.llm_api_key,

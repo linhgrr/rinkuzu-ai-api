@@ -14,6 +14,9 @@ from .exercise import (
     ExerciseResponse,
     SubmitAnswerRequest,
     SubmitAnswerResponse,
+    TutorChatMessage,
+    TutorChatRequest,
+    TutorChatResponse,
 )
 from .knowledge import (
     KnowledgeNodeResponse,
@@ -42,6 +45,9 @@ __all__ = [
     "ExerciseResponse",
     "SubmitAnswerRequest",
     "SubmitAnswerResponse",
+    "TutorChatMessage",
+    "TutorChatRequest",
+    "TutorChatResponse",
     "KnowledgeNodeResponse",
     "KnowledgeEdgeResponse",
     "KnowledgeGraphResponse",
