@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # ── App Config ──────────────────────────────────────────
     cors_origins: list[str] = ["*"]
+    internal_service_token: Optional[str] = None
 
     # ── MongoDB ─────────────────────────────────────────────
     mongo_url: Optional[str] = None

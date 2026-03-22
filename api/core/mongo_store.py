@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 
 from loguru import logger
 
+from ..config import get_settings
 from ..repositories.pipeline_repo import PipelineRepository
 from ..repositories.subject_progress_repo import SubjectProgressRepository
 
@@ -26,8 +27,7 @@ async def init_mongo(mongo_url: Optional[str] = None) -> bool:
     global _mongo_available, _pipeline_repo, _subject_progress_repo
 
     if not mongo_url:
-        import os
-        mongo_url = os.getenv("MONGO_URL")
+        mongo_url = get_settings().mongo_url
 
     if not mongo_url:
         logger.warning("[MongoDB] MONGO_URL not set — persistence disabled")

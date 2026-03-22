@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import gymnasium as gym
 from gymnasium import spaces
+from loguru import logger
 
 from .models import SaintModel
 
@@ -357,9 +358,12 @@ class AdaptiveLearningEnv(gym.Env):
             self._mastery_dirty = True
             self._compute_mastery_vector()
 
-        print(f"[Env] Replayed {len(concept_indices)} subject-history interactions, "
-              f"visited {len(self._visited)} concepts, "
-              f"avg mastery: {float(np.mean(self._current_mastery)):.4f}")
+        logger.info(
+            "[Env] Replayed {} subject-history interactions, visited {} concepts, avg mastery: {:.4f}",
+            len(concept_indices),
+            len(self._visited),
+            float(np.mean(self._current_mastery)),
+        )
 
     def step(self, action: int, human_correct: Optional[bool] = None):
         assert self.action_space.contains(action)

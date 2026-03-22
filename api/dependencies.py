@@ -2,8 +2,6 @@
 dependencies.py — FastAPI dependency injection functions.
 """
 
-import os
-
 from fastapi import Request, Header, HTTPException
 
 from .config import Settings, get_settings
@@ -15,7 +13,7 @@ def get_current_user(
     x_service_token: str = Header(default=None),
 ):
     """Extract user ID from headers."""
-    required_service_token = os.getenv("INTERNAL_SERVICE_TOKEN")
+    required_service_token = get_settings().internal_service_token
     if required_service_token and x_service_token != required_service_token:
         raise HTTPException(status_code=401, detail="Invalid service token")
 

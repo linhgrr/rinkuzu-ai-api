@@ -2,6 +2,7 @@
 exceptions.py — Domain exceptions and global FastAPI exception handlers.
 """
 
+from fastapi import HTTPException
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -56,10 +57,26 @@ async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     """Map domain exceptions to JSON error responses."""
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail},
+        content={"detail": exc.detail, "error": exc.detail},
+    )
+
+
+async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+    """Normalize FastAPI HTTPException responses into a stable JSON envelope."""
+    detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    content = {"detail": detail, "error": detail}
+
+    if not isinstance(exc.detail, str):
+        content["meta"] = exc.detail
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=content,
+        headers=exc.headers,
     )
 
 
 def register_exception_handlers(app) -> None:
     """Register all custom exception handlers on the FastAPI app."""
     app.add_exception_handler(AppError, app_error_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler)
