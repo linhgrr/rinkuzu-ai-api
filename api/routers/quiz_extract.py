@@ -2,7 +2,6 @@
 routers/quiz_extract.py — Quiz extraction endpoints via LLM.
 """
 
-import os
 import json
 import re
 import time
@@ -63,23 +62,27 @@ Always return raw JSON list of question dictionaries with no markdown codeblocks
 """
 
 
-def _clean_json_response(content: str) -> list:
-    """Extract list JSON from LLM response safely"""
-    match = re.search(r'\[\s*\{.*\}\s*\]', content, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except Exception:
-            pass
-    
-    # Try direct parse
+def _parse_json_list(content: str) -> list:
     try:
         data = json.loads(content)
-        if isinstance(data, list):
-            return data
-    except Exception:
-        pass
-        
+    except json.JSONDecodeError:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _clean_json_response(content: str) -> list:
+    """Extract a top-level JSON array from LLM output."""
+    match = re.search(r"\[\s*\{.*\}\s*\]", content, re.DOTALL)
+    if match:
+        parsed = _parse_json_list(match.group(0))
+        if parsed:
+            return parsed
+
+    parsed = _parse_json_list(content)
+    if parsed:
+        return parsed
+
+    logger.warning("[quiz_extract] failed_to_parse_llm_json response_chars={}", len(content))
     return []
 
 
@@ -98,6 +101,7 @@ async def _invoke_pdf_extract_llm(
     api_key: Optional[str],
 ) -> list:
     endpoint = build_chat_completions_url(base_url)
+    timeout_sec = max(1.0, float(get_settings().llm_timeout_sec))
 
     headers = {
         "Content-Type": "application/json",
@@ -128,7 +132,7 @@ async def _invoke_pdf_extract_llm(
     )
 
     llm_start = time.perf_counter()
-    async with httpx.AsyncClient(timeout=300) as client:
+    async with httpx.AsyncClient(timeout=timeout_sec) as client:
         response = await client.post(endpoint, headers=headers, json=payload)
         response.raise_for_status()
     llm_duration_ms = int((time.perf_counter() - llm_start) * 1000)
@@ -144,6 +148,15 @@ async def _invoke_pdf_extract_llm(
         response_payload.get("choices", [{}])[0].get("message", {}).get("content", "")
     )
     return _clean_json_response(llm_text)
+
+
+def _validate_quiz_extract_dependencies(settings, s3_client) -> None:
+    if not s3_client or not settings.s3_bucket_name:
+        raise HTTPException(status_code=500, detail="S3 is not configured.")
+    if not settings.s3_endpoint_url:
+        raise HTTPException(status_code=500, detail="S3 endpoint URL is not configured.")
+    if not settings.llm_base_url or not settings.llm_model:
+        raise HTTPException(status_code=500, detail="LLM configuration is missing.")
 
 
 @router.post("/extract")
@@ -175,14 +188,7 @@ async def extract_quiz(
     settings = get_settings()
 
     try:
-        if not s3_client or not settings.s3_bucket_name:
-            raise HTTPException(status_code=500, detail="S3 is not configured.")
-
-        if not settings.s3_endpoint_url:
-            raise HTTPException(status_code=500, detail="S3 endpoint URL is not configured.")
-
-        if not settings.llm_base_url or not settings.llm_model:
-            raise HTTPException(status_code=500, detail="LLM configuration is missing.")
+        _validate_quiz_extract_dependencies(settings, s3_client)
 
         normalized_key = s3_key.strip().lstrip("/")
         required_prefix = f"uploads/quiz_extract/{user_id}/"
@@ -202,12 +208,11 @@ async def extract_quiz(
                     Key=normalized_key,
                 ).get("ContentLength", 0)
             )
-        except Exception as e:
-            logger.error(
-                "[quiz_extract] s3_head_failed request_id={} key={} error={}",
+        except Exception:
+            logger.exception(
+                "[quiz_extract] s3_head_failed request_id={} key={}",
                 request_id,
                 normalized_key,
-                e,
             )
             raise HTTPException(status_code=400, detail="Unable to inspect PDF from s3_key.")
 
@@ -254,12 +259,11 @@ async def extract_quiz(
                 body,
             )
             raise HTTPException(status_code=502, detail="Quiz extraction request to LLM failed.")
-        except Exception as e:
-            logger.error(
-                "[quiz_extract] llm_invoke_error request_id={} key={} error={}",
+        except Exception:
+            logger.exception(
+                "[quiz_extract] llm_invoke_error request_id={} key={}",
                 request_id,
                 normalized_key,
-                e,
             )
             raise HTTPException(status_code=502, detail="Quiz extraction failed during LLM invocation.")
 
@@ -286,12 +290,11 @@ async def extract_quiz(
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         total_duration_ms = int((time.perf_counter() - started_at) * 1000)
-        logger.error(
-            "[quiz_extract] request_failed request_id={} error={} duration_ms={}",
+        logger.exception(
+            "[quiz_extract] request_failed request_id={} duration_ms={}",
             request_id,
-            str(e),
             total_duration_ms,
         )
         raise HTTPException(status_code=500, detail="Quiz extraction internal error")
