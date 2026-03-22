@@ -34,6 +34,12 @@ from .history import (
     SubjectProgressListResponse,
     SubjectHistoryDetailResponse,
 )
+from .quiz_tutor import (
+    QuizTutorChatMessage,
+    QuizTutorRequest,
+    QuizTutorResponse,
+    QuizTutorResponseData,
+)
 
 __all__ = [
     "SessionCreateRequest",
@@ -60,4 +66,8 @@ __all__ = [
     "SubjectProgressSummaryResponse",
     "SubjectProgressListResponse",
     "SubjectHistoryDetailResponse",
+    "QuizTutorChatMessage",
+    "QuizTutorRequest",
+    "QuizTutorResponse",
+    "QuizTutorResponseData",
 ]
