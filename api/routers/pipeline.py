@@ -36,16 +36,11 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 @router.get("/status")
 async def pipeline_status(availability: dict = Depends(get_content_pipeline_availability)):
     """Check if content pipeline runtime modules are available."""
+    available = availability["available"]
     return {
-        "available": availability["available"],
-        "error": availability["error"],
+        "available": available,
         "service_initialized": availability["service_initialized"],
-        "message": (
-            "Content pipeline ready"
-            if availability["available"]
-            else f"Import error: {availability['error']}"
-        ),
-        "content_processor_src": availability["src"],
+        "message": "Content pipeline ready" if available else "Content pipeline unavailable",
     }
 
 
@@ -71,11 +66,7 @@ async def process_document(
         )
         raise HTTPException(
             status_code=503,
-            detail=(
-                f"ContentPipeline unavailable: {availability['error']}"
-                if availability["error"]
-                else "ContentPipeline unavailable: unknown startup error"
-            ),
+            detail="Content pipeline is unavailable.",
         )
     if not mongo_store.is_available():
         raise ServiceUnavailableError("MongoDB persistence")
@@ -186,7 +177,12 @@ async def create_session_from_pipeline(
 
     for required_key in ("concepts_data", "concept_map", "prereq_edges"):
         if required_key not in result:
-            raise HTTPException(status_code=500, detail=f"Result missing key: {required_key}")
+            logger.error(
+                "[PipelineRouter] job_id={} missing_result_key={}",
+                job_id,
+                required_key,
+            )
+            raise HTTPException(status_code=500, detail="Pipeline result is incomplete.")
 
     concept_ids = set(result["concept_map"].keys())
     invalid_edges = [
@@ -194,9 +190,14 @@ async def create_session_from_pipeline(
         if edge.get("source") not in concept_ids or edge.get("target") not in concept_ids
     ]
     if invalid_edges:
+        logger.warning(
+            "[PipelineRouter] job_id={} invalid_edge_count={}",
+            job_id,
+            len(invalid_edges),
+        )
         raise HTTPException(
             status_code=409,
-            detail=f"Graph has {len(invalid_edges)} invalid edges. Please reprocess.",
+            detail="Pipeline graph validation failed. Please reprocess.",
         )
 
     session = await manager.create_session_from_pipeline(

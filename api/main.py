@@ -150,25 +150,37 @@ app.include_router(quiz_tutor_router.router)
 
 @app.get("/api/health")
 async def health():
+    settings = get_settings()
+    models_loaded = getattr(app.state, "session_manager", None) is not None
+    models_ready = models_loaded if settings.load_models else True
+    mongo_available = mongo_store.is_available()
+    pipeline_service_ready = getattr(app.state, "content_pipeline_service", None) is not None
+    content_pipeline_available = bool(getattr(app.state, "content_processor_available", False))
+    ready = mongo_available and models_ready and pipeline_service_ready
+
     return {
-        "status": "ok",
-        "models_loaded": getattr(app.state, "session_manager", None) is not None,
-        "mongo_available": mongo_store.is_available(),
+        "status": "ok" if ready else "degraded",
+        "ready": ready,
+        "mongo_available": mongo_available,
+        "models_enabled": settings.load_models,
+        "models_loaded": models_loaded,
+        "content_pipeline_available": content_pipeline_available,
+        "content_pipeline_service_ready": pipeline_service_ready,
     }
 
 
 @app.get("/api/info")
 async def info():
+    settings = get_settings()
     manager = app.state.session_manager
-    if not manager:
-        return {"error": "Models not loaded"}
+    models_loaded = manager is not None
+
     return {
-        "n_concepts": manager.n_concepts,
-        "concept_names": {
-            cid: name for cid, name in list(manager.concept_names.items())[:20]
-        },
-        "models": {
-            "saint": "saint_best.pt",
-            "dqn": "dqn_best.pt",
-        },
+        "models_enabled": settings.load_models,
+        "models_loaded": models_loaded,
+        "n_concepts": manager.n_concepts if manager else 0,
+        "mongo_available": mongo_store.is_available(),
+        "content_pipeline_available": bool(
+            getattr(app.state, "content_processor_available", False)
+        ),
     }
