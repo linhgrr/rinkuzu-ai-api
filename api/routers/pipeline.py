@@ -2,7 +2,6 @@
 routers/pipeline.py — Content pipeline endpoints.
 """
 
-import os
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -37,7 +36,6 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 @router.get("/status")
 async def pipeline_status(availability: dict = Depends(get_content_pipeline_availability)):
     """Check if content pipeline runtime modules are available."""
-    import sys
     return {
         "available": availability["available"],
         "error": availability["error"],
@@ -48,7 +46,6 @@ async def pipeline_status(availability: dict = Depends(get_content_pipeline_avai
             else f"Import error: {availability['error']}"
         ),
         "content_processor_src": availability["src"],
-        "sys_path": sys.path,
     }
 
 
@@ -92,8 +89,9 @@ async def process_document(
         async with aiofiles.open(save_path, "wb") as f:
             while chunk := await file.read(1024 * 1024):
                 await f.write(chunk)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+    except Exception:
+        logger.exception("[PipelineRouter] Failed to save upload {}", file.filename)
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
 
     try:
         job = await pipeline_service.start_job(
@@ -106,18 +104,19 @@ async def process_document(
             content_processor_available=availability["available"],
             content_processor_src=availability["src"] or "",
         )
-    except Exception as exc:
+    except Exception:
+        logger.exception("[PipelineRouter] Failed to initialize pipeline job for {}", file.filename)
         try:
             if save_path.exists():
                 save_path.unlink()
         except OSError:
             logger.warning(f"[PipelineRouter] Failed to cleanup upload {save_path}")
-        raise HTTPException(status_code=503, detail=f"Failed to initialize pipeline job: {exc}")
+        raise HTTPException(status_code=503, detail="Failed to initialize pipeline job.")
 
     return {
         "job_id": job.job_id,
         "filename": file.filename,
-        "file_size": os.path.getsize(save_path),
+        "file_size": save_path.stat().st_size,
         "subject_id": job.subject_id,
         "status": job.status.value,
         "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
