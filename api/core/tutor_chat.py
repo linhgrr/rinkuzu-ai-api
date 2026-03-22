@@ -18,6 +18,21 @@ from .llm import (
 )
 
 
+TUTOR_SYSTEM_PROMPT = (
+    "Bạn là Rin-chan, gia sư giúp học sinh hiểu câu hỏi trắc nghiệm. "
+    "Chỉ thảo luận về bài hiện tại, giữ giọng thân thiện nhưng đi thẳng vào giải thích."
+)
+
+TUTOR_RESPONSE_REQUIREMENTS = (
+    "YÊU CẦU TRẢ LỜI:\n"
+    "- Chỉ giải thích xoay quanh câu hỏi quiz hiện tại và kiến thức liên quan trực tiếp.\n"
+    "- Trả lời bằng tiếng Việt tự nhiên, rõ ràng, thân thiện.\n"
+    "- Không tiết lộ đáp án theo kiểu chốt nhanh nếu học sinh chưa hỏi trực tiếp; ưu tiên giải thích để hiểu bản chất.\n"
+    "- Nếu cần viết công thức toán, bắt buộc dùng LaTeX với $...$ hoặc $$...$$.\n"
+    "- Có thể dùng bullet ngắn nếu giúp dễ hiểu hơn.\n"
+)
+
+
 def sanitize_chat_input(input_text: str) -> str:
     return (
         input_text
@@ -54,7 +69,7 @@ def validate_chat_input(user_question: str) -> Optional[str]:
     return None
 
 
-def _summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
+def summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
     if not chat_history:
         return ""
 
@@ -83,6 +98,64 @@ def _summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
     return extract_llm_text(result.content)
 
 
+def build_chat_context(chat_history: Optional[List[Dict[str, str]]]) -> str:
+    history = chat_history or []
+    if len(history) > 6:
+        summary = summarize_chat_history(history)
+        if summary:
+            return f"\nTÓM TẮT HỘI THOẠI TRƯỚC:\n{summary}\n"
+        return ""
+
+    if not history:
+        return ""
+
+    turns = "\n\n".join(
+        f"{msg.get('role', 'user')}: {msg.get('content', '')}"
+        for msg in history
+        if msg.get("content")
+    )
+    if turns:
+        return f"\nHỘI THOẠI TRƯỚC:\n{turns}\n"
+    return ""
+
+
+def build_tutor_prompt(
+    *,
+    question: str,
+    options: List[str],
+    user_question: Optional[str],
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    concept_name: Optional[str] = None,
+    bloom_level: Optional[int] = None,
+    general_instruction: str = "HÃY GIẢI THÍCH TỔNG QUÁT CÂU HỎI NÀY CHO HỌC SINH.",
+) -> str:
+    contextual_info = build_chat_context(chat_history)
+    sanitized_question = sanitize_chat_input(user_question) if user_question else ""
+    learner_prompt = (
+        f"CÂU HỎI MỚI CỦA HỌC SINH: {sanitized_question}"
+        if sanitized_question
+        else general_instruction
+    )
+
+    concept_block = ""
+    if concept_name is not None or bloom_level is not None:
+        concept_block = (
+            f"KHÁI NIỆM: {concept_name or 'Không rõ'}\n"
+            f"MỨC BLOOM: {bloom_level if bloom_level is not None else 'Không rõ'}\n"
+        )
+
+    return (
+        "CÂU HỎI QUIZ:\n"
+        f"{question}\n\n"
+        "ĐÁP ÁN:\n"
+        f"{chr(10).join(f'{chr(65 + idx)}. {option}' for idx, option in enumerate(options))}\n\n"
+        f"{concept_block}"
+        f"{contextual_info}\n"
+        f"{learner_prompt}\n\n"
+        f"{TUTOR_RESPONSE_REQUIREMENTS}"
+    )
+
+
 def generate_tutor_chat_response(
     question: str,
     options: List[str],
@@ -96,38 +169,13 @@ def generate_tutor_chat_response(
         raise ValueError(validation_error)
 
     llm = get_shared_llm()
-    history = chat_history or []
-    sanitized_question = sanitize_chat_input(user_question)
-
-    contextual_info = ""
-    if len(history) > 6:
-        summary = _summarize_chat_history(history)
-        if summary:
-            contextual_info = f"\nTÓM TẮT HỘI THOẠI TRƯỚC:\n{summary}\n"
-    elif history:
-        turns = "\n\n".join(
-            f"{msg.get('role', 'user')}: {msg.get('content', '')}"
-            for msg in history
-            if msg.get("content")
-        )
-        if turns:
-            contextual_info = f"\nHỘI THOẠI TRƯỚC:\n{turns}\n"
-
-    prompt = (
-        "CÂU HỎI QUIZ:\n"
-        f"{question}\n\n"
-        "ĐÁP ÁN:\n"
-        f"{chr(10).join(f'{chr(65 + idx)}. {option}' for idx, option in enumerate(options))}\n\n"
-        f"KHÁI NIỆM: {concept_name or 'Không rõ'}\n"
-        f"MỨC BLOOM: {bloom_level if bloom_level is not None else 'Không rõ'}\n"
-        f"{contextual_info}\n"
-        f"CÂU HỎI MỚI CỦA HỌC SINH: {sanitized_question}\n\n"
-        "YÊU CẦU TRẢ LỜI:\n"
-        "- Chỉ giải thích xoay quanh câu hỏi quiz hiện tại và kiến thức liên quan trực tiếp.\n"
-        "- Trả lời bằng tiếng Việt tự nhiên, rõ ràng, thân thiện.\n"
-        "- Không tiết lộ đáp án theo kiểu chốt nhanh nếu học sinh chưa hỏi trực tiếp; ưu tiên giải thích để hiểu bản chất.\n"
-        "- Nếu cần viết công thức toán, bắt buộc dùng LaTeX với $...$ hoặc $$...$$.\n"
-        "- Có thể dùng bullet ngắn nếu giúp dễ hiểu hơn.\n"
+    prompt = build_tutor_prompt(
+        question=question,
+        options=options,
+        user_question=user_question,
+        chat_history=chat_history,
+        concept_name=concept_name,
+        bloom_level=bloom_level,
     )
 
     t0 = time.time()
@@ -137,10 +185,7 @@ def generate_tutor_chat_response(
             result = llm.invoke([
                 (
                     "system",
-                    (
-                        "Bạn là Rin-chan, gia sư giúp học sinh hiểu câu hỏi trắc nghiệm. "
-                        "Chỉ thảo luận về bài hiện tại, giữ giọng thân thiện nhưng đi thẳng vào giải thích."
-                    ),
+                    TUTOR_SYSTEM_PROMPT,
                 ),
                 ("human", prompt),
             ])

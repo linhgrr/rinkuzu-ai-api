@@ -14,12 +14,15 @@ from ..config import get_settings
 from .llm import (
     build_chat_completions_url,
     extract_llm_text,
-    get_shared_llm,
     resolve_llm_api_key,
     resolve_retry_policy,
     sleep_before_retry,
 )
-from .tutor_chat import sanitize_chat_input, validate_chat_input
+from .tutor_chat import (
+    TUTOR_SYSTEM_PROMPT,
+    build_tutor_prompt,
+    validate_chat_input,
+)
 
 
 def _resolve_quiz_tutor_model() -> str:
@@ -46,55 +49,6 @@ def _extract_completion_text(payload: Dict) -> str:
     return extract_llm_text(message.get("content"))
 
 
-def _summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
-    if not chat_history:
-        return ""
-
-    llm = get_shared_llm()
-    chat_text = "\n\n".join(
-        f"{msg.get('role', 'user')}: {msg.get('content', '')}"
-        for msg in chat_history[-6:]
-        if msg.get("content")
-    )
-    if not chat_text:
-        return ""
-
-    result = llm.invoke([
-        (
-            "system",
-            "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài.",
-        ),
-        (
-            "human",
-            (
-                "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
-                f"{chat_text}"
-            ),
-        ),
-    ])
-    return extract_llm_text(result.content)
-
-
-def _build_contextual_info(chat_history: List[Dict[str, str]]) -> str:
-    if len(chat_history) > 6:
-        summary = _summarize_chat_history(chat_history)
-        if summary:
-            return f"\nTÓM TẮT HỘI THOẠI TRƯỚC:\n{summary}\n"
-        return ""
-
-    if not chat_history:
-        return ""
-
-    turns = "\n\n".join(
-        f"{msg.get('role', 'user')}: {msg.get('content', '')}"
-        for msg in chat_history
-        if msg.get("content")
-    )
-    if not turns:
-        return ""
-    return f"\nHỘI THOẠI TRƯỚC:\n{turns}\n"
-
-
 def _build_messages(
     *,
     question: str,
@@ -104,21 +58,11 @@ def _build_messages(
     question_image: Optional[str],
     option_images: Optional[List[Optional[str]]],
 ) -> List[Dict]:
-    contextual_info = _build_contextual_info(chat_history)
-    sanitized_question = sanitize_chat_input(user_question) if user_question else ""
-    prompt = (
-        "CÂU HỎI QUIZ:\n"
-        f"{question}\n\n"
-        "ĐÁP ÁN:\n"
-        f"{chr(10).join(f'{chr(65 + idx)}. {option}' for idx, option in enumerate(options))}\n"
-        f"{contextual_info}\n"
-        f"{f'CÂU HỎI MỚI CỦA HỌC SINH: {sanitized_question}' if sanitized_question else 'HÃY GIẢI THÍCH TỔNG QUÁT CÂU HỎI NÀY CHO HỌC SINH.'}\n\n"
-        "YÊU CẦU TRẢ LỜI:\n"
-        "- Chỉ giải thích xoay quanh câu hỏi quiz hiện tại và kiến thức liên quan trực tiếp.\n"
-        "- Trả lời bằng tiếng Việt tự nhiên, rõ ràng, thân thiện.\n"
-        "- Không tiết lộ đáp án theo kiểu chốt nhanh nếu học sinh chưa hỏi trực tiếp; ưu tiên giải thích để hiểu bản chất.\n"
-        "- Nếu cần viết công thức toán, bắt buộc dùng LaTeX với $...$ hoặc $$...$$.\n"
-        "- Có thể dùng bullet ngắn nếu giúp dễ hiểu hơn.\n"
+    prompt = build_tutor_prompt(
+        question=question,
+        options=options,
+        user_question=user_question,
+        chat_history=chat_history,
     )
 
     user_content: List[Dict] = [{"type": "text", "text": prompt}]
@@ -138,10 +82,7 @@ def _build_messages(
     return [
         {
             "role": "system",
-            "content": (
-                "Bạn là Rin-chan, gia sư giúp học sinh hiểu câu hỏi trắc nghiệm. "
-                "Chỉ thảo luận về bài hiện tại, giữ giọng thân thiện nhưng đi thẳng vào giải thích."
-            ),
+            "content": TUTOR_SYSTEM_PROMPT,
         },
         {
             "role": "user",
