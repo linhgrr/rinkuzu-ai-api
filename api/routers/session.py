@@ -5,6 +5,7 @@ Session router — Session lifecycle endpoints.
 import asyncio
 
 from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
 from ..schemas import (
@@ -16,7 +17,7 @@ from ..schemas import (
 )
 from ..dependencies import get_session_manager, get_session_service, get_current_user
 from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
-from ..core.tutor_chat import generate_tutor_chat_response
+from ..core.tutor_chat import create_tutor_chat_stream, generate_tutor_chat_response
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -170,17 +171,48 @@ async def chat_about_exercise(
     if not options:
         raise ExerciseGenerationError("Exercise is missing answer options")
 
-    explanation = await asyncio.to_thread(
-        generate_tutor_chat_response,
-        question=exercise.question,
-        options=options,
-        user_question=req.user_question,
-        chat_history=[item.model_dump() for item in req.chat_history],
-        concept_name=exercise.concept_name,
-        bloom_level=exercise.bloom_level,
-    )
+    chat_history = [item.model_dump() for item in req.chat_history]
 
-    return TutorChatResponse(explanation=explanation)
+    try:
+        if req.stream:
+            stream = await create_tutor_chat_stream(
+                question=exercise.question,
+                options=options,
+                user_question=req.user_question,
+                chat_history=chat_history,
+                concept_name=exercise.concept_name,
+                bloom_level=exercise.bloom_level,
+            )
+            return StreamingResponse(
+                stream,
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache, no-transform",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
+        explanation = await asyncio.to_thread(
+            generate_tutor_chat_response,
+            question=exercise.question,
+            options=options,
+            user_question=req.user_question,
+            chat_history=chat_history,
+            concept_name=exercise.concept_name,
+            bloom_level=exercise.bloom_level,
+        )
+        return TutorChatResponse(explanation=explanation)
+    except ValueError as exc:
+        return JSONResponse(
+            {"detail": str(exc), "error": str(exc)},
+            status_code=400,
+        )
+    except RuntimeError as exc:
+        return JSONResponse(
+            {"detail": str(exc), "error": str(exc)},
+            status_code=502,
+        )
 
 
 @router.get("/{session_id}/status", response_model=SessionStatusResponse)

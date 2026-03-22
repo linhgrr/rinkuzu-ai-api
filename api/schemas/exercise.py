@@ -66,6 +66,7 @@ class TutorChatRequest(BaseModel):
 
     user_question: str = Field(..., alias="userQuestion", min_length=1, max_length=1000)
     chat_history: List[TutorChatMessage] = Field(default_factory=list, alias="chatHistory")
+    stream: bool = False
 
 
 class TutorChatResponse(BaseModel):

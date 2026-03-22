@@ -4,15 +4,20 @@ tutor_chat.py — Adaptive tutor-chat prompt and validation logic.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
-from typing import Dict, List, Optional
+from typing import AsyncIterator, Dict, List, Optional
 
+import httpx
 from loguru import logger
 
+from ..config import get_settings
 from .llm import (
+    build_chat_completions_url,
     extract_llm_text,
     get_shared_llm,
+    resolve_llm_api_key,
     resolve_retry_policy,
     sleep_before_retry,
 )
@@ -154,6 +159,91 @@ def build_tutor_prompt(
         f"{learner_prompt}\n\n"
         f"{TUTOR_RESPONSE_REQUIREMENTS}"
     )
+
+
+def _resolve_tutor_model() -> str:
+    settings = get_settings()
+    return settings.exercise_llm_model or settings.llm_model or "gemini-3.0-pro"
+
+
+def _build_stream_headers(*, accept: str) -> Dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": accept,
+    }
+    api_key = resolve_llm_api_key()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return headers
+
+
+async def create_tutor_chat_stream(
+    *,
+    question: str,
+    options: List[str],
+    user_question: str,
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    concept_name: Optional[str] = None,
+    bloom_level: Optional[int] = None,
+) -> AsyncIterator[bytes]:
+    validation_error = validate_chat_input(user_question)
+    if validation_error:
+        raise ValueError(validation_error)
+
+    settings = get_settings()
+    endpoint = build_chat_completions_url(settings.llm_base_url)
+    prompt = await asyncio.to_thread(
+        build_tutor_prompt,
+        question=question,
+        options=options,
+        user_question=user_question,
+        chat_history=chat_history,
+        concept_name=concept_name,
+        bloom_level=bloom_level,
+    )
+    payload = {
+        "model": _resolve_tutor_model(),
+        "temperature": 0.7,
+        "stream": True,
+        "messages": [
+            {
+                "role": "system",
+                "content": TUTOR_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+    }
+
+    timeout = httpx.Timeout(settings.llm_timeout_sec, read=None)
+    client = httpx.AsyncClient(timeout=timeout)
+    request = client.build_request(
+        "POST",
+        endpoint,
+        headers=_build_stream_headers(accept="text/event-stream"),
+        json=payload,
+    )
+    response = await client.send(request, stream=True)
+
+    if response.status_code >= 400:
+        error_body = (await response.aread()).decode("utf-8", errors="replace")
+        await response.aclose()
+        await client.aclose()
+        raise RuntimeError(
+            error_body or f"Tutor chat streaming failed with status {response.status_code}"
+        )
+
+    async def iterator() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
+
+    return iterator()
 
 
 def generate_tutor_chat_response(
