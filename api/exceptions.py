@@ -4,7 +4,9 @@ exceptions.py — Domain exceptions and global FastAPI exception handlers.
 
 from fastapi import HTTPException
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from loguru import logger
 
 
 # ── Domain Exceptions ───────────────────────────────────────
@@ -76,7 +78,42 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
     )
 
 
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Normalize request validation failures into a stable JSON envelope."""
+    logger.warning(
+        "[ValidationError] method={} path={} errors={}",
+        request.method,
+        request.url.path,
+        exc.errors(),
+    )
+    detail = "Invalid request"
+    return JSONResponse(
+        status_code=422,
+        content={"detail": detail, "error": detail, "meta": exc.errors()},
+    )
+
+
+async def unexpected_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch unexpected errors and avoid leaking internal details to clients."""
+    logger.exception(
+        "[UnhandledError] method={} path={} error_type={}",
+        request.method,
+        request.url.path,
+        exc.__class__.__name__,
+    )
+    detail = "Internal server error"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": detail, "error": detail},
+    )
+
+
 def register_exception_handlers(app) -> None:
     """Register all custom exception handlers on the FastAPI app."""
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, unexpected_exception_handler)
