@@ -17,7 +17,7 @@ from ..schemas import (
 )
 from ..dependencies import get_session_manager, get_session_service, get_current_user
 from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
-from ..core.tutor_chat import create_tutor_chat_stream, generate_tutor_chat_response
+from ..core.tutor_chat import create_tutor_chat_stream, generate_tutor_chat_response, sanitize_chat_input
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -32,6 +32,44 @@ async def _resolve_user_session(manager, session_id: str, user_id: str):
     if not session:
         raise SessionNotFoundError(session_id)
     return session
+
+
+async def _get_tutor_chat_history(session, exercise_id: str) -> list[dict[str, str]]:
+    async with session._lock:
+        if session.tutor_chat_exercise_id != exercise_id:
+            session.tutor_chat_exercise_id = exercise_id
+            session.tutor_chat_history = []
+        return [dict(item) for item in session.tutor_chat_history]
+
+
+async def _append_tutor_chat_turn(
+    session,
+    *,
+    exercise_id: str,
+    user_question: str,
+    assistant_response: str,
+) -> None:
+    sanitized_user_question = sanitize_chat_input(user_question)
+    sanitized_assistant_response = (
+        str(assistant_response)
+        .replace("<", "")
+        .replace(">", "")
+        .strip()[:4000]
+    )
+
+    if not sanitized_user_question or not sanitized_assistant_response:
+        return
+
+    async with session._lock:
+        if session.tutor_chat_exercise_id != exercise_id:
+            session.tutor_chat_exercise_id = exercise_id
+            session.tutor_chat_history = []
+
+        session.tutor_chat_history.extend([
+            {"role": "user", "content": sanitized_user_question},
+            {"role": "assistant", "content": sanitized_assistant_response},
+        ])
+        session.tutor_chat_history = session.tutor_chat_history[-12:]
 
 
 @router.post("/start", response_model=SessionCreateResponse)
@@ -171,10 +209,18 @@ async def chat_about_exercise(
     if not options:
         raise ExerciseGenerationError("Exercise is missing answer options")
 
-    chat_history = [item.model_dump() for item in req.chat_history]
+    chat_history = await _get_tutor_chat_history(session, exercise.exercise_id)
 
     try:
         if req.stream:
+            async def persist_chat_history(full_response: str) -> None:
+                await _append_tutor_chat_turn(
+                    session,
+                    exercise_id=exercise.exercise_id,
+                    user_question=req.user_question,
+                    assistant_response=full_response,
+                )
+
             stream = await create_tutor_chat_stream(
                 question=exercise.question,
                 options=options,
@@ -182,6 +228,7 @@ async def chat_about_exercise(
                 chat_history=chat_history,
                 concept_name=exercise.concept_name,
                 bloom_level=exercise.bloom_level,
+                on_complete=persist_chat_history,
             )
             return StreamingResponse(
                 stream,
@@ -202,6 +249,12 @@ async def chat_about_exercise(
             concept_name=exercise.concept_name,
             bloom_level=exercise.bloom_level,
         )
+        await _append_tutor_chat_turn(
+            session,
+            exercise_id=exercise.exercise_id,
+            user_question=req.user_question,
+            assistant_response=explanation,
+        )
         return TutorChatResponse(explanation=explanation)
     except ValueError as exc:
         return JSONResponse(
@@ -212,6 +265,12 @@ async def chat_about_exercise(
         return JSONResponse(
             {"detail": str(exc), "error": str(exc)},
             status_code=502,
+        )
+    except Exception as exc:
+        logger.exception(f"[SessionRouter] Tutor chat failed unexpectedly: {exc}")
+        return JSONResponse(
+            {"detail": "Tutor chat failed unexpectedly", "error": "Tutor chat failed unexpectedly"},
+            status_code=500,
         )
 
 

@@ -5,9 +5,11 @@ tutor_chat.py — Adaptive tutor-chat prompt and validation logic.
 from __future__ import annotations
 
 import asyncio
+import codecs
+import json
 import re
 import time
-from typing import AsyncIterator, Dict, List, Optional
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 import httpx
 from loguru import logger
@@ -50,9 +52,9 @@ def sanitize_chat_input(input_text: str) -> str:
 def validate_chat_input(user_question: str) -> Optional[str]:
     sanitized = sanitize_chat_input(user_question)
     suspicious_patterns = [
-        r"ignore\s+(previous|above|all)\s+(instructions?|prompts?)",
+        r"ignore\b[\s\S]{0,120}\b(instructions?|prompts?)",
         r"you\s+are\s+now\s+",
-        r"forget\s+(everything|all|previous)",
+        r"forget\b[\s\S]{0,120}\b(previous|everything|all)",
         r"act\s+as\s+(?!.*tutor)",
         r"roleplay|role\s*play",
         r"pretend\s+to\s+be",
@@ -74,6 +76,30 @@ def validate_chat_input(user_question: str) -> Optional[str]:
     return None
 
 
+def normalize_chat_history(chat_history: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
+    normalized: List[Dict[str, str]] = []
+
+    for message in chat_history or []:
+        role = message.get("role")
+        if role not in {"user", "assistant"}:
+            continue
+
+        content = sanitize_chat_input(str(message.get("content", "")))
+        if not content:
+            continue
+
+        if validate_chat_input(content):
+            logger.warning("[TutorChat] Dropped suspicious historical chat message")
+            continue
+
+        normalized.append({
+            "role": role,
+            "content": content,
+        })
+
+    return normalized[-12:]
+
+
 def summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
     if not chat_history:
         return ""
@@ -87,24 +113,28 @@ def summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
     if not chat_text:
         return ""
 
-    result = llm.invoke([
-        (
-            "system",
-            "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài.",
-        ),
-        (
-            "human",
+    try:
+        result = llm.invoke([
             (
-                "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
-                f"{chat_text}"
+                "system",
+                "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài.",
             ),
-        ),
-    ])
-    return extract_llm_text(result.content)
+            (
+                "human",
+                (
+                    "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
+                    f"{chat_text}"
+                ),
+            ),
+        ])
+        return extract_llm_text(result.content)
+    except Exception as exc:
+        logger.warning(f"[TutorChat] Failed to summarize chat history: {exc}")
+        return ""
 
 
 def build_chat_context(chat_history: Optional[List[Dict[str, str]]]) -> str:
-    history = chat_history or []
+    history = normalize_chat_history(chat_history)
     if len(history) > 6:
         summary = summarize_chat_history(history)
         if summary:
@@ -177,6 +207,68 @@ def _build_stream_headers(*, accept: str) -> Dict[str, str]:
     return headers
 
 
+def _extract_openai_delta_content(payload: Dict) -> str:
+    choices = payload.get("choices") or []
+    if choices:
+        delta = choices[0].get("delta") or {}
+        content = delta.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if isinstance(item, dict) and isinstance(item.get("text"), str):
+                    parts.append(item["text"])
+            return "".join(parts)
+
+    content = payload.get("content")
+    return content if isinstance(content, str) else ""
+
+
+def _split_sse_events(buffer: str) -> tuple[List[str], str]:
+    events: List[str] = []
+    last_index = 0
+
+    for match in re.finditer(r"\r?\n\r?\n", buffer):
+        events.append(buffer[last_index:match.start()])
+        last_index = match.end()
+
+    return events, buffer[last_index:]
+
+
+def _parse_sse_event(event: str) -> tuple[str, bool]:
+    data_lines = [
+        line[5:].strip()
+        for line in re.split(r"\r?\n", event)
+        if line.startswith("data:")
+    ]
+    if not data_lines:
+        return "", False
+
+    data = "\n".join(data_lines)
+    if data == "[DONE]":
+        return "", True
+
+    try:
+        payload = json.loads(data)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Tutor chat stream returned invalid SSE payload") from exc
+
+    error = payload.get("error")
+    if error:
+        raise RuntimeError(error if isinstance(error, str) else "Tutor chat streaming failed")
+
+    finish_reason = None
+    choices = payload.get("choices") or []
+    if choices:
+        finish_reason = choices[0].get("finish_reason")
+
+    return _extract_openai_delta_content(payload), payload.get("done") is True or finish_reason is not None
+
+
 async def create_tutor_chat_stream(
     *,
     question: str,
@@ -185,6 +277,7 @@ async def create_tutor_chat_stream(
     chat_history: Optional[List[Dict[str, str]]] = None,
     concept_name: Optional[str] = None,
     bloom_level: Optional[int] = None,
+    on_complete: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> AsyncIterator[bytes]:
     validation_error = validate_chat_input(user_question)
     if validation_error:
@@ -218,27 +311,92 @@ async def create_tutor_chat_stream(
     }
 
     timeout = httpx.Timeout(settings.llm_timeout_sec, read=None)
-    client = httpx.AsyncClient(timeout=timeout)
-    request = client.build_request(
-        "POST",
-        endpoint,
-        headers=_build_stream_headers(accept="text/event-stream"),
-        json=payload,
-    )
-    response = await client.send(request, stream=True)
+    max_retries, backoff_sec = resolve_retry_policy()
+    client: Optional[httpx.AsyncClient] = None
+    response: Optional[httpx.Response] = None
 
-    if response.status_code >= 400:
-        error_body = (await response.aread()).decode("utf-8", errors="replace")
-        await response.aclose()
-        await client.aclose()
-        raise RuntimeError(
-            error_body or f"Tutor chat streaming failed with status {response.status_code}"
-        )
+    for attempt in range(1, max_retries + 1):
+        candidate_client = httpx.AsyncClient(timeout=timeout)
+        try:
+            request = candidate_client.build_request(
+                "POST",
+                endpoint,
+                headers=_build_stream_headers(accept="text/event-stream"),
+                json=payload,
+            )
+            candidate_response = await candidate_client.send(request, stream=True)
+
+            if candidate_response.status_code >= 400:
+                error_body = (await candidate_response.aread()).decode("utf-8", errors="replace")
+                await candidate_response.aclose()
+                raise RuntimeError(
+                    error_body or f"Tutor chat streaming failed with status {candidate_response.status_code}"
+                )
+
+            client = candidate_client
+            response = candidate_response
+            break
+        except Exception as exc:
+            logger.warning(
+                f"[LLM] ⚠ tutor chat stream attempt {attempt}/{max_retries} failed "
+                f"(will_retry={attempt < max_retries}): {exc}"
+            )
+            await candidate_client.aclose()
+            if attempt < max_retries:
+                await asyncio.sleep(backoff_sec * attempt)
+                continue
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError("Tutor chat service is temporarily unavailable") from exc
+
+    if client is None or response is None:
+        raise RuntimeError("Tutor chat service is temporarily unavailable")
 
     async def iterator() -> AsyncIterator[bytes]:
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        buffer = ""
+        full_response = ""
+        saw_terminal_event = False
+
         try:
             async for chunk in response.aiter_bytes():
                 yield chunk
+
+                buffer += decoder.decode(chunk)
+                events, buffer = _split_sse_events(buffer)
+
+                for event in events:
+                    delta, is_terminal = _parse_sse_event(event)
+                    if delta:
+                        full_response += delta
+                    if is_terminal:
+                        saw_terminal_event = True
+
+            buffer += decoder.decode(b"", final=True)
+            events, buffer = _split_sse_events(buffer)
+
+            for event in events:
+                delta, is_terminal = _parse_sse_event(event)
+                if delta:
+                    full_response += delta
+                if is_terminal:
+                    saw_terminal_event = True
+
+            if buffer.strip():
+                delta, is_terminal = _parse_sse_event(buffer)
+                if delta:
+                    full_response += delta
+                if is_terminal:
+                    saw_terminal_event = True
+
+            if not saw_terminal_event:
+                raise RuntimeError("Tutor chat stream ended before completion signal")
+
+            if on_complete and full_response.strip():
+                try:
+                    await on_complete(full_response.strip())
+                except Exception as exc:
+                    logger.warning(f"[TutorChat] Failed to persist chat history: {exc}")
         finally:
             await response.aclose()
             await client.aclose()

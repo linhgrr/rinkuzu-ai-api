@@ -70,6 +70,8 @@ class SessionState:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     concept_theories: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     _prefetch_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    tutor_chat_history: List[Dict[str, str]] = field(default_factory=list)
+    tutor_chat_exercise_id: Optional[str] = None
 
 
 class SessionManager:
