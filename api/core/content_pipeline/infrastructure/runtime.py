@@ -40,7 +40,7 @@ class ContentProcessorBindings:
 
 def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str):
     """Import theory generation lazily to avoid runtime circular imports."""
-    from ...exercise_gen import generate_theory
+    from ...learning.exercise_gen import generate_theory
 
     return generate_theory(concept_name, concept_definition)
 

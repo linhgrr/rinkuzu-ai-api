@@ -17,7 +17,11 @@ from ..schemas import (
 )
 from ..dependencies import get_session_manager, get_session_service, get_current_user
 from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
-from ..core.tutor_chat import create_tutor_chat_stream, generate_tutor_chat_response, sanitize_chat_input
+from ..core.quiz.tutor_chat import (
+    create_tutor_chat_stream,
+    generate_tutor_chat_response,
+    sanitize_chat_input,
+)
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 

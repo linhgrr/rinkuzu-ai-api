@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from api.core import llm as llm_module
-from api.core.llm import _resolve_shared_llm_model, resolve_retry_policy
+from api.core.shared import llm as llm_module
+from api.core.shared.llm import _resolve_shared_llm_model, resolve_retry_policy
 
 
 def test_resolve_retry_policy_uses_backend_settings(monkeypatch):

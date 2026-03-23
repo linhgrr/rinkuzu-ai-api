@@ -1,14 +1,14 @@
 from types import SimpleNamespace
 
-from api.core.exercise_gen import select_exercise_type
-from api.core.exercise_types import (
+from api.core.learning.exercise_gen import select_exercise_type
+from api.core.learning.exercise_types import (
     FillBlankOutput,
     MatchingOutput,
     MatchingPair,
     serialize_exercise_result,
 )
-from api.services import exercise_service as exercise_service_module
-from api.services.exercise_service import ExerciseService
+from api.core.learning import exercise_service as exercise_service_module
+from api.core.learning.exercise_service import ExerciseService
 
 
 def test_select_exercise_type_covers_new_bloom_mapping():

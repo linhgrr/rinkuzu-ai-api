@@ -10,8 +10,8 @@ from typing import AsyncIterator, Dict, List, Optional
 import httpx
 from loguru import logger
 
-from ..config import get_settings
-from .llm import (
+from ...config import get_settings
+from ..shared.llm import (
     build_chat_completions_url,
     extract_llm_text,
     resolve_llm_api_key,

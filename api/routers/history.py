@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 
 from ..config import get_settings
-from ..core import mongo_store
+from ..core.shared import mongo_store
 from ..dependencies import get_current_user
 from ..exceptions import PipelineNotFoundError
 from ..schemas import (

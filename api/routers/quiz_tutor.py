@@ -7,7 +7,7 @@ import asyncio
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ..core.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
+from ..core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
 from ..dependencies import get_current_user
 from ..schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponse
 

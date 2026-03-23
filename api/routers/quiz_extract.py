@@ -16,7 +16,7 @@ from loguru import logger
 from ..config import get_settings
 from ..dependencies import get_current_user
 from ..core.content_pipeline.infrastructure.runtime import get_s3_client
-from ..core.llm import build_chat_completions_url, extract_llm_text
+from ..core.shared.llm import build_chat_completions_url, extract_llm_text
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 MAX_PDF_BYTES = 50 * 1024 * 1024

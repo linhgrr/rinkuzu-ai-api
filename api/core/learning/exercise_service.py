@@ -1,5 +1,5 @@
 """
-services/exercise_service.py — Exercise lifecycle business logic.
+exercise_service.py — Exercise lifecycle business logic.
 
 Handles: concept selection via D3QN, theory generation, exercise generation,
 answer submission, and prefetch caching.
@@ -13,16 +13,28 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from loguru import logger
 
-from ..core.agent import select_action, decode_action
-from ..core.exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
-from ..config import settings
-from ..exceptions import ExerciseGenerationError
+from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
+from ...config import settings
+from ...exceptions import ExerciseGenerationError
 
 
 BLOOM_LABELS = {
     1: "Remember", 2: "Understand", 3: "Apply",
     4: "Analyze", 5: "Evaluate", 6: "Create",
 }
+
+
+def _select_action(*args, **kwargs):
+    """Lazy-load RL inference helpers so non-ML tests can import this module."""
+    from .agent import select_action
+
+    return select_action(*args, **kwargs)
+
+
+def _decode_action(*args, **kwargs):
+    from .agent import decode_action
+
+    return decode_action(*args, **kwargs)
 
 
 class ExerciseService:
@@ -138,11 +150,11 @@ class ExerciseService:
                 logger.info(f"[Exercise] 🎯 STEP 0 — Forcing warm-up: concept_idx=0, bloom=1")
             else:
                 masks = env.action_masks()
-                action_id = select_action(
+                action_id = _select_action(
                     session.q_net, session.current_obs, masks, session.device,
                     n_concepts=env.n_concepts,
                 )
-                concept_idx, bloom_level = decode_action(action_id)
+                concept_idx, bloom_level = _decode_action(action_id)
                 logger.info(f"[Exercise] 🤖 D3QN selected action_id={action_id}")
 
             id_to_concept = self._build_id_to_concept_map(session)
@@ -198,7 +210,7 @@ class ExerciseService:
 
     async def generate_exercise(self, session, background_tasks=None):
         """Generate exercise from prefetch cache or LLM."""
-        from ..core.session import ExerciseRecord
+        from .session import ExerciseRecord
 
         if not hasattr(session, '_pending_concept_idx'):
             return None
@@ -448,11 +460,11 @@ class ExerciseService:
                 bloom_level = 1
             else:
                 masks = session.env.action_masks()
-                action_id = select_action(
+                action_id = _select_action(
                     session.q_net, session.current_obs, masks, session.device,
                     n_concepts=session.env.n_concepts,
                 )
-                concept_idx, bloom_level = decode_action(action_id)
+                concept_idx, bloom_level = _decode_action(action_id)
 
             id_to_concept = self._build_id_to_concept_map(session)
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
@@ -500,11 +512,11 @@ class ExerciseService:
                     return
 
                 masks = env_snap.action_masks()
-                next_action = select_action(
+                next_action = _select_action(
                     session.q_net, obs, masks, session.device,
                     n_concepts=env_snap.n_concepts,
                 )
-                next_concept_idx, next_bloom = decode_action(next_action)
+                next_concept_idx, next_bloom = _decode_action(next_action)
 
                 next_concept_id = id_to_concept.get(next_concept_idx, str(next_concept_idx))
                 next_concept_name = session.concept_names.get(next_concept_id, next_concept_id)

@@ -13,7 +13,7 @@ import aiofiles
 from ..core.content_pipeline import (
     PipelineStatus,
 )
-from ..core import mongo_store
+from ..core.shared import mongo_store
 from ..dependencies import (
     get_content_pipeline_availability,
     get_content_pipeline_service,

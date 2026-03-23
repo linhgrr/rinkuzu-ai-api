@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from api.core import tutor_chat
+from api.core.quiz import tutor_chat
 
 
 def test_build_tutor_prompt_ignores_suspicious_history_messages():

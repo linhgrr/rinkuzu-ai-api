@@ -22,7 +22,7 @@ from .exercise_types import (
     select_exercise_type,
     serialize_exercise_result,
 )
-from .llm import (
+from ..shared.llm import (
     get_structured_llm,
     resolve_retry_policy,
     sleep_before_retry,

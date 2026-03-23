@@ -10,7 +10,7 @@ from typing import Any, Optional
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from loguru import logger
 
-from ..config import get_settings
+from ...config import get_settings
 
 
 _shared_llm: Optional[ChatOpenAI] = None

@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from .. import mongo_store
+from ..shared import mongo_store
 from .application.pipeline_runner import PipelineRunner
 from .application.pipeline_service import PipelineService
 from .domain.jobs import PipelineJob

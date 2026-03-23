@@ -7,7 +7,7 @@ SessionManager handles:
   - Knowledge graph and mastery queries
 
 Exercise-related logic (generation, submission, prefetch) is delegated
-to services/exercise_service.py.
+to the learning exercise service.
 """
 
 import uuid
@@ -20,10 +20,10 @@ import numpy as np
 import torch
 from loguru import logger
 
-from ..config import get_settings
+from ...config import get_settings
 from .models import load_saint_model, load_dqn_model, DuelingQNetwork, SaintModel
 from .environment import AdaptiveLearningEnv
-from . import mongo_store
+from ..shared import mongo_store
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
 _MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)

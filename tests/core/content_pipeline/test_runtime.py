@@ -52,7 +52,7 @@ def test_runtime_root_no_longer_points_to_content_processor_folder():
 
 
 def test_generate_theory_helper_imports_exercise_gen_lazily(monkeypatch):
-    module_name = "api.core.exercise_gen"
+    module_name = "api.core.learning.exercise_gen"
     original_module = sys.modules.get(module_name)
     fake_module = SimpleNamespace(
         generate_theory=lambda name, definition: {

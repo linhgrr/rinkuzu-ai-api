@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.services import exercise_service as exercise_service_module
-from api.services.exercise_service import ExerciseService
+from api.core.learning import exercise_service as exercise_service_module
+from api.core.learning.exercise_service import ExerciseService
 
 
 def test_exercise_service_uses_separate_request_and_prefetch_timeouts(monkeypatch):

@@ -18,7 +18,7 @@ from botocore.client import Config
 from loguru import logger
 
 from ......config import get_settings
-from .....llm import build_chat_completions_url, extract_llm_text
+from .....shared.llm import build_chat_completions_url, extract_llm_text
 from .base import BaseLoader
 
 # ── OCR prompt ─────────────────────────────────────────────────────────

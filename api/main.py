@@ -10,9 +10,9 @@ from loguru import logger
 
 from .config import get_settings
 from .exceptions import register_exception_handlers
-from .core.session import SessionManager
-from .core.llm import initialize_shared_llm
-from .core import mongo_store
+from .core.learning.session import SessionManager
+from .core.shared.llm import initialize_shared_llm
+from .core.shared import mongo_store
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
 from .core.content_pipeline.application.pipeline_service import PipelineService
 from .core.content_pipeline.infrastructure.runtime import (
@@ -20,7 +20,7 @@ from .core.content_pipeline.infrastructure.runtime import (
     CONTENT_PROCESSOR_ERROR,
     CONTENT_PROCESSOR_SRC,
 )
-from .services.exercise_service import ExerciseService
+from .core.learning.exercise_service import ExerciseService
 from .routers import session as session_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
