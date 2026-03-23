@@ -1,6 +1,13 @@
 from types import SimpleNamespace
 
 from api.core.exercise_gen import select_exercise_type
+from api.core.exercise_types import (
+    FillBlankOutput,
+    MatchingOutput,
+    MatchingPair,
+    serialize_exercise_result,
+)
+from api.services import exercise_service as exercise_service_module
 from api.services.exercise_service import ExerciseService
 
 
@@ -84,5 +91,73 @@ def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_orderin
             True,
             "Khái niệm A -> Định nghĩa A, Khái niệm B -> Định nghĩa B",
         )
+    finally:
+        service.close()
+
+
+def test_serialize_exercise_result_normalizes_fill_blank_and_matching_payloads():
+    fill_blank = FillBlankOutput(
+        question="ignored",
+        sentence="Động năng được tính bằng công thức _____.",
+        blank_answers=["Wđ", "Wd"],
+        hint="Liên quan đến năng lượng chuyển động",
+        explanation_correct="Đúng",
+        explanation_incorrect="Sai",
+    )
+    matching = MatchingOutput(
+        question="Ghép khái niệm với định nghĩa phù hợp.",
+        pairs=[
+            MatchingPair(left="Vận tốc", right="Độ lớn và hướng của chuyển động"),
+            MatchingPair(left="Gia tốc", right="Độ biến thiên vận tốc theo thời gian"),
+            MatchingPair(left="Lực", right="Tác dụng làm vật đổi trạng thái chuyển động"),
+        ],
+        right_items=[
+            "Độ biến thiên vận tốc theo thời gian",
+            "Tác dụng làm vật đổi trạng thái chuyển động",
+            "Độ lớn và hướng của chuyển động",
+        ],
+        explanation_correct="Đúng",
+        explanation_incorrect="Sai",
+    )
+
+    fill_blank_payload = serialize_exercise_result(fill_blank)
+    matching_payload = serialize_exercise_result(matching)
+
+    assert fill_blank_payload["question"] == "Động năng được tính bằng công thức _____."
+    assert fill_blank_payload["correct_answer"] == ["Wđ", "Wd"]
+    assert matching_payload["right_items"][0] == "Độ biến thiên vận tốc theo thời gian"
+    assert matching_payload["correct_answer"]["Vận tốc"] == "Độ lớn và hướng của chuyển động"
+
+
+def test_evaluate_answer_updates_short_answer_feedback(monkeypatch):
+    service = ExerciseService()
+    monkeypatch.setattr(
+        exercise_service_module,
+        "evaluate_short_answer",
+        lambda **_kwargs: {
+            "is_correct": True,
+            "explanation": "Đáp án đạt rubric cốt lõi.",
+            "score": 9,
+        },
+    )
+
+    short_answer = SimpleNamespace(
+        exercise_type="short_answer",
+        correct_answer="Mẫu trả lời",
+        correct_option="Mẫu trả lời",
+        concept_name="Concept",
+        question="Question",
+        rubric=["Ý chính", "Lập luận"],
+        explanation_correct="",
+        explanation_incorrect="",
+    )
+
+    try:
+        assert service._evaluate_answer(short_answer, {"text": "Câu trả lời của học sinh"}) == (
+            True,
+            "Câu trả lời của học sinh",
+        )
+        assert short_answer.explanation_correct == "Đáp án đạt rubric cốt lõi."
+        assert short_answer.explanation_incorrect == "Đáp án đạt rubric cốt lõi."
     finally:
         service.close()
