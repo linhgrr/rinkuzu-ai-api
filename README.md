@@ -1,3 +1,12 @@
+---
+title: Rinkuzu AI API
+emoji: 🚀
+colorFrom: gray
+colorTo: blue
+sdk: docker
+pinned: false
+---
+
 # Rinkuzu AI API
 
 FastAPI backend cho adaptive learning, quiz tutor, quiz extraction, và content pipeline.
