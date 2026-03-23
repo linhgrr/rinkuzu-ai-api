@@ -55,7 +55,10 @@ async def test_eager_prefetch_uses_prefetch_timeout(monkeypatch):
     monkeypatch.setattr(service, "_generate_exercise_dedup", fake_generate_exercise_dedup)
 
     session = SimpleNamespace(
-        env=SimpleNamespace(get_session_stats=lambda: {"step": 0}),
+        env=SimpleNamespace(
+            get_session_stats=lambda: {"step": 0},
+            get_concept_mastery=lambda: [0.2],
+        ),
         concept_map={"concept-1": 0},
         concept_names={"concept-1": "Concept 1"},
         concept_definitions={"concept-1": "Definition 1"},

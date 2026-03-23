@@ -14,7 +14,7 @@ import numpy as np
 from loguru import logger
 
 from ..core.agent import select_action, decode_action
-from ..core.exercise_gen import generate_exercise, generate_theory
+from ..core.exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from ..config import settings
 from ..exceptions import ExerciseGenerationError
 
@@ -40,7 +40,7 @@ class ExerciseService:
         )
         self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)
-        self._exercise_inflight: Dict[Tuple[str, int, int], asyncio.Future] = {}
+        self._exercise_inflight: Dict[Tuple[str, int, int, int], asyncio.Future] = {}
         self._theory_inflight: Dict[Tuple[str, str], asyncio.Future] = {}
 
     @staticmethod
@@ -63,9 +63,11 @@ class ExerciseService:
         bloom_level: int,
         concept_name: str,
         concept_def: str,
+        mastery: Optional[float],
         timeout_sec: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
-        key = (session.session_id, concept_idx, bloom_level)
+        mastery_bucket = int(max(0.0, min(1.0, mastery or 0.0)) * 10)
+        key = (session.session_id, concept_idx, bloom_level, mastery_bucket)
         existing = self._exercise_inflight.get(key)
         if existing is not None:
             return await existing
@@ -76,6 +78,7 @@ class ExerciseService:
                 concept_name,
                 concept_def,
                 bloom_level,
+                mastery,
                 timeout_sec=timeout_sec,
             )
 
@@ -223,6 +226,8 @@ class ExerciseService:
         if exercise_data is None:
             session._prefetch_cache.clear()
             concept_def = session.concept_definitions.get(concept_id, "")
+            concept_mastery = session.env.get_concept_mastery()
+            mastery = float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
             logger.info(f"[Exercise] Generating for {concept_name} (Bloom {bloom_level})...")
             try:
                 exercise_data = await self._generate_exercise_dedup(
@@ -231,6 +236,7 @@ class ExerciseService:
                     bloom_level=bloom_level,
                     concept_name=concept_name,
                     concept_def=concept_def,
+                    mastery=mastery,
                 )
             except Exception as e:
                 logger.error(f"[Exercise] ✗ Generation failed: {e}")
@@ -246,9 +252,17 @@ class ExerciseService:
             concept_name=concept_name,
             bloom_level=bloom_level,
             question=exercise_data["question"],
-            options=exercise_data.get("options", {}),
-            correct_option=exercise_data.get("correct_option", "A"),
+            correct_option=exercise_data.get("correct_option", ""),
             explanation="",
+            exercise_type=exercise_data.get("exercise_type", "mcq"),
+            options=exercise_data.get("options", {}),
+            statement=exercise_data.get("statement"),
+            hint=exercise_data.get("hint"),
+            items=exercise_data.get("items", []),
+            pairs=exercise_data.get("pairs", []),
+            right_items=exercise_data.get("right_items", []),
+            rubric=exercise_data.get("rubric", []),
+            correct_answer=exercise_data.get("correct_answer"),
             explanation_correct=exercise_data.get("explanation_correct", ""),
             explanation_incorrect=exercise_data.get("explanation_incorrect", ""),
             theory=None,
@@ -266,24 +280,113 @@ class ExerciseService:
 
         return exercise
 
-    async def submit_answer(self, session, answer: str, background_tasks=None) -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def _normalize_text(value: str) -> str:
+        return " ".join(value.strip().casefold().split())
+
+    @classmethod
+    def _serialize_answer_for_history(cls, exercise, answer: Dict[str, Any]) -> Any:
+        exercise_type = getattr(exercise, "exercise_type", "mcq")
+        if exercise_type in {"mcq", "multi_correct"}:
+            choices = answer.get("choices") or []
+            if choices:
+                return ", ".join(sorted(choices))
+            return answer.get("choice")
+        if exercise_type == "true_false":
+            value = answer.get("boolean")
+            return None if value is None else ("True" if value else "False")
+        if exercise_type == "fill_blank":
+            blanks = [item.strip() for item in (answer.get("blanks") or []) if item and item.strip()]
+            return ", ".join(blanks)
+        if exercise_type == "ordering":
+            ordering = [item.strip() for item in (answer.get("ordering") or []) if item and item.strip()]
+            return " → ".join(ordering)
+        if exercise_type == "matching":
+            matching = answer.get("matching") or {}
+            return ", ".join(f"{left} -> {right}" for left, right in matching.items())
+        return (answer.get("text") or "").strip()
+
+    def _evaluate_answer(self, exercise, answer: Dict[str, Any]) -> Tuple[bool, str]:
+        exercise_type = getattr(exercise, "exercise_type", "mcq")
+
+        if exercise_type == "mcq":
+            selected = (answer.get("choice") or "").strip().upper()
+            return selected == exercise.correct_option.strip().upper(), selected
+
+        if exercise_type == "true_false":
+            selected = answer.get("boolean")
+            expected = bool(exercise.correct_answer)
+            return selected is not None and bool(selected) == expected, "True" if selected else "False"
+
+        if exercise_type == "fill_blank":
+            user_values = [self._normalize_text(item) for item in (answer.get("blanks") or []) if item and item.strip()]
+            accepted = [self._normalize_text(item) for item in (exercise.correct_answer or []) if isinstance(item, str)]
+            is_correct = bool(user_values and accepted and user_values[0] in accepted)
+            return is_correct, ", ".join(answer.get("blanks") or [])
+
+        if exercise_type == "multi_correct":
+            selected = sorted({item.strip().upper() for item in (answer.get("choices") or []) if item and item.strip()})
+            expected = sorted({item.strip().upper() for item in (exercise.correct_answer or []) if isinstance(item, str)})
+            return selected == expected, ", ".join(selected)
+
+        if exercise_type == "ordering":
+            selected = [self._normalize_text(item) for item in (answer.get("ordering") or []) if item and item.strip()]
+            expected = [self._normalize_text(item) for item in (exercise.correct_answer or []) if isinstance(item, str)]
+            return bool(selected) and selected == expected, " → ".join(answer.get("ordering") or [])
+
+        if exercise_type == "matching":
+            selected = {
+                self._normalize_text(left): self._normalize_text(right)
+                for left, right in (answer.get("matching") or {}).items()
+                if left and right
+            }
+            expected = {
+                self._normalize_text(left): self._normalize_text(right)
+                for left, right in (exercise.correct_answer or {}).items()
+                if isinstance(left, str) and isinstance(right, str)
+            }
+            return bool(selected) and selected == expected, ", ".join(
+                f"{left} -> {right}" for left, right in (answer.get("matching") or {}).items()
+            )
+
+        student_answer = (answer.get("text") or "").strip()
+        grading = evaluate_short_answer(
+            concept_name=exercise.concept_name,
+            question=exercise.question,
+            rubric=exercise.rubric,
+            sample_answer=str(exercise.correct_answer or exercise.correct_option),
+            student_answer=student_answer,
+        )
+        exercise.explanation_correct = grading["explanation"]
+        exercise.explanation_incorrect = grading["explanation"]
+        return bool(grading["is_correct"]), student_answer
+
+    async def submit_answer(self, session, answer: Dict[str, Any], background_tasks=None) -> Optional[Dict[str, Any]]:
         """Process user's answer, update environment, return result."""
-        
+
         async with session._lock:
             if not session.current_exercise:
                 return None
 
             exercise = session.current_exercise
-            is_correct = answer.strip().upper() == exercise.correct_option.strip().upper()
+            if exercise.exercise_type == "short_answer":
+                is_correct, answer_summary = await self._run_llm_call(
+                    self._evaluate_answer,
+                    exercise,
+                    answer,
+                    timeout_sec=self._request_llm_timeout_sec,
+                )
+            else:
+                is_correct, answer_summary = self._evaluate_answer(exercise, answer)
             verdict = "✓ ĐÚNG" if is_correct else "✗ SAI"
 
-            logger.info(f"[Exercise] 📝 {exercise.concept_name} | Answer: {answer} → {verdict}")
+            logger.info(f"[Exercise] 📝 {exercise.concept_name} | Type: {exercise.exercise_type} | Answer: {answer_summary} → {verdict}")
 
             # Use pre-generated explanations
             explanation = exercise.explanation_correct if is_correct else exercise.explanation_incorrect
 
             exercise.explanation = explanation
-            exercise.user_answer = answer
+            exercise.user_answer = self._serialize_answer_for_history(exercise, answer)
             exercise.is_correct = is_correct
             session.exercise_history.append(exercise)
 
@@ -355,6 +458,8 @@ class ExerciseService:
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
             concept_name = session.concept_names.get(concept_id, concept_id)
             concept_def = session.concept_definitions.get(concept_id, "")
+            concept_mastery = session.env.get_concept_mastery()
+            mastery = float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
 
             logger.info(f"[Eager] Pre-generating: {concept_name} (Bloom {bloom_level})...")
 
@@ -364,6 +469,7 @@ class ExerciseService:
                 bloom_level=bloom_level,
                 concept_name=concept_name,
                 concept_def=concept_def,
+                mastery=mastery,
                 timeout_sec=self._prefetch_llm_timeout_sec,
             )
 
@@ -405,6 +511,12 @@ class ExerciseService:
                 next_concept_def = session.concept_definitions.get(next_concept_id, "")
 
                 logger.debug(f"[Prefetch] {branch}: predicted → {next_concept_name} (Bloom {next_bloom})")
+                concept_mastery = session.env.get_concept_mastery()
+                mastery = (
+                    float(concept_mastery[next_concept_idx])
+                    if len(concept_mastery) > next_concept_idx
+                    else None
+                )
 
                 ex_data = await self._generate_exercise_dedup(
                     session=session,
@@ -412,6 +524,7 @@ class ExerciseService:
                     bloom_level=next_bloom,
                     concept_name=next_concept_name,
                     concept_def=next_concept_def,
+                    mastery=mastery,
                     timeout_sec=self._prefetch_llm_timeout_sec,
                 )
 

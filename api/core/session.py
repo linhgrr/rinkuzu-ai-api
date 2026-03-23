@@ -36,13 +36,21 @@ class ExerciseRecord:
     concept_name: str
     bloom_level: int
     question: str
-    options: Dict[str, str]
     correct_option: str
     explanation: str
+    exercise_type: str = "mcq"
+    options: Dict[str, str] = field(default_factory=dict)
+    statement: Optional[str] = None
+    hint: Optional[str] = None
+    items: List[str] = field(default_factory=list)
+    pairs: List[Dict[str, str]] = field(default_factory=list)
+    right_items: List[str] = field(default_factory=list)
+    rubric: List[str] = field(default_factory=list)
+    correct_answer: Any = None
     explanation_correct: str = ""
     explanation_incorrect: str = ""
     theory: Optional[Dict[str, Any]] = None
-    user_answer: Optional[str] = None
+    user_answer: Optional[Any] = None
     is_correct: Optional[bool] = None
     timestamp: float = field(default_factory=time.time)
 
@@ -412,9 +420,17 @@ class SessionManager:
                 concept_name=ex.get("concept_name", ""),
                 bloom_level=ex["bloom_level"],
                 question=ex.get("question", ""),
-                options=ex.get("options", {}),
                 correct_option=ex.get("correct_option", ""),
                 explanation=ex.get("explanation", ""),
+                exercise_type=ex.get("exercise_type", "mcq"),
+                options=ex.get("options", {}),
+                statement=ex.get("statement"),
+                hint=ex.get("hint"),
+                items=ex.get("items", []),
+                pairs=ex.get("pairs", []),
+                right_items=ex.get("right_items", []),
+                rubric=ex.get("rubric", []),
+                correct_answer=ex.get("correct_answer"),
                 explanation_correct=ex.get("explanation_correct", ""),
                 explanation_incorrect=ex.get("explanation_incorrect", ""),
                 user_answer=ex.get("user_answer"),

@@ -32,15 +32,32 @@ class ExerciseResponse(BaseModel):
     concept_idx: int
     bloom_level: int
     bloom_label: str
+    exercise_type: str = "mcq"
     question: str
-    options: Dict[str, str]
+    options: Dict[str, str] = Field(default_factory=dict)
+    statement: Optional[str] = None
+    hint: Optional[str] = None
+    items: List[str] = Field(default_factory=list)
+    pairs: List[Dict[str, str]] = Field(default_factory=list)
+    right_items: List[str] = Field(default_factory=list)
+    rubric: List[str] = Field(default_factory=list)
     step: int
     max_steps: int
     theory: Optional[Dict[str, Any]] = None
 
 
+class SubmitAnswerPayload(BaseModel):
+    choice: Optional[str] = None
+    choices: List[str] = Field(default_factory=list)
+    boolean: Optional[bool] = None
+    blanks: List[str] = Field(default_factory=list)
+    ordering: List[str] = Field(default_factory=list)
+    matching: Dict[str, str] = Field(default_factory=dict)
+    text: Optional[str] = None
+
+
 class SubmitAnswerRequest(BaseModel):
-    answer: str = Field(..., min_length=1, max_length=10)
+    answer: SubmitAnswerPayload
 
 
 class SubmitAnswerResponse(BaseModel):

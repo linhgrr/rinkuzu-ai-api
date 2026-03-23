@@ -164,8 +164,15 @@ async def generate_exercise(
         concept_idx=exercise.concept_idx,
         bloom_level=exercise.bloom_level,
         bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
+        exercise_type=exercise.exercise_type,
         question=exercise.question,
         options=exercise.options,
+        statement=exercise.statement,
+        hint=exercise.hint,
+        items=exercise.items,
+        pairs=exercise.pairs,
+        right_items=exercise.right_items,
+        rubric=exercise.rubric,
         step=env_stats["step"],
         max_steps=env_stats["max_steps"],
         theory=exercise.theory,
@@ -183,7 +190,7 @@ async def submit_answer(
 ):
     session = await _resolve_user_session(manager, session_id, user_id)
 
-    result = await exercise_svc.submit_answer(session, req.answer, background_tasks)
+    result = await exercise_svc.submit_answer(session, req.answer.model_dump(), background_tasks)
     if not result:
         raise ExerciseGenerationError("No pending exercise or session not found")
 
@@ -207,7 +214,18 @@ async def chat_about_exercise(
     option_keys = sorted(exercise.options.keys())
     options = [exercise.options[key] for key in option_keys if exercise.options.get(key)]
     if not options:
-        raise ExerciseGenerationError("Exercise is missing answer options")
+        if exercise.exercise_type == "true_false":
+            options = ["True", "False"]
+        elif exercise.exercise_type == "ordering":
+            options = exercise.items
+        elif exercise.exercise_type == "matching":
+            options = exercise.right_items
+        elif exercise.exercise_type == "fill_blank" and exercise.hint:
+            options = [f"Gợi ý: {exercise.hint}"]
+        elif exercise.exercise_type == "short_answer":
+            options = exercise.rubric or ["Trả lời ngắn gọn, bám sát câu hỏi."]
+        else:
+            options = ["Xem lại yêu cầu của bài tập hiện tại."]
 
     chat_history = await _get_tutor_chat_history(session, exercise.exercise_id)
 
