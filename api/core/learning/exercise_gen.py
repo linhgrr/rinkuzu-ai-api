@@ -113,7 +113,7 @@ def _build_generation_spec(
             + "Yêu cầu:\n"
             + "- Có từ 2 đến 4 đáp án đúng.\n"
             + "- Các lựa chọn sai phải gần đúng hoặc thiếu một điều kiện quan trọng.\n"
-            + "- Câu hỏi phù hợp Bloom 4-5, đòi hỏi phân tích hoặc đánh giá.\n",
+            + "- Câu hỏi phù hợp Bloom 3-5, đòi hỏi áp dụng, phân tích hoặc đánh giá.\n",
             serialize_exercise_result,
         )
 

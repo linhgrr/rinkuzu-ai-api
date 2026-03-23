@@ -2,7 +2,8 @@
 exercise_types.py — Shared exercise type schemas, selection, and serialization.
 """
 
-from typing import Any, Dict, Literal, Optional, Sequence
+from typing import Any, Dict, Literal, Optional, Sequence, cast
+import random
 
 from pydantic import BaseModel, Field
 
@@ -211,27 +212,68 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
     raise TypeError(f"Unsupported exercise output type: {type(result)}")
 
 
+# Configuration-driven weight matrix for exercise type selection.
+# Structure: { bloom_level: { exercise_type: (weight_low_mastery, weight_mid_mastery, weight_high_mastery) } }
+# Mastery bins: Low (< 0.4), Mid (0.4 - 0.7), High (>= 0.7)
+EXERCISE_WEIGHTS: Dict[int, Dict[str, tuple[int, int, int]]] = {
+    1: {
+        "true_false": (70, 40, 10),
+        "mcq":        (30, 60, 90),
+    },
+    2: {
+        "true_false": (60, 20,  5),
+        "mcq":        (30, 40, 25),
+        "fill_blank": (10, 30, 40),
+        "matching":   ( 0, 10, 30),
+    },
+    3: {
+        "mcq":           (50, 20,  5),
+        "fill_blank":    (30, 40, 20),
+        "matching":      (20, 30, 20),
+        "multi_correct": ( 0, 10, 35),
+        "ordering":      ( 0,  0, 20),
+    },
+    4: {
+        "ordering":      (70, 40, 20),
+        "multi_correct": (30, 60, 80),
+    },
+    5: {
+        "multi_correct": (80, 50, 20),
+        "short_answer":  (20, 50, 80),
+    },
+    6: {
+        "mcq":           (60, 30,  0),
+        "short_answer":  (40, 70, 100),
+    }
+}
+
+
 def select_exercise_type(bloom_level: int, mastery: Optional[float] = None) -> ExerciseType:
     mastery_value = 0.5 if mastery is None else max(0.0, min(1.0, float(mastery)))
-
-    if bloom_level <= 1:
-        return "true_false" if mastery_value < 0.55 else "mcq"
-    if bloom_level == 2:
-        if mastery_value < 0.3:
-            return "true_false"
-        if mastery_value < 0.55:
-            return "fill_blank"
-        if mastery_value < 0.8:
-            return "matching"
-        return "mcq"
-    if bloom_level == 3:
-        if mastery_value < 0.35:
-            return "fill_blank"
-        if mastery_value < 0.7:
-            return "matching"
-        return "ordering"
-    if bloom_level == 4:
-        return "ordering" if mastery_value < 0.5 else "multi_correct"
-    if bloom_level == 5:
-        return "multi_correct" if mastery_value < 0.7 else "short_answer"
-    return "mcq" if mastery_value < 0.35 else "short_answer"
+    bloom_level = max(1, min(6, bloom_level))
+    
+    weights_config = EXERCISE_WEIGHTS.get(bloom_level, EXERCISE_WEIGHTS[1])
+    
+    # Determine the mastery bin index: 0 (Low), 1 (Mid), 2 (High)
+    if mastery_value < 0.4:
+        weight_index = 0
+    elif mastery_value < 0.7:
+        weight_index = 1
+    else:
+        weight_index = 2
+        
+    candidates: list[str] = []
+    weights: list[int] = []
+    
+    for ex_type, w_tuple in weights_config.items():
+        w = w_tuple[weight_index]
+        if w > 0:
+            candidates.append(ex_type)
+            weights.append(w)
+            
+    if not candidates:
+        return "mcq"  # Safe fallback
+        
+    # random.choices returns a list of k elements, we pluck the first
+    selected_type = random.choices(candidates, weights=weights, k=1)[0]
+    return cast(ExerciseType, selected_type)
