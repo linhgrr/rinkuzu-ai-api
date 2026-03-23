@@ -136,7 +136,6 @@ def _build_generation_spec(
             + "Hãy tạo 1 bài tập ghép nối khái niệm.\n"
             + "Yêu cầu:\n"
             + "- `pairs` gồm 3-5 cặp ghép đúng.\n"
-            + "- `right_items` chứa đúng các giá trị cột phải nhưng ở thứ tự xáo trộn.\n"
             + "- Phù hợp Bloom 2-3, kiểm tra hiểu mối liên hệ giữa các khái niệm.\n",
             serialize_exercise_result,
         )

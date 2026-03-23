@@ -137,11 +137,6 @@ def test_serialize_exercise_result_normalizes_fill_blank_and_matching_payloads()
             MatchingPair(left="Gia tốc", right="Độ biến thiên vận tốc theo thời gian"),
             MatchingPair(left="Lực", right="Tác dụng làm vật đổi trạng thái chuyển động"),
         ],
-        right_items=[
-            "Độ biến thiên vận tốc theo thời gian",
-            "Tác dụng làm vật đổi trạng thái chuyển động",
-            "Độ lớn và hướng của chuyển động",
-        ],
         explanation_correct="Đúng",
         explanation_incorrect="Sai",
     )
@@ -151,7 +146,11 @@ def test_serialize_exercise_result_normalizes_fill_blank_and_matching_payloads()
 
     assert fill_blank_payload["question"] == "Động năng được tính bằng công thức _____."
     assert fill_blank_payload["correct_answer"] == ["Wđ", "Wd"]
-    assert matching_payload["right_items"][0] == "Độ biến thiên vận tốc theo thời gian"
+    assert sorted(matching_payload["right_items"]) == sorted([
+        "Độ lớn và hướng của chuyển động",
+        "Độ biến thiên vận tốc theo thời gian",
+        "Tác dụng làm vật đổi trạng thái chuyển động",
+    ])
     assert matching_payload["correct_answer"]["Vận tốc"] == "Độ lớn và hướng của chuyển động"
 
 

@@ -94,7 +94,6 @@ class MatchingPair(BaseModel):
 class MatchingOutput(ExerciseBaseOutput):
     exercise_type: Literal["matching"] = "matching"
     pairs: list[MatchingPair] = Field(..., min_length=3, description="Correct left-right pairs")
-    right_items: list[str] = Field(..., min_length=3, description="Right-column choices in shuffled order")
 
 
 class ShortAnswerOutput(ExerciseBaseOutput):
@@ -186,12 +185,14 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
 
     if isinstance(result, MatchingOutput):
         pairs = [{"left": item.left, "right": item.right} for item in result.pairs]
+        right_items = [item["right"] for item in pairs]
+        random.shuffle(right_items)
         return {
             "exercise_type": result.exercise_type,
             "question": result.question,
             "pairs": pairs,
             "left_items": [item["left"] for item in pairs],
-            "right_items": result.right_items,
+            "right_items": right_items,
             "correct_answer": {item["left"]: item["right"] for item in pairs},
             "correct_option": join_lines([f"{item['left']} → {item['right']}" for item in pairs]),
             "explanation_correct": result.explanation_correct,
