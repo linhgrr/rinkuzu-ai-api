@@ -21,6 +21,7 @@ import torch
 from loguru import logger
 
 from ...config import get_settings
+from .exercise_types import ExerciseType
 from .models import load_saint_model, load_dqn_model, DuelingQNetwork, SaintModel
 from .environment import AdaptiveLearningEnv
 from ..shared import mongo_store
@@ -38,7 +39,7 @@ class ExerciseRecord:
     question: str
     correct_option: str
     explanation: str
-    exercise_type: str = "mcq"
+    exercise_type: ExerciseType = ExerciseType.MCQ
     options: Dict[str, str] = field(default_factory=dict)
     statement: Optional[str] = None
     hint: Optional[str] = None
@@ -422,7 +423,7 @@ class SessionManager:
                 question=ex.get("question", ""),
                 correct_option=ex.get("correct_option", ""),
                 explanation=ex.get("explanation", ""),
-                exercise_type=ex.get("exercise_type", "mcq"),
+                exercise_type=ExerciseType(ex.get("exercise_type", ExerciseType.MCQ.value)),
                 options=ex.get("options", {}),
                 statement=ex.get("statement"),
                 hint=ex.get("hint"),

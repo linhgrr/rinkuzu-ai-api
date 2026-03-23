@@ -68,7 +68,7 @@ def _build_generation_spec(
         "---\n\n"
     )
 
-    if exercise_type == "mcq":
+    if exercise_type == ExerciseType.MCQ:
         return (
             MCQOutput,
             common_intro
@@ -80,7 +80,7 @@ def _build_generation_spec(
             serialize_exercise_result,
         )
 
-    if exercise_type == "true_false":
+    if exercise_type == ExerciseType.TRUE_FALSE:
         return (
             TrueFalseOutput,
             common_intro
@@ -92,7 +92,7 @@ def _build_generation_spec(
             serialize_exercise_result,
         )
 
-    if exercise_type == "fill_blank":
+    if exercise_type == ExerciseType.FILL_BLANK:
         return (
             FillBlankOutput,
             common_intro
@@ -105,7 +105,7 @@ def _build_generation_spec(
             serialize_exercise_result,
         )
 
-    if exercise_type == "multi_correct":
+    if exercise_type == ExerciseType.MULTI_CORRECT:
         return (
             MultiCorrectOutput,
             common_intro
@@ -117,7 +117,7 @@ def _build_generation_spec(
             serialize_exercise_result,
         )
 
-    if exercise_type == "ordering":
+    if exercise_type == ExerciseType.ORDERING:
         return (
             OrderingOutput,
             common_intro
@@ -129,7 +129,7 @@ def _build_generation_spec(
             serialize_exercise_result,
         )
 
-    if exercise_type == "matching":
+    if exercise_type == ExerciseType.MATCHING:
         return (
             MatchingOutput,
             common_intro

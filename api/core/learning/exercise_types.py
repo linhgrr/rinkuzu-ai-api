@@ -17,15 +17,16 @@ BLOOM_VERBS = {
     6: "Create (Sáng tạo: Thiết kế, chứng minh, tổng hợp)",
 }
 
-ExerciseType = Literal[
-    "mcq",
-    "true_false",
-    "fill_blank",
-    "multi_correct",
-    "ordering",
-    "matching",
-    "short_answer",
-]
+from enum import Enum
+
+class ExerciseType(str, Enum):
+    MCQ = "mcq"
+    TRUE_FALSE = "true_false"
+    FILL_BLANK = "fill_blank"
+    MULTI_CORRECT = "multi_correct"
+    ORDERING = "ordering"
+    MATCHING = "matching"
+    SHORT_ANSWER = "short_answer"
 
 
 class ExerciseBaseOutput(BaseModel):
@@ -215,35 +216,35 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
 # Configuration-driven weight matrix for exercise type selection.
 # Structure: { bloom_level: { exercise_type: (weight_low_mastery, weight_mid_mastery, weight_high_mastery) } }
 # Mastery bins: Low (< 0.4), Mid (0.4 - 0.7), High (>= 0.7)
-EXERCISE_WEIGHTS: Dict[int, Dict[str, tuple[int, int, int]]] = {
+EXERCISE_WEIGHTS: Dict[int, Dict[ExerciseType, tuple[int, int, int]]] = {
     1: {
-        "true_false": (70, 40, 10),
-        "mcq":        (30, 60, 90),
+        ExerciseType.TRUE_FALSE: (70, 40, 10),
+        ExerciseType.MCQ:        (30, 60, 90),
     },
     2: {
-        "true_false": (60, 20,  5),
-        "mcq":        (30, 40, 25),
-        "fill_blank": (10, 30, 40),
-        "matching":   ( 0, 10, 30),
+        ExerciseType.TRUE_FALSE: (60, 20,  5),
+        ExerciseType.MCQ:        (30, 40, 25),
+        ExerciseType.FILL_BLANK: (10, 30, 40),
+        ExerciseType.MATCHING:   ( 0, 10, 30),
     },
     3: {
-        "mcq":           (50, 20,  5),
-        "fill_blank":    (30, 40, 20),
-        "matching":      (20, 30, 20),
-        "multi_correct": ( 0, 10, 35),
-        "ordering":      ( 0,  0, 20),
+        ExerciseType.MCQ:           (50, 20,  5),
+        ExerciseType.FILL_BLANK:    (30, 40, 20),
+        ExerciseType.MATCHING:      (20, 30, 20),
+        ExerciseType.MULTI_CORRECT: ( 0, 10, 35),
+        ExerciseType.ORDERING:      ( 0,  0, 20),
     },
     4: {
-        "ordering":      (70, 40, 20),
-        "multi_correct": (30, 60, 80),
+        ExerciseType.ORDERING:      (70, 40, 20),
+        ExerciseType.MULTI_CORRECT: (30, 60, 80),
     },
     5: {
-        "multi_correct": (80, 50, 20),
-        "short_answer":  (20, 50, 80),
+        ExerciseType.MULTI_CORRECT: (80, 50, 20),
+        ExerciseType.SHORT_ANSWER:  (20, 50, 80),
     },
     6: {
-        "mcq":           (60, 30,  0),
-        "short_answer":  (40, 70, 100),
+        ExerciseType.MCQ:           (60, 30,  0),
+        ExerciseType.SHORT_ANSWER:  (40, 70, 100),
     }
 }
 
@@ -262,7 +263,7 @@ def select_exercise_type(bloom_level: int, mastery: Optional[float] = None) -> E
     else:
         weight_index = 2
         
-    candidates: list[str] = []
+    candidates: list[ExerciseType] = []
     weights: list[int] = []
     
     for ex_type, w_tuple in weights_config.items():
@@ -272,8 +273,8 @@ def select_exercise_type(bloom_level: int, mastery: Optional[float] = None) -> E
             weights.append(w)
             
     if not candidates:
-        return "mcq"  # Safe fallback
+        return ExerciseType.MCQ  # Safe fallback
         
     # random.choices returns a list of k elements, we pluck the first
     selected_type = random.choices(candidates, weights=weights, k=1)[0]
-    return cast(ExerciseType, selected_type)
+    return selected_type

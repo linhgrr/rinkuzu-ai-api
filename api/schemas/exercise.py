@@ -7,6 +7,9 @@ from typing import Optional, Dict, Any, List, Literal
 from pydantic import BaseModel, Field, ConfigDict
 
 
+from api.core.learning.exercise_types import ExerciseType
+
+
 class ExerciseOption(BaseModel):
     key: str
     value: str
@@ -32,7 +35,7 @@ class ExerciseResponse(BaseModel):
     concept_idx: int
     bloom_level: int
     bloom_label: str
-    exercise_type: str = "mcq"
+    exercise_type: ExerciseType = ExerciseType.MCQ
     question: str
     options: Dict[str, str] = Field(default_factory=dict)
     statement: Optional[str] = None
