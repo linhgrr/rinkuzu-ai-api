@@ -48,6 +48,91 @@ MATH_FORMAT_RULES = (
 )
 
 
+BLOOM_LEVEL_GUIDANCE = {
+    1: (
+        "Bloom Level 1 - Remember:\n"
+        "- Mục tiêu: kiểm tra khả năng nhớ lại đúng sự kiện, định nghĩa, thuật ngữ, ký hiệu, quy tắc cơ bản.\n"
+        "- Dạng yêu cầu phù hợp: nhận diện, chọn phát biểu đúng, nhắc lại định nghĩa, xác định tên gọi hoặc giá trị đã học.\n"
+        "- Không yêu cầu giải thích sâu, suy luận nhiều bước hay áp dụng vào tình huống mới.\n"
+        "- Distractor (đáp án sai): sai rõ ràng nhưng cùng loại khái niệm, tránh vô lý hoàn toàn.\n"
+    ),
+    2: (
+        "Bloom Level 2 - Understand:\n"
+        "- Mục tiêu: kiểm tra học sinh có hiểu ý nghĩa, diễn giải lại được, phân biệt được mô tả đúng/sai của khái niệm.\n"
+        "- Dạng yêu cầu phù hợp: giải thích ngắn, diễn đạt lại, chọn ví dụ/phản ví dụ đúng, nhận ra hệ quả trực tiếp từ định nghĩa.\n"
+        "- Có thể yêu cầu hiểu bản chất hoặc mô tả bằng lời, nhưng chưa nên đòi hỏi tính toán phức tạp hay quy trình nhiều bước.\n"
+        "- KHÔNG được chỉ yêu cầu nhận diện lại định nghĩa nguyên văn.\n"
+        "- Phải có yếu tố diễn giải, hiểu bản chất hoặc nhận ra quan hệ đơn giản.\n"
+        "- Distractor: dựa trên các hiểu sai phổ biến (ví dụ: nhầm điều kiện, thiếu yếu tố, suy diễn sai nhẹ).\n"
+    ),
+    3: (
+        "Bloom Level 3 - Apply:\n"
+        "- Mục tiêu: kiểm tra khả năng dùng quy tắc, công thức, định nghĩa đã học vào một bài toán hoặc tình huống cụ thể.\n"
+        "- Dạng yêu cầu phù hợp: tính toán, thay số, thực hiện quy trình quen thuộc, áp dụng công thức trực tiếp.\n"
+        "- Tình huống nên rõ ràng và đủ dữ kiện; không biến thành phân tích sâu nhiều hướng.\n"
+        "- Distractor: sai do áp dụng sai công thức, sai bước tính, hoặc nhầm dữ kiện.\n"
+    ),
+    4: (
+        "Bloom Level 4 - Analyze:\n"
+        "- Mục tiêu: kiểm tra khả năng tách vấn đề thành phần nhỏ, so sánh, chỉ ra quan hệ, tìm lỗi hoặc phân loại.\n"
+        "- Dạng yêu cầu phù hợp: so sánh hai trường hợp, xác định bước sai, tìm nguyên nhân, nhận ra cấu trúc hoặc mẫu hình.\n"
+        "- Cần có suy luận phân tích, không chỉ áp dụng công thức trực tiếp.\n"
+        "- Distractor: sai do lập luận thiếu bước, nhầm quan hệ, hoặc phân tích chưa đầy đủ.\n"
+    ),
+    5: (
+        "Bloom Level 5 - Evaluate:\n"
+        "- Mục tiêu: kiểm tra khả năng đưa ra nhận định có căn cứ, chọn phương án tốt hơn, đánh giá tính đúng/sai hoặc hợp lý.\n"
+        "- Dạng yêu cầu phù hợp: biện luận, phê bình lời giải, chọn lập luận thuyết phục nhất, đánh giá kết luận.\n"
+        "- Đáp án đúng phải dựa trên tiêu chí rõ ràng, không mơ hồ.\n"
+        "- Distractor: các phương án nghe hợp lý nhưng thiếu tiêu chí, lập luận yếu hoặc sai logic.\n"
+    ),
+    6: (
+        "Bloom Level 6 - Create:\n"
+        "- Mục tiêu: kiểm tra khả năng tạo lập cách giải, thiết kế ví dụ, xây dựng phương án hoặc tổng hợp ý tưởng mới.\n"
+        "- Dạng yêu cầu phù hợp: đề xuất cách làm, xây dựng đáp án, tạo ví dụ thỏa điều kiện, hoàn thiện phương án.\n"
+        "- Đáp án phải chấm được rõ ràng theo tiêu chí hoặc điều kiện cụ thể.\n"
+        "- Distractor: phương án không thỏa điều kiện, thiếu tính đầy đủ hoặc vi phạm ràng buộc đề bài.\n"
+    ),
+}
+
+
+EXERCISE_TYPE_BLOOM_GUIDANCE = {
+    ExerciseType.MCQ: {
+        1: "- Với MCQ Bloom 1: hỏi nhận diện/ghi nhớ trực tiếp; đáp án đúng nên là kiến thức cốt lõi, distractor sai gần nhưng không đánh đố.\n",
+        2: "- Với MCQ Bloom 2: câu hỏi phải buộc học sinh hiểu và diễn giải bản chất; tránh chỉ chép lại nguyên văn định nghĩa.\n",
+        3: "- Với MCQ Bloom 3: nên có tình huống ngắn hoặc dữ kiện cụ thể để học sinh áp dụng quy tắc/công thức.\n",
+        4: "- Với MCQ Bloom 4: các phương án nên đại diện cho các cách phân tích/nhận định khác nhau, chỉ một phương án phân tích đúng.\n",
+        5: "- Với MCQ Bloom 5: các phương án nên là các nhận định/lập luận cạnh tranh, đáp án đúng là nhận định có căn cứ tốt nhất.\n",
+        6: "- Với MCQ Bloom 6: dùng khi có thể đánh giá phương án tạo lập/thiết kế nào thỏa điều kiện tốt nhất; không biến thành câu hỏi mẹo.\n",
+    },
+    ExerciseType.TRUE_FALSE: {
+        1: "- Với True/False Bloom 1: mệnh đề kiểm tra nhớ đúng sai của một fact/định nghĩa cơ bản.\n",
+        2: "- Với True/False Bloom 2: mệnh đề nên thể hiện một cách diễn giải của khái niệm để học sinh đánh giá mức độ hiểu đúng.\n",
+    },
+    ExerciseType.FILL_BLANK: {
+        2: "- Với Fill Blank Bloom 2: chỗ trống nên là từ/cụm ngắn thể hiện ý nghĩa hoặc hệ quả trực tiếp từ khái niệm.\n",
+        3: "- Với Fill Blank Bloom 3: chỗ trống nên là kết quả áp dụng trực tiếp hoặc bước quan trọng trong quy trình quen thuộc.\n",
+    },
+    ExerciseType.MULTI_CORRECT: {
+        3: "- Với Multi Correct Bloom 3: nhiều đáp án đúng nên tương ứng nhiều trường hợp áp dụng đúng quy tắc.\n",
+        4: "- Với Multi Correct Bloom 4: các lựa chọn nên buộc học sinh phân tích từng phương án thay vì nhận diện bề mặt.\n",
+        5: "- Với Multi Correct Bloom 5: các lựa chọn nên là các nhận định cần cân nhắc theo tiêu chí rõ ràng trước khi chọn.\n",
+    },
+    ExerciseType.ORDERING: {
+        3: "- Với Ordering Bloom 3: thứ tự đúng nên phản ánh quy trình áp dụng quen thuộc, có tính thao tác rõ ràng.\n",
+        4: "- Với Ordering Bloom 4: thứ tự đúng nên phản ánh logic phân tích hoặc quan hệ nguyên nhân-kết quả giữa các bước.\n",
+    },
+    ExerciseType.MATCHING: {
+        2: "- Với Matching Bloom 2: ghép khái niệm với ý nghĩa, ví dụ, tính chất hoặc hệ quả trực tiếp để kiểm tra hiểu quan hệ.\n",
+        3: "- Với Matching Bloom 3: ghép tình huống/case ngắn với quy tắc hoặc cách áp dụng phù hợp.\n",
+    },
+    ExerciseType.SHORT_ANSWER: {
+        5: "- Với Short Answer Bloom 5: rubric phải chấm được chất lượng nhận định và căn cứ lập luận.\n",
+        6: "- Với Short Answer Bloom 6: rubric phải chấm được tính đầy đủ, đúng điều kiện và hợp lý của phương án do học sinh tạo ra.\n",
+    },
+}
+
+
 def _build_generation_spec(
     concept_name: str,
     concept_definition: str,
@@ -55,11 +140,18 @@ def _build_generation_spec(
     exercise_type: ExerciseType,
     recent_same_concept_exercises: Optional[Sequence[Dict[str, Any]]] = None,
 ):
+    bloom_guidance = BLOOM_LEVEL_GUIDANCE.get(
+        bloom_level,
+        "Hãy bám sát mức độ tư duy Bloom được yêu cầu và tránh lệch sang cấp độ thấp hoặc cao hơn.\n",
+    )
+    exercise_type_guidance = EXERCISE_TYPE_BLOOM_GUIDANCE.get(exercise_type, {}).get(bloom_level, "")
     common_intro = (
         "Bạn là giáo viên chuyên tạo bài tập adaptive learning theo Bloom's Taxonomy.\n"
         f"Kiến thức yêu cầu: {concept_name}\n"
         f"Định nghĩa kiến thức: {concept_definition}\n"
         f"Mức độ tư duy (Bloom): Level {bloom_level} - {BLOOM_VERBS.get(bloom_level, '')}\n"
+        f"{bloom_guidance}"
+        f"{exercise_type_guidance}"
         "Ngôn ngữ: Tiếng Việt.\n"
         "Nội dung phải rõ ràng, không lan man, đúng trọng tâm kiến thức.\n"
         "BẮT BUỘC chỉ tạo bài tập có thể hiển thị và làm hoàn toàn bằng text.\n"
