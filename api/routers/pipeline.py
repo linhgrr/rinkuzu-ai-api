@@ -2,13 +2,18 @@
 routers/pipeline.py — Content pipeline endpoints.
 """
 
+import asyncio
 import uuid
 from pathlib import Path
 from typing import Optional
+import httpx
+from pydantic import BaseModel
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from loguru import logger
 import aiofiles
+
+from ..config import settings
 
 from ..core.content_pipeline import (
     PipelineStatus,
@@ -44,18 +49,23 @@ async def pipeline_status(availability: dict = Depends(get_content_pipeline_avai
     }
 
 
+class ProcessDocumentRequest(BaseModel):
+    file_url: str
+    filename: str
+    subject_id: Optional[str] = None
+    prs_threshold: float = 0.75
+    min_confidence: float = 0.6
+    apply_reduction: bool = True
+
+
 @router.post("/process")
 async def process_document(
-    file: UploadFile = File(...),
-    subject_id: Optional[str] = Form(None),
-    prs_threshold: float = Form(0.75),
-    min_confidence: float = Form(0.6),
-    apply_reduction: bool = Form(True),
+    request: ProcessDocumentRequest,
     user_id: str = Depends(get_current_user),
     availability: dict = Depends(get_content_pipeline_availability),
     pipeline_service=Depends(get_content_pipeline_service),
 ):
-    """Upload a PDF and run the full content processing pipeline."""
+    """Run the full content processing pipeline from an S3 uploaded file."""
     if not availability["available"]:
         logger.error(
             "[PipelineRouter] Content pipeline unavailable",
@@ -71,32 +81,37 @@ async def process_document(
     if not mongo_store.is_available():
         raise ServiceUnavailableError("MongoDB persistence")
 
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
+    if not request.filename or not request.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    file_id = str(uuid.uuid4())[:8]
-    save_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+    file_id = uuid.uuid4().hex[:8]
+    save_path = UPLOAD_DIR / f"{file_id}_{request.filename}"
+    
+    # Download file from URL
     try:
-        async with aiofiles.open(save_path, "wb") as f:
-            while chunk := await file.read(1024 * 1024):
-                await f.write(chunk)
+        async with httpx.AsyncClient() as client:
+            async with client.stream("GET", request.file_url) as response:
+                response.raise_for_status()
+                async with aiofiles.open(save_path, "wb") as f:
+                    async for chunk in response.aiter_bytes(chunk_size=8192):
+                        await f.write(chunk)
     except Exception:
-        logger.exception("[PipelineRouter] Failed to save upload {}", file.filename)
-        raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
+        logger.exception("[PipelineRouter] Failed to download file from URL {}", request.file_url)
+        raise HTTPException(status_code=500, detail="Failed to download file.")
 
     try:
         job = await pipeline_service.start_job(
             file_path=str(save_path),
-            subject_id=subject_id,
-            prs_threshold=prs_threshold,
-            min_confidence=min_confidence,
-            apply_reduction=apply_reduction,
+            subject_id=request.subject_id,
+            prs_threshold=request.prs_threshold,
+            min_confidence=request.min_confidence,
+            apply_reduction=request.apply_reduction,
             user_id=user_id,
             content_processor_available=availability["available"],
             content_processor_src=availability["src"] or "",
         )
     except Exception:
-        logger.exception("[PipelineRouter] Failed to initialize pipeline job for {}", file.filename)
+        logger.exception("[PipelineRouter] Failed to initialize pipeline job for {}", request.filename)
         try:
             if save_path.exists():
                 save_path.unlink()
@@ -106,7 +121,7 @@ async def process_document(
 
     return {
         "job_id": job.job_id,
-        "filename": file.filename,
+        "filename": request.filename,
         "file_size": save_path.stat().st_size,
         "subject_id": job.subject_id,
         "status": job.status.value,
