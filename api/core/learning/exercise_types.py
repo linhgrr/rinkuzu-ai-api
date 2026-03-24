@@ -112,6 +112,21 @@ def join_lines(values: Sequence[str]) -> str:
     return "\n".join(f"{index + 1}. {value}" for index, value in enumerate(values))
 
 
+def shuffle_ordering_items(correct_order: Sequence[str], max_attempts: int = 5) -> list[str]:
+    items = list(correct_order)
+    if len(items) <= 1:
+        return items
+
+    shuffled = items[:]
+    for _ in range(max_attempts):
+        random.shuffle(shuffled)
+        if shuffled != items:
+            return shuffled
+
+    # Guard: if repeated shuffles still match the correct order, force a simple rotation.
+    return items[1:] + items[:1]
+
+
 def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
     if isinstance(result, MCQOutput):
         return {
@@ -144,7 +159,7 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
         canonical_answer = accepted_answers[0] if accepted_answers else ""
         return {
             "exercise_type": result.exercise_type,
-            "question": result.sentence,
+            "question": result.question,
             "sentence": result.sentence,
             "hint": result.hint,
             "blank_answers": accepted_answers,
@@ -173,12 +188,14 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
         }
 
     if isinstance(result, OrderingOutput):
+        correct_order = [item.strip() for item in result.correct_order if item.strip()]
+        items = shuffle_ordering_items(correct_order)
         return {
             "exercise_type": result.exercise_type,
             "question": result.question,
-            "items": result.items,
-            "correct_answer": result.correct_order,
-            "correct_option": join_lines(result.correct_order),
+            "items": items,
+            "correct_answer": correct_order,
+            "correct_option": join_lines(correct_order),
             "explanation_correct": result.explanation_correct,
             "explanation_incorrect": result.explanation_incorrect,
         }

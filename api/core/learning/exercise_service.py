@@ -71,6 +71,8 @@ class ExerciseService:
         }
         if getattr(exercise, "statement", None):
             payload["statement"] = exercise.statement
+        if getattr(exercise, "sentence", None):
+            payload["sentence"] = exercise.sentence
         if getattr(exercise, "hint", None):
             payload["hint"] = exercise.hint
         if getattr(exercise, "options", None):
@@ -327,6 +329,7 @@ class ExerciseService:
             correct_option=exercise_data.get("correct_option", ""),
             explanation="",
             exercise_type=exercise_data.get("exercise_type", ExerciseType.MCQ),
+            sentence=exercise_data.get("sentence"),
             options=exercise_data.get("options", {}),
             statement=exercise_data.get("statement"),
             hint=exercise_data.get("hint"),

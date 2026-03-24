@@ -40,6 +40,7 @@ class ExerciseRecord:
     correct_option: str
     explanation: str
     exercise_type: ExerciseType = ExerciseType.MCQ
+    sentence: Optional[str] = None
     options: Dict[str, str] = field(default_factory=dict)
     statement: Optional[str] = None
     hint: Optional[str] = None
@@ -424,6 +425,7 @@ class SessionManager:
                 correct_option=ex.get("correct_option", ""),
                 explanation=ex.get("explanation", ""),
                 exercise_type=ExerciseType(ex.get("exercise_type", ExerciseType.MCQ.value)),
+                sentence=ex.get("sentence"),
                 options=ex.get("options", {}),
                 statement=ex.get("statement"),
                 hint=ex.get("hint"),

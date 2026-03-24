@@ -37,6 +37,7 @@ class ExerciseResponse(BaseModel):
     bloom_label: str
     exercise_type: ExerciseType = ExerciseType.MCQ
     question: str
+    sentence: Optional[str] = None
     options: Dict[str, str] = Field(default_factory=dict)
     statement: Optional[str] = None
     hint: Optional[str] = None
@@ -44,6 +45,7 @@ class ExerciseResponse(BaseModel):
     pairs: List[Dict[str, str]] = Field(default_factory=list)
     right_items: List[str] = Field(default_factory=list)
     rubric: List[str] = Field(default_factory=list)
+    correct_answer: Optional[Any] = None
     step: int
     max_steps: int
     theory: Optional[Dict[str, Any]] = None

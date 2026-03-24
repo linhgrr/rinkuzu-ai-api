@@ -239,8 +239,9 @@ def _build_generation_spec(
             common_intro
             + "Hãy tạo 1 bài tập sắp xếp thứ tự.\n"
             + "Yêu cầu:\n"
-            + "- `items` phải là danh sách các bước/ý/công đoạn ở thứ tự bị xáo trộn.\n"
-            + "- `correct_order` phải chứa đúng các phần tử đó nhưng ở thứ tự đúng.\n"
+            + "- `correct_order` là nguồn chân lý, phải chứa đầy đủ các bước/ý/công đoạn ở thứ tự đúng.\n"
+            + "- `items` phải chứa đúng các phần tử của `correct_order` và không thêm/bớt phần tử nào.\n"
+            + "- Backend sẽ tự chuẩn hóa/xáo trộn `items` trước khi hiển thị, nên ưu tiên đảm bảo `correct_order` chính xác tuyệt đối.\n"
             + "- Kiểm tra quy trình, lập luận tuần tự hoặc trình tự logic Bloom 3-4.\n",
             serialize_exercise_result,
         )

@@ -20,6 +20,7 @@ def build_subject_progress_snapshot(session) -> Dict[str, Any]:
             "concept_name": ex.concept_name,
             "bloom_level": ex.bloom_level,
             "question": ex.question,
+            "sentence": ex.sentence,
             "exercise_type": ex.exercise_type,
             "options": ex.options,
             "statement": ex.statement,

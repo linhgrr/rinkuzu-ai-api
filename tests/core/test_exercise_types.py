@@ -6,7 +6,9 @@ from api.core.learning.exercise_types import (
     FillBlankOutput,
     MatchingOutput,
     MatchingPair,
+    OrderingOutput,
     serialize_exercise_result,
+    shuffle_ordering_items,
     select_exercise_type,
 )
 from api.core.learning import exercise_service as exercise_service_module
@@ -123,7 +125,7 @@ def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_orderin
 
 def test_serialize_exercise_result_normalizes_fill_blank_and_matching_payloads():
     fill_blank = FillBlankOutput(
-        question="ignored",
+        question="Hãy điền từ thích hợp vào chỗ trống.",
         sentence="Động năng được tính bằng công thức _____.",
         blank_answers=["Wđ", "Wd"],
         hint="Liên quan đến năng lượng chuyển động",
@@ -144,7 +146,8 @@ def test_serialize_exercise_result_normalizes_fill_blank_and_matching_payloads()
     fill_blank_payload = serialize_exercise_result(fill_blank)
     matching_payload = serialize_exercise_result(matching)
 
-    assert fill_blank_payload["question"] == "Động năng được tính bằng công thức _____."
+    assert fill_blank_payload["question"] == "Hãy điền từ thích hợp vào chỗ trống."
+    assert fill_blank_payload["sentence"] == "Động năng được tính bằng công thức _____."
     assert fill_blank_payload["correct_answer"] == ["Wđ", "Wd"]
     assert sorted(matching_payload["right_items"]) == sorted([
         "Độ lớn và hướng của chuyển động",
@@ -152,6 +155,33 @@ def test_serialize_exercise_result_normalizes_fill_blank_and_matching_payloads()
         "Tác dụng làm vật đổi trạng thái chuyển động",
     ])
     assert matching_payload["correct_answer"]["Vận tốc"] == "Độ lớn và hướng của chuyển động"
+
+
+def test_shuffle_ordering_items_uses_guard_when_shuffle_keeps_original_order():
+    original = ["Bước 1", "Bước 2", "Bước 3"]
+
+    with patch("random.shuffle", side_effect=lambda items: None):
+        shuffled = shuffle_ordering_items(original)
+
+    assert shuffled == ["Bước 2", "Bước 3", "Bước 1"]
+    assert shuffled != original
+
+
+def test_serialize_exercise_result_normalizes_ordering_payload_from_correct_order():
+    ordering = OrderingOutput(
+        question="Sắp xếp các bước theo đúng trình tự.",
+        items=["Sai 1", "Sai 2", "Sai 3"],
+        correct_order=["Bước 1", "Bước 2", "Bước 3"],
+        explanation_correct="Đúng",
+        explanation_incorrect="Sai",
+    )
+
+    with patch("random.shuffle", side_effect=lambda items: items.reverse()):
+        ordering_payload = serialize_exercise_result(ordering)
+
+    assert ordering_payload["correct_answer"] == ["Bước 1", "Bước 2", "Bước 3"]
+    assert ordering_payload["items"] == ["Bước 3", "Bước 2", "Bước 1"]
+    assert ordering_payload["items"] != ordering_payload["correct_answer"]
 
 
 def test_evaluate_answer_updates_short_answer_feedback(monkeypatch):
