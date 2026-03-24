@@ -23,6 +23,7 @@ langchain-chroma
 sentence-transformers
 transformers
 chromadb>=0.5.0
+langsmith
 trustcall>=0.0.10
 agentic-doc
 wikipedia==1.4.0

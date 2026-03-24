@@ -99,6 +99,24 @@ class Settings(BaseSettings):
     s3_secret_access_key: Optional[str] = None
     s3_bucket_name: Optional[str] = None
 
+    # ── LangChain / LangSmith ──────────────────────────────
+    langchain_tracing_v2: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING"),
+    )
+    langchain_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGCHAIN_API_KEY", "LANGSMITH_API_KEY"),
+    )
+    langchain_project: str = Field(
+        default="rinkuzu-ai-api",
+        validation_alias=AliasChoices("LANGCHAIN_PROJECT", "LANGSMITH_PROJECT"),
+    )
+    langchain_endpoint: str = Field(
+        default="https://api.smith.langchain.com",
+        validation_alias=AliasChoices("LANGCHAIN_ENDPOINT", "LANGSMITH_ENDPOINT"),
+    )
+
     # ── Google/Gemini (legacy) ──────────────────────────────
     google_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None

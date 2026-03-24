@@ -15,8 +15,10 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from loguru import logger
 
+from .answer_eval import evaluate_answer, normalize_text, serialize_answer_for_history
 from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from .exercise_types import ExerciseType
+from .history_formatter import format_exercise_history
 from ...config import settings
 from ...exceptions import ExerciseGenerationError
 
@@ -64,32 +66,8 @@ class ExerciseService:
 
     @staticmethod
     def _serialize_exercise_for_prompt(exercise) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
-            "question": exercise.question,
-            "exercise_type": getattr(getattr(exercise, "exercise_type", ExerciseType.MCQ), "value", getattr(exercise, "exercise_type", ExerciseType.MCQ)),
-            "bloom_level": exercise.bloom_level,
-        }
-        if getattr(exercise, "statement", None):
-            payload["statement"] = exercise.statement
-        if getattr(exercise, "sentence", None):
-            payload["sentence"] = exercise.sentence
-        if getattr(exercise, "hint", None):
-            payload["hint"] = exercise.hint
-        if getattr(exercise, "options", None):
-            payload["options"] = exercise.options
-        if getattr(exercise, "items", None):
-            payload["items"] = exercise.items
-        if getattr(exercise, "pairs", None):
-            payload["pairs"] = exercise.pairs
-        if getattr(exercise, "right_items", None):
-            payload["right_items"] = exercise.right_items
-        if getattr(exercise, "rubric", None):
-            payload["rubric"] = exercise.rubric
-        if getattr(exercise, "correct_option", None):
-            payload["correct_option"] = exercise.correct_option
-        if getattr(exercise, "correct_answer", None) is not None:
-            payload["correct_answer"] = exercise.correct_answer
-        return payload
+        history_json = format_exercise_history([exercise])
+        return json.loads(history_json)[0]
 
     def _get_recent_same_concept_exercises(self, session, concept_idx: int) -> list[Dict[str, Any]]:
         limit = max(0, int(settings.adaptive_exercise_recent_same_concept_limit))
@@ -357,84 +335,18 @@ class ExerciseService:
 
     @staticmethod
     def _normalize_text(value: str) -> str:
-        return " ".join(value.strip().casefold().split())
+        return normalize_text(value)
 
     @classmethod
     def _serialize_answer_for_history(cls, exercise, answer: Dict[str, Any]) -> Any:
-        exercise_type = getattr(exercise, "exercise_type", ExerciseType.MCQ)
-        if exercise_type in {ExerciseType.MCQ, ExerciseType.MULTI_CORRECT}:
-            choices = answer.get("choices") or []
-            if choices:
-                return ", ".join(sorted(choices))
-            return answer.get("choice")
-        if exercise_type == ExerciseType.TRUE_FALSE:
-            value = answer.get("boolean")
-            return None if value is None else ("True" if value else "False")
-        if exercise_type == ExerciseType.FILL_BLANK:
-            blanks = [item.strip() for item in (answer.get("blanks") or []) if item and item.strip()]
-            return ", ".join(blanks)
-        if exercise_type == ExerciseType.ORDERING:
-            ordering = [item.strip() for item in (answer.get("ordering") or []) if item and item.strip()]
-            return " → ".join(ordering)
-        if exercise_type == ExerciseType.MATCHING:
-            matching = answer.get("matching") or {}
-            return ", ".join(f"{left} -> {right}" for left, right in matching.items())
-        return (answer.get("text") or "").strip()
+        return serialize_answer_for_history(exercise, answer)
 
     def _evaluate_answer(self, exercise, answer: Dict[str, Any]) -> Tuple[bool, str]:
-        exercise_type = getattr(exercise, "exercise_type", ExerciseType.MCQ)
-
-        if exercise_type == ExerciseType.MCQ:
-            selected = (answer.get("choice") or "").strip().upper()
-            return selected == exercise.correct_option.strip().upper(), selected
-
-        if exercise_type == ExerciseType.TRUE_FALSE:
-            selected = answer.get("boolean")
-            expected = bool(exercise.correct_answer)
-            return selected is not None and bool(selected) == expected, "True" if selected else "False"
-
-        if exercise_type == ExerciseType.FILL_BLANK:
-            user_values = [self._normalize_text(item) for item in (answer.get("blanks") or []) if item and item.strip()]
-            accepted = [self._normalize_text(item) for item in (exercise.correct_answer or []) if isinstance(item, str)]
-            is_correct = bool(user_values and accepted and user_values[0] in accepted)
-            return is_correct, ", ".join(answer.get("blanks") or [])
-
-        if exercise_type == ExerciseType.MULTI_CORRECT:
-            selected = sorted({item.strip().upper() for item in (answer.get("choices") or []) if item and item.strip()})
-            expected = sorted({item.strip().upper() for item in (exercise.correct_answer or []) if isinstance(item, str)})
-            return selected == expected, ", ".join(selected)
-
-        if exercise_type == ExerciseType.ORDERING:
-            selected = [self._normalize_text(item) for item in (answer.get("ordering") or []) if item and item.strip()]
-            expected = [self._normalize_text(item) for item in (exercise.correct_answer or []) if isinstance(item, str)]
-            return bool(selected) and selected == expected, " → ".join(answer.get("ordering") or [])
-
-        if exercise_type == ExerciseType.MATCHING:
-            selected = {
-                self._normalize_text(left): self._normalize_text(right)
-                for left, right in (answer.get("matching") or {}).items()
-                if left and right
-            }
-            expected = {
-                self._normalize_text(left): self._normalize_text(right)
-                for left, right in (exercise.correct_answer or {}).items()
-                if isinstance(left, str) and isinstance(right, str)
-            }
-            return bool(selected) and selected == expected, ", ".join(
-                f"{left} -> {right}" for left, right in (answer.get("matching") or {}).items()
-            )
-
-        student_answer = (answer.get("text") or "").strip()
-        grading = evaluate_short_answer(
-            concept_name=exercise.concept_name,
-            question=exercise.question,
-            rubric=exercise.rubric,
-            sample_answer=str(exercise.correct_answer or exercise.correct_option),
-            student_answer=student_answer,
+        return evaluate_answer(
+            exercise,
+            answer,
+            short_answer_grader=evaluate_short_answer,
         )
-        exercise.explanation_correct = grading["explanation"]
-        exercise.explanation_incorrect = grading["explanation"]
-        return bool(grading["is_correct"]), student_answer
 
     async def submit_answer(self, session, answer: Dict[str, Any], background_tasks=None) -> Optional[Dict[str, Any]]:
         """Process user's answer, update environment, return result."""

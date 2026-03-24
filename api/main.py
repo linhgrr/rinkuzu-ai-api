@@ -38,7 +38,15 @@ async def lifespan(app: FastAPI):
     logger.info("  ALSS-LEPC Full Demo — Starting up...")
     logger.info("=" * 60)
 
-    # Init LLM
+    # Init LLM Tracing & Connectivity
+    import os
+    if settings.langchain_tracing_v2:
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key or ""
+        os.environ["LANGCHAIN_PROJECT"] = settings.langchain_project
+        os.environ["LANGCHAIN_ENDPOINT"] = settings.langchain_endpoint
+        logger.info(f"[LangSmith] Tracing ENABLED for project: {settings.langchain_project}")
+
     initialize_shared_llm(
         base_url=settings.llm_base_url,
         model=settings.llm_model,

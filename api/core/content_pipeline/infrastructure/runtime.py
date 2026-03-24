@@ -73,31 +73,69 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
     from .llm.extract_chain import ExtractionChain
     from .llm.postprocess import postprocess_concepts
     from .llm import get_llm
-    from .embed.embedding_client import EmbeddingClient
-    from .embed.embeddings import compute_embedding_for_concepts
-    from .embed.prereq_ranking import rank_prerequisites
-    from .merge.name_merge import merge_by_name
-    from .graph.builder import KnowledgeGraphBuilder
-    from .graph.cycle_removal import make_dag_with_llm
-    from .graph.reduction import apply_transitive_reduction
-    from sentence_transformers import SentenceTransformer
+
+    def _get_embedding_client_cls():
+        from .embed.embedding_client import EmbeddingClient
+
+        return EmbeddingClient
+
+    def _compute_embedding_for_concepts(concepts, embedding_model):
+        from .embed.embeddings import compute_embedding_for_concepts
+
+        return compute_embedding_for_concepts(concepts, embedding_model)
+
+    def _build_relation_engine(*, extraction_chain):
+        try:
+            from .embed.prereq_ranking import rank_prerequisites
+        except ModuleNotFoundError as exc:
+            def rank_prerequisites(*_args, **_kwargs):
+                raise ModuleNotFoundError(
+                    "Optional embedding dependencies are required for prerequisite ranking"
+                ) from exc
+
+        return DefaultRelationEngine(
+            rank_prerequisites=rank_prerequisites,
+            verify_relations_batch=extraction_chain.verify_relations_batch,
+        )
+
+    def _merge_by_name(concepts):
+        from .merge.name_merge import merge_by_name
+
+        return merge_by_name(concepts)
+
+    def _knowledge_graph_builder_factory(subject_id: str):
+        from .graph.builder import KnowledgeGraphBuilder
+
+        return KnowledgeGraphBuilder(subject_id=subject_id)
+
+    def _make_dag_with_llm(graph):
+        from .graph.cycle_removal import make_dag_with_llm
+
+        return make_dag_with_llm(graph)
+
+    def _apply_transitive_reduction(graph):
+        from .graph.reduction import apply_transitive_reduction
+
+        return apply_transitive_reduction(graph)
+
+    def _build_saint_text_model():
+        from sentence_transformers import SentenceTransformer
+
+        return SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
 
     return ContentProcessorBindings(
         file_loader_factory=FileLoaderFactory,
         extraction_chain_cls=ExtractionChain,
         postprocess_concepts=postprocess_concepts,
         llm_factory=get_llm,
-        embedding_client_cls=EmbeddingClient,
-        compute_embedding_for_concepts=compute_embedding_for_concepts,
-        merge_by_name=merge_by_name,
-        relation_engine_factory=lambda *, extraction_chain: DefaultRelationEngine(
-            rank_prerequisites=rank_prerequisites,
-            verify_relations_batch=extraction_chain.verify_relations_batch,
-        ),
-        knowledge_graph_builder_factory=lambda subject_id: KnowledgeGraphBuilder(subject_id=subject_id),
-        make_dag_with_llm=make_dag_with_llm,
-        apply_transitive_reduction=apply_transitive_reduction,
-        saint_text_model_factory=lambda: SentenceTransformer("paraphrase-multilingual-mpnet-base-v2"),
+        embedding_client_cls=_get_embedding_client_cls,
+        compute_embedding_for_concepts=_compute_embedding_for_concepts,
+        merge_by_name=_merge_by_name,
+        relation_engine_factory=_build_relation_engine,
+        knowledge_graph_builder_factory=_knowledge_graph_builder_factory,
+        make_dag_with_llm=_make_dag_with_llm,
+        apply_transitive_reduction=_apply_transitive_reduction,
+        saint_text_model_factory=_build_saint_text_model,
         generate_theory=_generate_theory_via_exercise_gen,
     )
 

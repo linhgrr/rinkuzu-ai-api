@@ -8,6 +8,9 @@ version = "1.0.0"
 description = "FastAPI backend for Rinkuzu adaptive learning and content pipeline services."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
+dependencies = [
+    "langsmith",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
