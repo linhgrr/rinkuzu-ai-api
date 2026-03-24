@@ -113,6 +113,9 @@ NEGATIVE_CONSTRAINTS = {
     ExerciseType.MULTI_CORRECT: (
         "- KHÔNG để số đáp án đúng là 0, 1 hoặc cả 5 đáp án.\n"
         "- KHÔNG làm lộ đáp án bằng mẫu hình chữ cái hoặc độ dài câu.\n"
+        "- PHẢI kiểm chứng phép tính/logic của TỪNG lựa chọn A-E một cách độc lập trước khi phân loại đúng/sai.\n"
+        "- Nếu lựa chọn liên quan đến phép tính số học, PHẢI tính toán cụ thể và xác nhận kết quả trước khi kết luận.\n"
+        "- KHÔNG được đánh dấu một lựa chọn là sai nếu chưa chỉ ra được lỗi cụ thể trong lựa chọn đó.\n"
     ),
     ExerciseType.ORDERING: (
         "- KHÔNG thêm bước thừa hoặc bước trùng nghĩa.\n"

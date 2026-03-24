@@ -67,8 +67,9 @@ PROMPT_REGISTRY: dict[ExerciseType, ExercisePromptSpec] = {
         schema=MultiCorrectOutput,
         instruction=(
             "Hãy tạo 1 câu hỏi trắc nghiệm nhiều đáp án đúng gồm đúng 5 lựa chọn A, B, C, D, E.\n"
-            "- Có từ 2 đến 4 đáp án đúng.\n"
+            "- Số đáp án đúng có thể là 2, 3, hoặc 4 — hãy thoải mái chọn số lượng phù hợp nhất với nội dung câu hỏi.\n"
             "- Các lựa chọn sai phải sai vì thiếu điều kiện hoặc sai bản chất, không được vô lý.\n"
+            "- Trước khi output, hãy tự kiểm tra TỪNG lựa chọn A-E: tính toán/suy luận cụ thể để xác nhận đúng hay sai.\n"
         ),
         negative_constraints=NEGATIVE_CONSTRAINTS[ExerciseType.MULTI_CORRECT],
         explanation_guidance=EXPLANATION_GUIDANCE[ExerciseType.MULTI_CORRECT],
