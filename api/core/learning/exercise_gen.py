@@ -2,6 +2,7 @@
 exercise_gen.py — LLM-powered exercise generation and answer evaluation.
 """
 
+import json
 import time
 from typing import Optional, Dict, Any, List, Sequence
 
@@ -52,6 +53,7 @@ def _build_generation_spec(
     concept_definition: str,
     bloom_level: int,
     exercise_type: ExerciseType,
+    recent_same_concept_exercises: Optional[Sequence[Dict[str, Any]]] = None,
 ):
     common_intro = (
         "Bạn là giáo viên chuyên tạo bài tập adaptive learning theo Bloom's Taxonomy.\n"
@@ -60,6 +62,11 @@ def _build_generation_spec(
         f"Mức độ tư duy (Bloom): Level {bloom_level} - {BLOOM_VERBS.get(bloom_level, '')}\n"
         "Ngôn ngữ: Tiếng Việt.\n"
         "Nội dung phải rõ ràng, không lan man, đúng trọng tâm kiến thức.\n"
+        "BẮT BUỘC chỉ tạo bài tập có thể hiển thị và làm hoàn toàn bằng text.\n"
+        "- Không được yêu cầu học sinh xem hình ảnh, hình vẽ, sơ đồ, đồ thị, biểu đồ, bảng, ký hiệu tô màu, hoặc bố cục trực quan.\n"
+        "- Không được tự mô tả rằng có hình bên dưới, hình minh họa, ảnh đính kèm, hoặc 'quan sát hình sau'.\n"
+        "- Không được sinh bài mà đáp án phụ thuộc vào yếu tố thị giác chưa được viết ra bằng text.\n"
+        "- Nếu cần dữ kiện, hãy viết đầy đủ mọi dữ kiện trực tiếp trong câu hỏi bằng text hoặc Markdown đơn giản.\n"
         "- explanation_correct: 1-3 câu, giọng thân thiện, giải thích vì sao đáp án đúng.\n"
         "- explanation_incorrect: 1-2 câu, nêu lỗi sai phổ biến hoặc điều kiện cần còn thiếu.\n"
         "- Có thể dùng Markdown cơ bản nếu hữu ích.\n"
@@ -67,6 +74,23 @@ def _build_generation_spec(
         f"{MATH_FORMAT_RULES}"
         "---\n\n"
     )
+    recent_examples_block = ""
+    if recent_same_concept_exercises:
+        serialized_recent = json.dumps(
+            list(recent_same_concept_exercises),
+            ensure_ascii=False,
+            indent=2,
+        )
+        recent_examples_block = (
+            "Các bài tập gần nhất của cùng khái niệm để tham chiếu tránh lặp:\n"
+            f"{serialized_recent}\n"
+            "Yêu cầu đa dạng hóa BẮT BUỘC:\n"
+            "- Không lặp lại cùng ý tưởng câu hỏi, cùng dữ kiện chính, cùng bối cảnh, cùng ví dụ hoặc cùng đáp án đúng.\n"
+            "- Nếu cùng dạng bài, phải đổi rõ rệt ngữ cảnh và cách kiểm tra kiến thức.\n"
+            "- Hãy tạo bài mới kiểm tra cùng khái niệm nhưng khác nội dung so với danh sách trên.\n"
+            "\n"
+        )
+    common_intro += recent_examples_block
 
     if exercise_type == ExerciseType.MCQ:
         return (
@@ -161,6 +185,7 @@ def generate_exercise(
     concept_definition: str,
     bloom_level: int,
     mastery: Optional[float] = None,
+    recent_same_concept_exercises: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Generate an exercise via LLM with a type selected from Bloom level and mastery."""
     bloom_label = BLOOM_VERBS.get(bloom_level, f"Level {bloom_level}")
@@ -175,6 +200,7 @@ def generate_exercise(
         concept_definition=concept_definition,
         bloom_level=bloom_level,
         exercise_type=exercise_type,
+        recent_same_concept_exercises=recent_same_concept_exercises,
     )
     structured_exercise_llm = get_structured_llm(schema)
 

@@ -15,6 +15,7 @@ def test_exercise_service_uses_separate_request_and_prefetch_timeouts(monkeypatc
             llm_max_concurrency=2,
             llm_request_timeout_sec=90,
             llm_prefetch_timeout_sec=210,
+            adaptive_exercise_recent_same_concept_limit=5,
         ),
     )
 
@@ -36,6 +37,7 @@ async def test_eager_prefetch_uses_prefetch_timeout(monkeypatch):
             llm_max_concurrency=None,
             llm_request_timeout_sec=90,
             llm_prefetch_timeout_sec=210,
+            adaptive_exercise_recent_same_concept_limit=5,
         ),
     )
 
@@ -70,5 +72,92 @@ async def test_eager_prefetch_uses_prefetch_timeout(monkeypatch):
         assert captured["timeout_sec"] == 210
         assert session._prefetch_cache["eager"]["concept_idx"] == 0
         assert session._prefetch_cache["eager"]["bloom_level"] == 1
+    finally:
+        service.close()
+
+
+def test_get_recent_same_concept_exercises_respects_setting_and_order(monkeypatch):
+    monkeypatch.setattr(
+        exercise_service_module,
+        "settings",
+        SimpleNamespace(
+            llm_max_workers=2,
+            llm_max_concurrency=None,
+            llm_request_timeout_sec=90,
+            llm_prefetch_timeout_sec=210,
+            adaptive_exercise_recent_same_concept_limit=2,
+        ),
+    )
+
+    service = ExerciseService()
+    session = SimpleNamespace(
+        exercise_history=[
+            SimpleNamespace(
+                concept_idx=0,
+                question="Q1",
+                exercise_type="mcq",
+                bloom_level=1,
+                statement=None,
+                hint=None,
+                options={"A": "1"},
+                items=[],
+                pairs=[],
+                right_items=[],
+                rubric=[],
+                correct_option="A",
+                correct_answer=None,
+            ),
+            SimpleNamespace(
+                concept_idx=1,
+                question="other concept",
+                exercise_type="mcq",
+                bloom_level=2,
+                statement=None,
+                hint=None,
+                options={"A": "x"},
+                items=[],
+                pairs=[],
+                right_items=[],
+                rubric=[],
+                correct_option="A",
+                correct_answer=None,
+            ),
+            SimpleNamespace(
+                concept_idx=0,
+                question="Q2",
+                exercise_type="fill_blank",
+                bloom_level=3,
+                statement=None,
+                hint="hint",
+                options={},
+                items=[],
+                pairs=[],
+                right_items=[],
+                rubric=[],
+                correct_option="",
+                correct_answer=["ans"],
+            ),
+            SimpleNamespace(
+                concept_idx=0,
+                question="Q3",
+                exercise_type="true_false",
+                bloom_level=2,
+                statement="S3",
+                hint=None,
+                options={},
+                items=[],
+                pairs=[],
+                right_items=[],
+                rubric=[],
+                correct_option="",
+                correct_answer=True,
+            ),
+        ]
+    )
+
+    try:
+        recent = service._get_recent_same_concept_exercises(session, concept_idx=0)
+        assert [item["question"] for item in recent] == ["Q3", "Q2"]
+        assert all(item["question"] != "other concept" for item in recent)
     finally:
         service.close()

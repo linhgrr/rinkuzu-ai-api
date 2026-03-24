@@ -79,6 +79,13 @@ class Settings(BaseSettings):
     prs_threshold: float = 0.75
     adaptive_mastery_threshold: float = 0.75
     similarity_threshold: float = 0.9
+    adaptive_exercise_recent_same_concept_limit: int = Field(
+        default=5,
+        validation_alias=AliasChoices(
+            "ADAPTIVE_EXERCISE_RECENT_SAME_CONCEPT_LIMIT",
+            "EXERCISE_RECENT_SAME_CONCEPT_LIMIT",
+        ),
+    )
     pdf_ocr_concurrency: int = 5
     vision_pdf_request_timeout_sec: float = 120
     vision_agent_api_key: Optional[str] = None

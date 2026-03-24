@@ -7,6 +7,8 @@ answer submission, and prefetch caching.
 
 import uuid
 import asyncio
+import hashlib
+import json
 from typing import Optional, Dict, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
@@ -53,12 +55,66 @@ class ExerciseService:
         )
         self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)
-        self._exercise_inflight: Dict[Tuple[str, int, int, int], asyncio.Future] = {}
+        self._exercise_inflight: Dict[Tuple[str, int, int, int, str], asyncio.Future] = {}
         self._theory_inflight: Dict[Tuple[str, str], asyncio.Future] = {}
 
     @staticmethod
     def _build_id_to_concept_map(session) -> Dict[int, str]:
         return {v: k for k, v in session.concept_map.items()}
+
+    @staticmethod
+    def _serialize_exercise_for_prompt(exercise) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "question": exercise.question,
+            "exercise_type": getattr(getattr(exercise, "exercise_type", ExerciseType.MCQ), "value", getattr(exercise, "exercise_type", ExerciseType.MCQ)),
+            "bloom_level": exercise.bloom_level,
+        }
+        if getattr(exercise, "statement", None):
+            payload["statement"] = exercise.statement
+        if getattr(exercise, "hint", None):
+            payload["hint"] = exercise.hint
+        if getattr(exercise, "options", None):
+            payload["options"] = exercise.options
+        if getattr(exercise, "items", None):
+            payload["items"] = exercise.items
+        if getattr(exercise, "pairs", None):
+            payload["pairs"] = exercise.pairs
+        if getattr(exercise, "right_items", None):
+            payload["right_items"] = exercise.right_items
+        if getattr(exercise, "rubric", None):
+            payload["rubric"] = exercise.rubric
+        if getattr(exercise, "correct_option", None):
+            payload["correct_option"] = exercise.correct_option
+        if getattr(exercise, "correct_answer", None) is not None:
+            payload["correct_answer"] = exercise.correct_answer
+        return payload
+
+    def _get_recent_same_concept_exercises(self, session, concept_idx: int) -> list[Dict[str, Any]]:
+        limit = max(0, int(settings.adaptive_exercise_recent_same_concept_limit))
+        if limit == 0:
+            return []
+
+        same_concept_history = [
+            ex
+            for ex in reversed(session.exercise_history)
+            if ex.concept_idx == concept_idx
+        ]
+        return [
+            self._serialize_exercise_for_prompt(ex)
+            for ex in same_concept_history[:limit]
+        ]
+
+    @staticmethod
+    def _recent_examples_fingerprint(recent_same_concept_exercises: list[Dict[str, Any]]) -> str:
+        if not recent_same_concept_exercises:
+            return "none"
+        serialized = json.dumps(
+            recent_same_concept_exercises,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return hashlib.sha1(serialized.encode("utf-8")).hexdigest()[:12]
 
     async def _run_llm_call(self, func, *args, timeout_sec: Optional[float] = None):
         loop = asyncio.get_running_loop()
@@ -80,7 +136,9 @@ class ExerciseService:
         timeout_sec: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         mastery_bucket = int(max(0.0, min(1.0, mastery or 0.0)) * 10)
-        key = (session.session_id, concept_idx, bloom_level, mastery_bucket)
+        recent_same_concept_exercises = self._get_recent_same_concept_exercises(session, concept_idx)
+        history_fingerprint = self._recent_examples_fingerprint(recent_same_concept_exercises)
+        key = (session.session_id, concept_idx, bloom_level, mastery_bucket, history_fingerprint)
         existing = self._exercise_inflight.get(key)
         if existing is not None:
             return await existing
@@ -92,6 +150,7 @@ class ExerciseService:
                 concept_def,
                 bloom_level,
                 mastery,
+                recent_same_concept_exercises,
                 timeout_sec=timeout_sec,
             )
 
