@@ -177,8 +177,7 @@ async def generate_exercise(
         items=exercise.items,
         pairs=exercise.pairs,
         right_items=exercise.right_items,
-        rubric=exercise.rubric,
-        correct_answer=exercise.correct_answer,
+
         step=env_stats["step"],
         max_steps=env_stats["max_steps"],
         theory=exercise.theory,

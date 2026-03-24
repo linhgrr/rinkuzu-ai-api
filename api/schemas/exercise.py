@@ -44,8 +44,7 @@ class ExerciseResponse(BaseModel):
     items: List[str] = Field(default_factory=list)
     pairs: List[Dict[str, str]] = Field(default_factory=list)
     right_items: List[str] = Field(default_factory=list)
-    rubric: List[str] = Field(default_factory=list)
-    correct_answer: Optional[Any] = None
+
     step: int
     max_steps: int
     theory: Optional[Dict[str, Any]] = None
