@@ -16,6 +16,7 @@ from .stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
 )
+from .stages.chunk_persistence import persist_document_chunks
 from .stages.concept_extraction import extract_concepts_from_chunks
 from .stages.concept_merge import merge_duplicate_concepts
 from .stages.document_loading import load_document_chunks
@@ -85,10 +86,14 @@ class PipelineRunner:
         load_job: LoadJobFn,
         save_job: SaveJobFn,
         persist_job_state: PersistJobStateFn,
+        chunk_chroma_store: Any = None,
+        document_chunks_col: Any = None,
     ) -> None:
         self._load_job = load_job
         self._save_job = save_job
         self._persist_job_state = persist_job_state
+        self._chunk_chroma_store = chunk_chroma_store
+        self._document_chunks_col = document_chunks_col
 
     async def run(
         self,
@@ -130,6 +135,15 @@ class PipelineRunner:
                     job,
                     file_path=file_path,
                     load_and_chunk=bindings.file_loader_factory.load_and_chunk,
+                    persist_job_state=self._persist_job_state,
+                )
+
+                # Persist document chunks for RAG (MongoDB + ChromaDB)
+                await persist_document_chunks(
+                    job,
+                    chunks=chunks,
+                    chunk_chroma_store=self._chunk_chroma_store,
+                    mongo_collection=self._document_chunks_col,
                     persist_job_state=self._persist_job_state,
                 )
 

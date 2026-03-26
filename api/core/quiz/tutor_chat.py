@@ -162,6 +162,7 @@ def build_tutor_prompt(
     chat_history: Optional[List[Dict[str, str]]] = None,
     concept_name: Optional[str] = None,
     bloom_level: Optional[int] = None,
+    rag_context: str = "",
     general_instruction: str = "HÃY GIẢI THÍCH TỔNG QUÁT CÂU HỎI NÀY CHO HỌC SINH.",
 ) -> str:
     contextual_info = build_chat_context(chat_history)
@@ -179,11 +180,20 @@ def build_tutor_prompt(
             f"MỨC BLOOM: {bloom_level if bloom_level is not None else 'Không rõ'}\n"
         )
 
+    rag_block = ""
+    if rag_context:
+        rag_block = (
+            f"NGỮ CẢNH TỪ TÀI LIỆU (dùng để trả lời chính xác):\n{rag_context}\n\n"
+            "Nếu ngữ cảnh trên đủ để trả lời, hãy dùng nó. "
+            "Nếu không đủ, bổ sung bằng kiến thức của bạn và ghi rõ đó là suy luận.\n\n"
+        )
+
     return (
         "CÂU HỎI QUIZ:\n"
         f"{question}\n\n"
         "ĐÁP ÁN:\n"
         f"{chr(10).join(f'{chr(65 + idx)}. {option}' for idx, option in enumerate(options))}\n\n"
+        f"{rag_block}"
         f"{concept_block}"
         f"{contextual_info}\n"
         f"{learner_prompt}\n\n"
@@ -277,6 +287,7 @@ async def create_tutor_chat_stream(
     chat_history: Optional[List[Dict[str, str]]] = None,
     concept_name: Optional[str] = None,
     bloom_level: Optional[int] = None,
+    rag_context: str = "",
     on_complete: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> AsyncIterator[bytes]:
     validation_error = validate_chat_input(user_question)
@@ -293,6 +304,7 @@ async def create_tutor_chat_stream(
         chat_history=chat_history,
         concept_name=concept_name,
         bloom_level=bloom_level,
+        rag_context=rag_context,
     )
     payload = {
         "model": _resolve_tutor_model(),
@@ -411,6 +423,7 @@ def generate_tutor_chat_response(
     chat_history: Optional[List[Dict[str, str]]] = None,
     concept_name: Optional[str] = None,
     bloom_level: Optional[int] = None,
+    rag_context: str = "",
 ) -> str:
     validation_error = validate_chat_input(user_question)
     if validation_error:
@@ -424,6 +437,7 @@ def generate_tutor_chat_response(
         chat_history=chat_history,
         concept_name=concept_name,
         bloom_level=bloom_level,
+        rag_context=rag_context,
     )
 
     t0 = time.time()

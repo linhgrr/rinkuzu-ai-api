@@ -15,7 +15,7 @@ from ..schemas import (
     SessionStatusResponse,
     TutorChatRequest, TutorChatResponse,
 )
-from ..dependencies import get_session_manager, get_session_service, get_current_user
+from ..dependencies import get_session_manager, get_session_service, get_current_user, get_chunk_chroma_store
 from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
 from ..core.quiz.tutor_chat import (
     create_tutor_chat_stream,
@@ -74,6 +74,40 @@ async def _append_tutor_chat_turn(
             {"role": "assistant", "content": sanitized_assistant_response},
         ])
         session.tutor_chat_history = session.tutor_chat_history[-12:]
+
+
+async def _build_rag_context(
+    session,
+    chunk_store,
+    user_question: str,
+    k: int = 3,
+) -> str:
+    """Retrieve top-k relevant document chunks for the user's question.
+
+    Returns an empty string if retrieval fails or no chunks are found.
+    """
+    if chunk_store is None or not session.job_id:
+        return ""
+
+    try:
+        docs = await chunk_store.aretrieve(
+            query=user_question,
+            job_id=session.job_id,
+            k=k,
+        )
+        if not docs:
+            return ""
+
+        blocks = []
+        for i, doc in enumerate(docs, 1):
+            page = doc.metadata.get("start_page", "?")
+            blocks.append(
+                f"[Đoạn {i}] (trang {page})\n{doc.page_content}"
+            )
+        return "\n\n".join(blocks)
+    except Exception as exc:
+        logger.warning(f"[RAG] Retrieval failed, continuing without context: {exc}")
+        return ""
 
 
 @router.post("/start", response_model=SessionCreateResponse)
@@ -208,6 +242,7 @@ async def chat_about_exercise(
     req: TutorChatRequest,
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
+    chunk_store=Depends(get_chunk_chroma_store),
 ):
     session = await _resolve_user_session(manager, session_id, user_id)
     exercise = session.current_exercise or (
@@ -234,6 +269,14 @@ async def chat_about_exercise(
 
     chat_history = await _get_tutor_chat_history(session, exercise.exercise_id)
 
+    # RAG: retrieve relevant document chunks for this question
+    rag_context = await _build_rag_context(
+        session,
+        chunk_store,
+        req.user_question,
+        k=3,
+    )
+
     try:
         if req.stream:
             async def persist_chat_history(full_response: str) -> None:
@@ -251,6 +294,7 @@ async def chat_about_exercise(
                 chat_history=chat_history,
                 concept_name=exercise.concept_name,
                 bloom_level=exercise.bloom_level,
+                rag_context=rag_context,
                 on_complete=persist_chat_history,
             )
             return StreamingResponse(
@@ -271,6 +315,7 @@ async def chat_about_exercise(
             chat_history=chat_history,
             concept_name=exercise.concept_name,
             bloom_level=exercise.bloom_level,
+            rag_context=rag_context,
         )
         await _append_tutor_chat_turn(
             session,

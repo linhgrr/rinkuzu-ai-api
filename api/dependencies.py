@@ -51,6 +51,11 @@ def get_content_pipeline_service(request: Request):
     return service
 
 
+def get_chunk_chroma_store(request: Request):
+    """Provide ChunkChromaStore from app state (may be None if unavailable)."""
+    return getattr(request.app.state, "chunk_chroma_store", None)
+
+
 def get_content_pipeline_availability(request: Request) -> dict:
     """Expose runtime availability of the unified content pipeline modules."""
     return {

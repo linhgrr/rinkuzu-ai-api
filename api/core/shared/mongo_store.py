@@ -17,6 +17,7 @@ from ...repositories.subject_progress_repo import SubjectProgressRepository
 _mongo_available = False
 _pipeline_repo: Optional[PipelineRepository] = None
 _subject_progress_repo: Optional[SubjectProgressRepository] = None
+_mongo_client: Optional[Any] = None  # motor AsyncIOMotorClient
 
 
 async def init_mongo(mongo_url: Optional[str] = None) -> bool:
@@ -24,7 +25,7 @@ async def init_mongo(mongo_url: Optional[str] = None) -> bool:
 
     Returns True if successful, False otherwise.
     """
-    global _mongo_available, _pipeline_repo, _subject_progress_repo
+    global _mongo_available, _pipeline_repo, _subject_progress_repo, _mongo_client
 
     if not mongo_url:
         mongo_url = get_settings().mongo_url
@@ -38,6 +39,7 @@ async def init_mongo(mongo_url: Optional[str] = None) -> bool:
         client = motor.motor_asyncio.AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
         await client.admin.command("ping")
         db = client["adaptive_learning"]
+        _mongo_client = client
 
         _pipeline_repo = PipelineRepository(db)
         _subject_progress_repo = SubjectProgressRepository(db)
@@ -56,6 +58,13 @@ async def init_mongo(mongo_url: Optional[str] = None) -> bool:
 
 def is_available() -> bool:
     return _mongo_available
+
+
+def _get_db():
+    """Return the adaptive_learning database if MongoDB is connected, else None."""
+    if _mongo_client is None:
+        return None
+    return _mongo_client["adaptive_learning"]
 
 
 def get_pipeline_repo() -> Optional[PipelineRepository]:

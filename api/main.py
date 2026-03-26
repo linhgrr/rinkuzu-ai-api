@@ -15,6 +15,8 @@ from .core.shared.llm import initialize_shared_llm
 from .core.shared import mongo_store
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
 from .core.content_pipeline.application.pipeline_service import PipelineService
+from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import ChunkChromaStore
+from .core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
 from .core.content_pipeline.infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
     CONTENT_PROCESSOR_ERROR,
@@ -80,6 +82,14 @@ async def lifespan(app: FastAPI):
     app.state.content_processor_error = CONTENT_PROCESSOR_ERROR
     app.state.content_processor_src = CONTENT_PROCESSOR_SRC
 
+    # Init RAG chunk stores
+    app.state.chunk_chroma_store = ChunkChromaStore(
+        embedding_client=EmbeddingClient(),
+    )
+    db = mongo_store._get_db() if mongo_store.is_available() else None
+    app.state.document_chunks_col = db["al_document_chunks"] if db else None
+    logger.info("[RAG] ChunkChromaStore and MongoDB collection initialized")
+
     if CONTENT_PROCESSOR_AVAILABLE:
         logger.info("[PipelineRuntime] Content pipeline runtime available")
     else:
@@ -99,6 +109,8 @@ async def lifespan(app: FastAPI):
         load_job=mongo_store.load_pipeline_job,
         save_job=mongo_store.save_pipeline_job,
         persist_job_state=persist_pipeline_job_state,
+        chunk_chroma_store=app.state.chunk_chroma_store,
+        document_chunks_col=app.state.document_chunks_col,
     )
 
     async def run_content_pipeline(job, file_path, prs_threshold, min_confidence, apply_reduction):
