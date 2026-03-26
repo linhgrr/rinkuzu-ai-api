@@ -87,7 +87,7 @@ async def lifespan(app: FastAPI):
         embedding_client=EmbeddingClient(),
     )
     db = mongo_store._get_db() if mongo_store.is_available() else None
-    app.state.document_chunks_col = db["al_document_chunks"] if db else None
+    app.state.document_chunks_col = db["al_document_chunks"] if db is not None else None
     logger.info("[RAG] ChunkChromaStore and MongoDB collection initialized")
 
     if CONTENT_PROCESSOR_AVAILABLE:
