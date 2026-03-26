@@ -15,7 +15,7 @@ from typing import Any, Awaitable, Callable, List, Optional
 from langchain_core.documents import Document as LangChainDocument
 from loguru import logger
 
-from ....core.shared import mongo_store
+from .....core.shared import mongo_store
 from ...domain.jobs import PipelineJob, PipelineStatus
 from ...infrastructure.storage.chunk_chroma_store import ChunkChromaStore
 
