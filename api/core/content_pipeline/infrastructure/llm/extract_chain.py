@@ -49,7 +49,7 @@ class ExtractionChain:
 
         try:
             self.structured_extract_llm = self.llm.with_structured_output(
-                ConceptExtraction, method="json_schema"
+                ConceptExtraction, method="json_mode"
             )
             self.extraction_chain = self.extraction_prompt | self.structured_extract_llm
         except Exception as e:
@@ -68,7 +68,7 @@ class ExtractionChain:
 
         try:
             self.structured_verif_llm = self.llm.with_structured_output(
-                EvidenceVerification, method="json_schema"
+                EvidenceVerification, method="json_mode"
             )
             self.verification_chain = self.verification_prompt | self.structured_verif_llm
         except Exception as e:
@@ -170,7 +170,7 @@ class ExtractionChain:
                 "previous_concepts_section": previous_concepts_section,
             }
 
-            # Only do native API call, no regex JSON repairing required via `json_schema`
+            # Only do native API call, no regex JSON repairing required via `json_mode`
             max_retries = 3
             last_error = None
             

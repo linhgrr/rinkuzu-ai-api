@@ -47,6 +47,10 @@ def sleep_before_retry(attempt: int, base_delay_sec: float) -> None:
     time.sleep(base_delay_sec * attempt)
 
 
+def _ngrok_headers() -> dict[str, str]:
+    return {"ngrok-skip-browser-warning": "true"}
+
+
 def get_llm(temperature: float = 0.0, **kwargs) -> ChatOpenAI:
     """Create a configured ChatOpenAI client for the current settings."""
     settings = get_settings()
@@ -64,6 +68,7 @@ def get_llm(temperature: float = 0.0, **kwargs) -> ChatOpenAI:
         temperature=temperature,
         max_retries=max_retries,
         timeout=timeout,
+        default_headers=_ngrok_headers(),
         **kwargs,
     )
 
@@ -82,6 +87,7 @@ def get_embeddings(**kwargs) -> OpenAIEmbeddings:
         model=model,
         api_key=api_key,
         timeout=timeout,
+        default_headers=_ngrok_headers(),
         **kwargs,
     )
 
@@ -126,7 +132,7 @@ def get_shared_llm() -> ChatOpenAI:
     return _shared_llm
 
 
-def get_structured_llm(schema: Any, *, method: str = "json_schema") -> Any:
+def get_structured_llm(schema: Any, *, method: str = "json_mode") -> Any:
     """Return a cached structured-output wrapper for the shared client."""
     llm = get_shared_llm()
     cache_key = f"{getattr(schema, '__module__', '')}:{getattr(schema, '__name__', repr(schema))}:{method}"

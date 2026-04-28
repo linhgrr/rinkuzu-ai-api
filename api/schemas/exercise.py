@@ -24,6 +24,20 @@ class NextConceptResponse(BaseModel):
     max_steps: int
 
 
+class RecommendationPrerequisite(BaseModel):
+    name: str
+    mastery: float
+
+
+class RecommendationReason(BaseModel):
+    concept_name: str
+    bloom_level: int
+    bloom_label: str
+    satisfied_prereqs: List[RecommendationPrerequisite] = Field(default_factory=list)
+    current_mastery: float
+    next_milestone: float
+
+
 class TheoryResponse(BaseModel):
     content: str
     examples: List[str]
@@ -48,6 +62,7 @@ class ExerciseResponse(BaseModel):
     step: int
     max_steps: int
     theory: Optional[Dict[str, Any]] = None
+    recommendation_reason: Optional[RecommendationReason] = None
 
 
 class SubmitAnswerPayload(BaseModel):

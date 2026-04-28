@@ -69,6 +69,49 @@ class ExerciseService:
         history_json = format_exercise_history([exercise])
         return json.loads(history_json)[0]
 
+    @staticmethod
+    def _round_mastery(value: float) -> float:
+        return round(float(value), 2)
+
+    def _build_recommendation_reason(
+        self,
+        session,
+        *,
+        concept_idx: int,
+        concept_name: str,
+        bloom_level: int,
+    ) -> Dict[str, Any]:
+        id_to_concept = self._build_id_to_concept_map(session)
+        concept_mastery = session.env.get_concept_mastery()
+        current_mastery = (
+            float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else 0.0
+        )
+
+        satisfied_prereqs = []
+        for prereq_idx in session.prereq_graph.get(concept_idx, []):
+            prereq_concept_id = id_to_concept.get(prereq_idx, str(prereq_idx))
+            prereq_mastery = (
+                float(concept_mastery[prereq_idx]) if len(concept_mastery) > prereq_idx else 0.0
+            )
+            if prereq_mastery >= settings.adaptive_mastery_threshold:
+                satisfied_prereqs.append(
+                    {
+                        "name": session.concept_names.get(prereq_concept_id, prereq_concept_id),
+                        "mastery": self._round_mastery(prereq_mastery),
+                    }
+                )
+
+        satisfied_prereqs.sort(key=lambda item: item["mastery"], reverse=True)
+
+        return {
+            "concept_name": concept_name,
+            "bloom_level": bloom_level,
+            "bloom_label": BLOOM_LABELS.get(bloom_level, "Unknown"),
+            "satisfied_prereqs": satisfied_prereqs[:3],
+            "current_mastery": self._round_mastery(current_mastery),
+            "next_milestone": self._round_mastery(settings.adaptive_mastery_threshold),
+        }
+
     def _get_recent_same_concept_exercises(self, session, concept_idx: int) -> list[Dict[str, Any]]:
         limit = max(0, int(settings.adaptive_exercise_recent_same_concept_limit))
         if limit == 0:
@@ -321,6 +364,12 @@ class ExerciseService:
             theory=None,
         )
         session.current_exercise = exercise
+        session._current_recommendation_reason = self._build_recommendation_reason(
+            session,
+            concept_idx=concept_idx,
+            concept_name=concept_name,
+            bloom_level=bloom_level,
+        )
 
         # Fire background prefetch
         try:

@@ -27,6 +27,10 @@ def _resolve_llm_api_key() -> str | None:
     )
 
 
+def _ngrok_headers() -> dict[str, str]:
+    return {"ngrok-skip-browser-warning": "true"}
+
+
 def get_llm(temperature: float = 0.0, **kwargs) -> ChatOpenAI:
     """Create a ChatOpenAI client using unified backend settings."""
     settings = get_settings()
@@ -43,6 +47,7 @@ def get_llm(temperature: float = 0.0, **kwargs) -> ChatOpenAI:
         temperature=temperature,
         timeout=timeout,
         max_retries=max_retries,
+        default_headers=_ngrok_headers(),
         **kwargs,
     )
 
@@ -60,6 +65,7 @@ def get_embeddings(**kwargs) -> OpenAIEmbeddings:
         model=model,
         api_key=api_key,
         timeout=timeout,
+        default_headers=_ngrok_headers(),
         **kwargs,
     )
 

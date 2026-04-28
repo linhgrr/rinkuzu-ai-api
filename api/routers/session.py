@@ -215,6 +215,7 @@ async def generate_exercise(
         step=env_stats["step"],
         max_steps=env_stats["max_steps"],
         theory=exercise.theory,
+        recommendation_reason=getattr(session, "_current_recommendation_reason", None),
     )
 
 
