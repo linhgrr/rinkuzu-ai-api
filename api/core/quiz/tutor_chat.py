@@ -9,13 +9,13 @@ import codecs
 import json
 import re
 import time
-from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 import httpx
 from loguru import logger
 
-from ...config import get_settings
-from ..shared.llm import (
+from api.config import get_settings
+from api.core.shared.llm import (
     build_chat_completions_url,
     extract_llm_text,
     get_shared_llm,
@@ -24,6 +24,8 @@ from ..shared.llm import (
     sleep_before_retry,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
 TUTOR_SYSTEM_PROMPT = (
     "Bạn là Rin-chan, gia sư giúp học sinh hiểu câu hỏi trắc nghiệm. "
@@ -49,7 +51,7 @@ def sanitize_chat_input(input_text: str) -> str:
     )
 
 
-def validate_chat_input(user_question: str) -> Optional[str]:
+def validate_chat_input(user_question: str) -> str | None:
     sanitized = sanitize_chat_input(user_question)
     suspicious_patterns = [
         r"ignore\b[\s\S]{0,120}\b(instructions?|prompts?)",
@@ -76,8 +78,8 @@ def validate_chat_input(user_question: str) -> Optional[str]:
     return None
 
 
-def normalize_chat_history(chat_history: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
-    normalized: List[Dict[str, str]] = []
+def normalize_chat_history(chat_history: list[dict[str, str]] | None) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
 
     for message in chat_history or []:
         role = message.get("role")
@@ -100,7 +102,7 @@ def normalize_chat_history(chat_history: Optional[List[Dict[str, str]]]) -> List
     return normalized[-12:]
 
 
-def summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
+def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
     if not chat_history:
         return ""
 
@@ -133,7 +135,7 @@ def summarize_chat_history(chat_history: List[Dict[str, str]]) -> str:
         return ""
 
 
-def build_chat_context(chat_history: Optional[List[Dict[str, str]]]) -> str:
+def build_chat_context(chat_history: list[dict[str, str]] | None) -> str:
     history = normalize_chat_history(chat_history)
     if len(history) > 6:
         summary = summarize_chat_history(history)
@@ -157,11 +159,11 @@ def build_chat_context(chat_history: Optional[List[Dict[str, str]]]) -> str:
 def build_tutor_prompt(
     *,
     question: str,
-    options: List[str],
-    user_question: Optional[str],
-    chat_history: Optional[List[Dict[str, str]]] = None,
-    concept_name: Optional[str] = None,
-    bloom_level: Optional[int] = None,
+    options: list[str],
+    user_question: str | None,
+    chat_history: list[dict[str, str]] | None = None,
+    concept_name: str | None = None,
+    bloom_level: int | None = None,
     rag_context: str = "",
     general_instruction: str = "HÃY GIẢI THÍCH TỔNG QUÁT CÂU HỎI NÀY CHO HỌC SINH.",
 ) -> str:
@@ -206,7 +208,7 @@ def _resolve_tutor_model() -> str:
     return settings.exercise_llm_model or settings.llm_model or "gemini-3.0-pro"
 
 
-def _build_stream_headers(*, accept: str) -> Dict[str, str]:
+def _build_stream_headers(*, accept: str) -> dict[str, str]:
     headers = {
         "Content-Type": "application/json",
         "Accept": accept,
@@ -217,7 +219,7 @@ def _build_stream_headers(*, accept: str) -> Dict[str, str]:
     return headers
 
 
-def _extract_openai_delta_content(payload: Dict) -> str:
+def _extract_openai_delta_content(payload: dict) -> str:
     choices = payload.get("choices") or []
     if choices:
         delta = choices[0].get("delta") or {}
@@ -225,7 +227,7 @@ def _extract_openai_delta_content(payload: Dict) -> str:
         if isinstance(content, str):
             return content
         if isinstance(content, list):
-            parts: List[str] = []
+            parts: list[str] = []
             for item in content:
                 if isinstance(item, str):
                     parts.append(item)
@@ -238,8 +240,8 @@ def _extract_openai_delta_content(payload: Dict) -> str:
     return content if isinstance(content, str) else ""
 
 
-def _split_sse_events(buffer: str) -> tuple[List[str], str]:
-    events: List[str] = []
+def _split_sse_events(buffer: str) -> tuple[list[str], str]:
+    events: list[str] = []
     last_index = 0
 
     for match in re.finditer(r"\r?\n\r?\n", buffer):
@@ -282,13 +284,13 @@ def _parse_sse_event(event: str) -> tuple[str, bool]:
 async def create_tutor_chat_stream(
     *,
     question: str,
-    options: List[str],
+    options: list[str],
     user_question: str,
-    chat_history: Optional[List[Dict[str, str]]] = None,
-    concept_name: Optional[str] = None,
-    bloom_level: Optional[int] = None,
+    chat_history: list[dict[str, str]] | None = None,
+    concept_name: str | None = None,
+    bloom_level: int | None = None,
     rag_context: str = "",
-    on_complete: Optional[Callable[[str], Awaitable[None]]] = None,
+    on_complete: Callable[[str], Awaitable[None]] | None = None,
 ) -> AsyncIterator[bytes]:
     validation_error = validate_chat_input(user_question)
     if validation_error:
@@ -324,8 +326,8 @@ async def create_tutor_chat_stream(
 
     timeout = httpx.Timeout(settings.llm_timeout_sec, read=None)
     max_retries, backoff_sec = resolve_retry_policy()
-    client: Optional[httpx.AsyncClient] = None
-    response: Optional[httpx.Response] = None
+    client: httpx.AsyncClient | None = None
+    response: httpx.Response | None = None
 
     for attempt in range(1, max_retries + 1):
         candidate_client = httpx.AsyncClient(timeout=timeout)
@@ -418,11 +420,11 @@ async def create_tutor_chat_stream(
 
 def generate_tutor_chat_response(
     question: str,
-    options: List[str],
+    options: list[str],
     user_question: str,
-    chat_history: Optional[List[Dict[str, str]]] = None,
-    concept_name: Optional[str] = None,
-    bloom_level: Optional[int] = None,
+    chat_history: list[dict[str, str]] | None = None,
+    concept_name: str | None = None,
+    bloom_level: int | None = None,
     rag_context: str = "",
 ) -> str:
     validation_error = validate_chat_input(user_question)

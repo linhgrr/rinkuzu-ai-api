@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from .exercise_types import ExerciseType
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def normalize_text(value: str) -> str:

@@ -2,10 +2,11 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
+
 from loguru import logger
 
-from ......config import get_settings
+from api.config import get_settings
 
 try:
     from agentic_doc.parse import parse
@@ -13,18 +14,20 @@ try:
 except ImportError:
     AGENTIC_DOC_AVAILABLE = False
 
-from ...utils import timeit
+from api.core.content_pipeline.infrastructure.utils import timeit
+
 from .base import BaseLoader
+
 
 class PDFLoader(BaseLoader):
     """Loader for PDF documents using Landing AI."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize PDFLoader with Landing AI API key.
 
         Args:
-            api_key: Landing AI API key. If not provided, will try to load from 
+            api_key: Landing AI API key. If not provided, will try to load from
                     unified backend settings.
 
         Raises:
@@ -51,10 +54,10 @@ class PDFLoader(BaseLoader):
 
     def supports(self, file_path: str) -> bool:
         """Check if file is a PDF."""
-        return Path(file_path).suffix.lower() == '.pdf'
+        return Path(file_path).suffix.lower() == ".pdf"
 
     @timeit
-    def load(self, file_path: str) -> Dict[str, Any]:
+    def load(self, file_path: str) -> dict[str, Any]:
         """
         Load PDF document using Landing AI and convert to Markdown format.
 
@@ -85,32 +88,32 @@ class PDFLoader(BaseLoader):
 
             markdown_content = result.markdown or ""
 
-            chunks = result.chunks if hasattr(result, 'chunks') else []
+            chunks = result.chunks if hasattr(result, "chunks") else []
 
             # Prepare metadata
             metadata = {
-                'file_name': Path(file_path).name,
-                'file_path': str(Path(file_path).absolute()),
-                'source': 'landing_ai',
-                'num_chunks': len(chunks) if chunks else 0,
+                "file_name": Path(file_path).name,
+                "file_path": str(Path(file_path).absolute()),
+                "source": "landing_ai",
+                "num_chunks": len(chunks) if chunks else 0,
             }
 
             logger.info(
-                f"Successfully parsed PDF",
+                "Successfully parsed PDF",
                 file_path=file_path,
                 num_chunks=len(chunks) if chunks else 0,
                 markdown_length=len(markdown_content),
             )
 
             return {
-                'text': markdown_content,
-                'markdown': markdown_content,
-                'chunks': chunks,
-                'metadata': metadata,
-                'structured_data': chunks,
+                "text": markdown_content,
+                "markdown": markdown_content,
+                "chunks": chunks,
+                "metadata": metadata,
+                "structured_data": chunks,
             }
 
         except Exception as e:
             logger.error(
-                f"Error loading PDF with Landing AI: {str(e)}", exc_info=True)
+                f"Error loading PDF with Landing AI: {e!s}", exc_info=True)
             raise

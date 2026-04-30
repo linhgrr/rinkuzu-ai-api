@@ -70,4 +70,4 @@ def get_embeddings(**kwargs) -> OpenAIEmbeddings:
     )
 
 
-__all__ = ["ChatOpenAI", "OpenAIEmbeddings", "get_settings", "get_llm", "get_embeddings"]
+__all__ = ["ChatOpenAI", "OpenAIEmbeddings", "get_embeddings", "get_llm", "get_settings"]

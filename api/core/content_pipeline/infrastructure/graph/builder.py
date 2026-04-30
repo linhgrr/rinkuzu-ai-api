@@ -1,17 +1,18 @@
 """Knowledge graph builder using NetworkX (DiGraph, no MultiGraph)."""
 
 from __future__ import annotations
-from typing import List, Dict, Any, Optional, Iterable, Union
-from enum import Enum
-import json
-import networkx as nx
+
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+import networkx as nx
 
-from ..llm.schemas import Concept, Relation
+if TYPE_CHECKING:
+    from api.core.content_pipeline.infrastructure.llm.schemas import Concept
 
 
-class RelationType(str, Enum):
+class RelationType(StrEnum):
     PREREQUISITE = "PREREQUISITE"
     UNKNOWN = "UNKNOWN"
 
@@ -28,9 +29,9 @@ class KnowledgeGraphBuilder:
         """
         self.subject_id = subject_id
         self.graph = nx.DiGraph()
-        self.concept_map: Dict[str, Concept] = {}
+        self.concept_map: dict[str, Concept] = {}
 
-    def _norm_rel(self, s: Optional[str]) -> RelationType:
+    def _norm_rel(self, s: str | None) -> RelationType:
         val = (s or "").strip().upper()
         try:
             return RelationType[val]
@@ -57,19 +58,16 @@ class KnowledgeGraphBuilder:
         nx.set_node_attributes(self.graph, {node_id: attrs})
 
     def _normalize_evidence(
-        self, evidence: Optional[Union[str, List[str]]]
-    ) -> Optional[List[str]]:
+        self, evidence: str | list[str] | None
+    ) -> list[str] | None:
         """Đưa evidence về list[str] đã dedupe."""
         if evidence is None:
             return None
 
-        items: List[str] = []
-        if isinstance(evidence, list):
-            items = evidence
-        else:
-            items = [evidence]
+        items: list[str] = []
+        items = evidence if isinstance(evidence, list) else [evidence]
 
-        out: List[str] = []
+        out: list[str] = []
         seen = set()
         for it in items:
             text = str(it).strip()
@@ -79,13 +77,13 @@ class KnowledgeGraphBuilder:
         return out or None
 
     def _merge_evidence(
-        self, old: Optional[Union[str, List[str]]],
-        new: Optional[Union[str, List[str]]],
-    ) -> Optional[List[str]]:
+        self, old: str | list[str] | None,
+        new: str | list[str] | None,
+    ) -> list[str] | None:
         """Gộp evidence cũ & mới, trả về list[str] đã dedupe."""
         old_list = self._normalize_evidence(old) or []
         new_list = self._normalize_evidence(new) or []
-        out: List[str] = []
+        out: list[str] = []
         seen = set()
         for text in old_list + new_list:
             if text and text not in seen:
@@ -93,7 +91,7 @@ class KnowledgeGraphBuilder:
                 out.append(text)
         return out or None
 
-    def add_concepts(self, concepts: List[Concept]):
+    def add_concepts(self, concepts: list[Concept]):
         """Add multiple concepts to graph."""
         for concept in concepts:
             self.add_concept(concept)
@@ -122,9 +120,9 @@ class KnowledgeGraphBuilder:
         self,
         source_id: str,
         target_id: str,
-        relation_type: Optional[str] = None,
-        evidence: Optional[Union[str, List[str]]] = None,
-        location: Optional[str] = None,
+        relation_type: str | None = None,
+        evidence: str | list[str] | None = None,
+        location: str | None = None,
     ):
         """
         Add a relation (edge) to graph.
@@ -164,9 +162,9 @@ class KnowledgeGraphBuilder:
         """Get the knowledge graph."""
         return self.graph
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get graph statistics (kể cả kiểm tra cycle)."""
-        edge_types: Dict[str, int] = {}
+        edge_types: dict[str, int] = {}
         for _, _, data in self.graph.edges(data=True):
             rel = data.get("relation_type", RelationType.UNKNOWN.value)
             edge_types[rel] = edge_types.get(rel, 0) + 1
@@ -182,22 +180,22 @@ class KnowledgeGraphBuilder:
             "has_cycle": has_cycle,
         }
 
-    def get_prerequisites(self, concept_id: str) -> List[str]:
+    def get_prerequisites(self, concept_id: str) -> list[str]:
         """Get prerequisite concepts for a concept (incoming edges with PREREQUISITE)."""
         if concept_id not in self.graph:
             return []
-        res: List[str] = []
+        res: list[str] = []
         for pred in self.graph.predecessors(concept_id):
             data = self.graph[pred][concept_id]
             if self._norm_rel(data.get("relation_type")) == RelationType.PREREQUISITE:
                 res.append(pred)
         return res
 
-    def get_dependents(self, concept_id: str) -> List[str]:
+    def get_dependents(self, concept_id: str) -> list[str]:
         """Get concepts depending on this concept (outgoing PREREQUISITE edges)."""
         if concept_id not in self.graph:
             return []
-        res: List[str] = []
+        res: list[str] = []
         for succ in self.graph.successors(concept_id):
             data = self.graph[concept_id][succ]
             if self._norm_rel(data.get("relation_type")) == RelationType.PREREQUISITE:

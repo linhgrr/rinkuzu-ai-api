@@ -5,23 +5,23 @@ Handles: concept selection via D3QN, theory generation, exercise generation,
 answer submission, and prefetch caching.
 """
 
-import uuid
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
-from typing import Optional, Dict, Any, Tuple
-from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+import uuid
 
-import numpy as np
 from loguru import logger
+import numpy as np
+
+from api.config import settings
+from api.exceptions import ExerciseGenerationError
 
 from .answer_eval import evaluate_answer, normalize_text, serialize_answer_for_history
 from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from .exercise_types import ExerciseType
 from .history_formatter import format_exercise_history
-from ...config import settings
-from ...exceptions import ExerciseGenerationError
-
 
 BLOOM_LABELS = {
     1: "Remember", 2: "Understand", 3: "Apply",
@@ -57,15 +57,15 @@ class ExerciseService:
         )
         self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)
-        self._exercise_inflight: Dict[Tuple[str, int, int, int, str], asyncio.Future] = {}
-        self._theory_inflight: Dict[Tuple[str, str], asyncio.Future] = {}
+        self._exercise_inflight: dict[tuple[str, int, int, int, str], asyncio.Future] = {}
+        self._theory_inflight: dict[tuple[str, str], asyncio.Future] = {}
 
     @staticmethod
-    def _build_id_to_concept_map(session) -> Dict[int, str]:
+    def _build_id_to_concept_map(session) -> dict[int, str]:
         return {v: k for k, v in session.concept_map.items()}
 
     @staticmethod
-    def _serialize_exercise_for_prompt(exercise) -> Dict[str, Any]:
+    def _serialize_exercise_for_prompt(exercise) -> dict[str, Any]:
         history_json = format_exercise_history([exercise])
         return json.loads(history_json)[0]
 
@@ -80,7 +80,7 @@ class ExerciseService:
         concept_idx: int,
         concept_name: str,
         bloom_level: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         id_to_concept = self._build_id_to_concept_map(session)
         concept_mastery = session.env.get_concept_mastery()
         current_mastery = (
@@ -112,7 +112,7 @@ class ExerciseService:
             "next_milestone": self._round_mastery(settings.adaptive_mastery_threshold),
         }
 
-    def _get_recent_same_concept_exercises(self, session, concept_idx: int) -> list[Dict[str, Any]]:
+    def _get_recent_same_concept_exercises(self, session, concept_idx: int) -> list[dict[str, Any]]:
         limit = max(0, int(settings.adaptive_exercise_recent_same_concept_limit))
         if limit == 0:
             return []
@@ -128,7 +128,7 @@ class ExerciseService:
         ]
 
     @staticmethod
-    def _recent_examples_fingerprint(recent_same_concept_exercises: list[Dict[str, Any]]) -> str:
+    def _recent_examples_fingerprint(recent_same_concept_exercises: list[dict[str, Any]]) -> str:
         if not recent_same_concept_exercises:
             return "none"
         serialized = json.dumps(
@@ -139,7 +139,7 @@ class ExerciseService:
         )
         return hashlib.sha1(serialized.encode("utf-8")).hexdigest()[:12]
 
-    async def _run_llm_call(self, func, *args, timeout_sec: Optional[float] = None):
+    async def _run_llm_call(self, func, *args, timeout_sec: float | None = None):
         loop = asyncio.get_running_loop()
         timeout = self._request_llm_timeout_sec if timeout_sec is None else timeout_sec
         async with self._llm_semaphore:
@@ -155,9 +155,9 @@ class ExerciseService:
         bloom_level: int,
         concept_name: str,
         concept_def: str,
-        mastery: Optional[float],
-        timeout_sec: Optional[float] = None,
-    ) -> Optional[Dict[str, Any]]:
+        mastery: float | None,
+        timeout_sec: float | None = None,
+    ) -> dict[str, Any] | None:
         mastery_bucket = int(max(0.0, min(1.0, mastery or 0.0)) * 10)
         recent_same_concept_exercises = self._get_recent_same_concept_exercises(session, concept_idx)
         history_fingerprint = self._recent_examples_fingerprint(recent_same_concept_exercises)
@@ -166,7 +166,7 @@ class ExerciseService:
         if existing is not None:
             return await existing
 
-        async def _run() -> Optional[Dict[str, Any]]:
+        async def _run() -> dict[str, Any] | None:
             return await self._run_llm_call(
                 generate_exercise,
                 concept_name,
@@ -190,14 +190,14 @@ class ExerciseService:
         concept_id: str,
         concept_name: str,
         concept_def: str,
-        timeout_sec: Optional[float] = None,
-    ) -> Optional[Dict[str, Any]]:
+        timeout_sec: float | None = None,
+    ) -> dict[str, Any] | None:
         key = (session.session_id, concept_id)
         existing = self._theory_inflight.get(key)
         if existing is not None:
             return await existing
 
-        async def _run() -> Optional[Dict[str, Any]]:
+        async def _run() -> dict[str, Any] | None:
             return await self._run_llm_call(
                 generate_theory,
                 concept_name,
@@ -212,7 +212,7 @@ class ExerciseService:
         finally:
             self._theory_inflight.pop(key, None)
 
-    async def get_next_concept(self, session) -> Optional[Dict[str, Any]]:
+    async def get_next_concept(self, session) -> dict[str, Any] | None:
         """Use D3QN to select the next concept+bloom level."""
         if session.status != "active":
             return None
@@ -230,7 +230,7 @@ class ExerciseService:
                 concept_idx = 0
                 bloom_level = 1
                 action_id = concept_idx * 6 + (bloom_level - 1)
-                logger.info(f"[Exercise] 🎯 STEP 0 — Forcing warm-up: concept_idx=0, bloom=1")
+                logger.info("[Exercise] 🎯 STEP 0 — Forcing warm-up: concept_idx=0, bloom=1")
             else:
                 masks = env.action_masks()
                 action_id = _select_action(
@@ -260,9 +260,9 @@ class ExerciseService:
                 "max_steps": env_stats["max_steps"],
             }
 
-    async def get_theory(self, session) -> Optional[Dict[str, Any]]:
+    async def get_theory(self, session) -> dict[str, Any] | None:
         """Generate theory for the pending concept."""
-        if not hasattr(session, '_pending_concept_idx'):
+        if not hasattr(session, "_pending_concept_idx"):
             return None
 
         concept_idx = session._pending_concept_idx
@@ -270,7 +270,7 @@ class ExerciseService:
         concept_id = id_to_concept.get(concept_idx, str(concept_idx))
 
         # Check pre-generated theory cache
-        if concept_id in session.concept_theories and session.concept_theories[concept_id]:
+        if session.concept_theories.get(concept_id):
             return session.concept_theories[concept_id]
 
         concept_name = session.concept_names.get(concept_id, concept_id)
@@ -295,7 +295,7 @@ class ExerciseService:
         """Generate exercise from prefetch cache or LLM."""
         from .session import ExerciseRecord
 
-        if not hasattr(session, '_pending_concept_idx'):
+        if not hasattr(session, "_pending_concept_idx"):
             return None
 
         concept_idx = session._pending_concept_idx
@@ -387,17 +387,17 @@ class ExerciseService:
         return normalize_text(value)
 
     @classmethod
-    def _serialize_answer_for_history(cls, exercise, answer: Dict[str, Any]) -> Any:
+    def _serialize_answer_for_history(cls, exercise, answer: dict[str, Any]) -> Any:
         return serialize_answer_for_history(exercise, answer)
 
-    def _evaluate_answer(self, exercise, answer: Dict[str, Any]) -> Tuple[bool, str]:
+    def _evaluate_answer(self, exercise, answer: dict[str, Any]) -> tuple[bool, str]:
         return evaluate_answer(
             exercise,
             answer,
             short_answer_grader=evaluate_short_answer,
         )
 
-    async def submit_answer(self, session, answer: Dict[str, Any], background_tasks=None) -> Optional[Dict[str, Any]]:
+    async def submit_answer(self, session, answer: dict[str, Any], background_tasks=None) -> dict[str, Any] | None:
         """Process user's answer, update environment, return result."""
 
         async with session._lock:
@@ -432,7 +432,7 @@ class ExerciseService:
 
             # Step environment
             action_id = getattr(session, "_pending_action", 0)
-            obs, reward, terminated, truncated, info = session.env.step(action_id, human_correct=is_correct)
+            obs, _reward, terminated, _truncated, info = session.env.step(action_id, human_correct=is_correct)
             session.current_obs = obs
             session.current_exercise = None
 
@@ -521,7 +521,7 @@ class ExerciseService:
 
     async def _prefetch_next_exercises(self, session) -> None:
         """Background: simulate correct/incorrect paths and pre-generate exercises."""
-        if not hasattr(session, '_pending_action'):
+        if not hasattr(session, "_pending_action"):
             return
 
         action_id = session._pending_action

@@ -2,10 +2,9 @@
 schemas/exercise.py — Exercise-related Pydantic models.
 """
 
-from typing import Optional, Dict, Any, List, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.core.learning.exercise_types import ExerciseType
 
@@ -33,14 +32,14 @@ class RecommendationReason(BaseModel):
     concept_name: str
     bloom_level: int
     bloom_label: str
-    satisfied_prereqs: List[RecommendationPrerequisite] = Field(default_factory=list)
+    satisfied_prereqs: list[RecommendationPrerequisite] = Field(default_factory=list)
     current_mastery: float
     next_milestone: float
 
 
 class TheoryResponse(BaseModel):
     content: str
-    examples: List[str]
+    examples: list[str]
 
 
 class ExerciseResponse(BaseModel):
@@ -51,28 +50,28 @@ class ExerciseResponse(BaseModel):
     bloom_label: str
     exercise_type: ExerciseType = ExerciseType.MCQ
     question: str
-    sentence: Optional[str] = None
-    options: Dict[str, str] = Field(default_factory=dict)
-    statement: Optional[str] = None
-    hint: Optional[str] = None
-    items: List[str] = Field(default_factory=list)
-    pairs: List[Dict[str, str]] = Field(default_factory=list)
-    right_items: List[str] = Field(default_factory=list)
+    sentence: str | None = None
+    options: dict[str, str] = Field(default_factory=dict)
+    statement: str | None = None
+    hint: str | None = None
+    items: list[str] = Field(default_factory=list)
+    pairs: list[dict[str, str]] = Field(default_factory=list)
+    right_items: list[str] = Field(default_factory=list)
 
     step: int
     max_steps: int
-    theory: Optional[Dict[str, Any]] = None
-    recommendation_reason: Optional[RecommendationReason] = None
+    theory: dict[str, Any] | None = None
+    recommendation_reason: RecommendationReason | None = None
 
 
 class SubmitAnswerPayload(BaseModel):
-    choice: Optional[str] = None
-    choices: List[str] = Field(default_factory=list)
-    boolean: Optional[bool] = None
-    blanks: List[str] = Field(default_factory=list)
-    ordering: List[str] = Field(default_factory=list)
-    matching: Dict[str, str] = Field(default_factory=dict)
-    text: Optional[str] = None
+    choice: str | None = None
+    choices: list[str] = Field(default_factory=list)
+    boolean: bool | None = None
+    blanks: list[str] = Field(default_factory=list)
+    ordering: list[str] = Field(default_factory=list)
+    matching: dict[str, str] = Field(default_factory=dict)
+    text: str | None = None
 
 
 class SubmitAnswerRequest(BaseModel):
@@ -89,7 +88,7 @@ class SubmitAnswerResponse(BaseModel):
     avg_mastery: float
     step: int
     session_completed: bool
-    stats: Dict[str, Any]
+    stats: dict[str, Any]
 
 
 class TutorChatMessage(BaseModel):
@@ -101,7 +100,7 @@ class TutorChatRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     user_question: str = Field(..., alias="userQuestion", min_length=1, max_length=1000)
-    chat_history: List[TutorChatMessage] = Field(default_factory=list, alias="chatHistory")
+    chat_history: list[TutorChatMessage] = Field(default_factory=list, alias="chatHistory")
     stream: bool = False
 
 

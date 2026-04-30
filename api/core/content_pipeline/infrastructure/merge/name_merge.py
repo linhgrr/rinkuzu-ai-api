@@ -1,17 +1,16 @@
 """Exact name-based concept merging."""
 
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
 
-import numpy as np
 from loguru import logger
+import numpy as np
 
-from ..llm.postprocess import normalize_concept_name
-from ..llm.schemas import Concept, Relation
-from ..utils import clean_text
+from api.core.content_pipeline.infrastructure.llm.postprocess import normalize_concept_name
+from api.core.content_pipeline.infrastructure.llm.schemas import Concept, Relation
+from api.core.content_pipeline.infrastructure.utils import clean_text
 
 
-def merge_by_name(concepts: List[Concept]) -> List[Concept]:
+def merge_by_name(concepts: list[Concept]) -> list[Concept]:
     """
     Merge concepts by exact normalized name matching.
 
@@ -24,7 +23,7 @@ def merge_by_name(concepts: List[Concept]) -> List[Concept]:
     if not concepts:
         return []
 
-    name_to_concepts: Dict[str, List[Concept]] = defaultdict(list)
+    name_to_concepts: dict[str, list[Concept]] = defaultdict(list)
 
     for concept in concepts:
         norm_name = normalize_concept_name(concept.name)
@@ -52,7 +51,7 @@ def merge_by_name(concepts: List[Concept]) -> List[Concept]:
             merged.append(concept)
             processed.add(concept_id)
         else:
-            merged_concept, id_map = _merge_concepts(similar_concepts)
+            merged_concept, _id_map = _merge_concepts(similar_concepts)
             merged.append(merged_concept)
 
             # Mark all as processed
@@ -92,7 +91,7 @@ def merge_by_name(concepts: List[Concept]) -> List[Concept]:
     return final
 
 
-def _select_canonical(concepts: List[Concept]) -> Concept:
+def _select_canonical(concepts: list[Concept]) -> Concept:
     """
     Select canonical concept from a group.
 
@@ -102,12 +101,12 @@ def _select_canonical(concepts: List[Concept]) -> Concept:
     """
     def _key(c: Concept) -> int:
         def_len = len(c.definition or "")
-        return -def_len  
+        return -def_len
 
     return min(concepts, key=_key)
 
 
-def _merge_concepts(concepts: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
+def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
     """
     Merge multiple concepts into one.
 
@@ -132,8 +131,8 @@ def _merge_concepts(concepts: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
         )
 
     # Merge examples (preserve order, dedup)
-    ex_seen: Set[str] = set()
-    examples: List[str] = []
+    ex_seen: set[str] = set()
+    examples: list[str] = []
     for c in concepts:
         for ex in c.examples or []:
             ex_clean = clean_text(ex)
@@ -142,8 +141,8 @@ def _merge_concepts(concepts: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
                 examples.append(ex_clean)
 
     # Merge formulas (dedup by latex)
-    f_seen: Set[str] = set()
-    formulas: List[dict] = []
+    f_seen: set[str] = set()
+    formulas: list[dict] = []
     for c in concepts:
         for f in c.formulas or []:
             key = getattr(f, "latex", None)
@@ -152,7 +151,7 @@ def _merge_concepts(concepts: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
                 formulas.append(f.model_dump())
 
     # Collect all relations (will be cleaned and remapped later)
-    all_relations: List[dict] = []
+    all_relations: list[dict] = []
     for c in concepts:
         all_relations.extend([rel.model_dump() for rel in (c.relations or [])])
 
@@ -169,10 +168,7 @@ def _merge_concepts(concepts: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
             logger.warning(
                 f"Inconsistent name_embedding shapes in merge group: {set(emb_shapes)}, using canonical"
             )
-            if canonical.name_embedding:
-                avg_name_embedding = canonical.name_embedding
-            else:
-                avg_name_embedding = name_emb_list[0].tolist()
+            avg_name_embedding = canonical.name_embedding or name_emb_list[0].tolist()
         else:
             avg_name_embedding = np.mean(name_emb_list, axis=0).tolist()
 
@@ -188,10 +184,7 @@ def _merge_concepts(concepts: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
             logger.warning(
                 f"Inconsistent definition_embedding shapes in merge group: {set(emb_shapes)}, using canonical"
             )
-            if canonical.definition_embedding:
-                avg_definition_embedding = canonical.definition_embedding
-            else:
-                avg_definition_embedding = def_emb_list[0].tolist()
+            avg_definition_embedding = canonical.definition_embedding or def_emb_list[0].tolist()
         else:
             avg_definition_embedding = np.mean(def_emb_list, axis=0).tolist()
 
@@ -215,10 +208,10 @@ def _merge_concepts(concepts: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
 
 
 def _remap_relations(
-    relations: List[Relation],
-    id_map: Dict[str, str],
+    relations: list[Relation],
+    id_map: dict[str, str],
     self_id: str,
-) -> List[Relation]:
+) -> list[Relation]:
     """
     Remap target_id via id_map, drop self-loops, dedup by (type, target_id).
     Merge evidences; keep max confidence.
@@ -226,7 +219,7 @@ def _remap_relations(
     if not relations:
         return []
 
-    bucket: Dict[Tuple[str, str], Relation] = {}
+    bucket: dict[tuple[str, str], Relation] = {}
 
     for rel in relations:
         if rel is None or not getattr(rel, "target_id", None):

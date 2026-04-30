@@ -7,9 +7,7 @@ from functools import partial
 from typing import Any, TypeVar
 
 from api.config import get_settings
-
-from ...domain.errors import PipelineStageTimeoutError
-
+from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
 
 T = TypeVar("T")
 
@@ -43,11 +41,11 @@ async def run_blocking_stage(
 
     try:
         return await asyncio.wait_for(future, timeout=effective_timeout)
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise PipelineStageTimeoutError(stage_name, effective_timeout) from exc
 
 
-def _normalize_timeout(raw_value: float | int | None) -> float | None:
+def _normalize_timeout(raw_value: float | None) -> float | None:
     if raw_value is None:
         return None
     value = float(raw_value)

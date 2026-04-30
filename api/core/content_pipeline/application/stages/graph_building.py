@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 
-from ...domain.jobs import PipelineJob, PipelineStatus
-from .execution import run_blocking_stage
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
+from .execution import run_blocking_stage
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 VerifiedRelation = tuple[str, str, Any]

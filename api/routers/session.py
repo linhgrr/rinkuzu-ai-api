@@ -4,23 +4,33 @@ Session router — Session lifecycle endpoints.
 
 import asyncio
 
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
-from ..schemas import (
-    SessionCreateRequest, SessionCreateResponse,
-    NextConceptResponse, TheoryResponse, ExerciseResponse,
-    SubmitAnswerRequest, SubmitAnswerResponse,
-    SessionStatusResponse,
-    TutorChatRequest, TutorChatResponse,
-)
-from ..dependencies import get_session_manager, get_session_service, get_current_user, get_chunk_chroma_store
-from ..exceptions import SessionNotFoundError, SessionCompletedError, ExerciseGenerationError
-from ..core.quiz.tutor_chat import (
+from api.core.quiz.tutor_chat import (
     create_tutor_chat_stream,
     generate_tutor_chat_response,
     sanitize_chat_input,
+)
+from api.dependencies import (
+    get_chunk_chroma_store,
+    get_current_user,
+    get_session_manager,
+    get_session_service,
+)
+from api.exceptions import ExerciseGenerationError, SessionCompletedError, SessionNotFoundError
+from api.schemas import (
+    ExerciseResponse,
+    NextConceptResponse,
+    SessionCreateRequest,
+    SessionCreateResponse,
+    SessionStatusResponse,
+    SubmitAnswerRequest,
+    SubmitAnswerResponse,
+    TheoryResponse,
+    TutorChatRequest,
+    TutorChatResponse,
 )
 
 router = APIRouter(prefix="/api/session", tags=["session"])
@@ -101,12 +111,10 @@ async def _build_rag_context(
         blocks = []
         for i, doc in enumerate(docs, 1):
             page = doc.metadata.get("start_page", "?")
-            blocks.append(
-                f"[Đoạn {i}] (trang {page})\n{doc.page_content}"
-            )
+            blocks.append(f"[Đoạn {i}] (trang {page})\n{doc.page_content}")
         return "\n\n".join(blocks)
-    except Exception as exc:
-        logger.warning(f"[RAG] Retrieval failed, continuing without context: {exc}")
+    except BaseException as exc:
+        logger.warning("[RAG] Retrieval failed, continuing without context: {}", exc)
         return ""
 
 
@@ -133,8 +141,8 @@ async def start_session(
     # Fire eager prefetch via built-in BackgroundTasks
     try:
         background_tasks.add_task(exercise_svc.eager_generate_first_exercise, session)
-    except Exception as exc:
-        logger.warning(f"[SessionRouter] Failed to schedule eager prefetch: {exc}")
+    except TypeError as exc:
+        logger.warning("[SessionRouter] Failed to schedule eager prefetch: {}", exc)
 
     return SessionCreateResponse(
         session_id=session.session_id,
@@ -192,7 +200,7 @@ async def generate_exercise(
 
     exercise = await exercise_svc.generate_exercise(session, background_tasks)
     if not exercise:
-        raise ExerciseGenerationError()
+        raise ExerciseGenerationError
 
     env_stats = session.env.get_session_stats()
 
@@ -237,6 +245,26 @@ async def submit_answer(
     return SubmitAnswerResponse(**result)
 
 
+def _resolve_exercise_options(exercise) -> list[str]:
+    """Return the display options list for a given exercise."""
+    option_keys = sorted(exercise.options.keys())
+    options = [exercise.options[key] for key in option_keys if exercise.options.get(key)]
+    if options:
+        return options
+    fallbacks = {
+        "true_false": ["True", "False"],
+        "ordering": exercise.items,
+        "matching": exercise.right_items,
+    }
+    if exercise.exercise_type in fallbacks:
+        return fallbacks[exercise.exercise_type]
+    if exercise.exercise_type == "fill_blank" and exercise.hint:
+        return [f"Gợi ý: {exercise.hint}"]
+    if exercise.exercise_type == "short_answer":
+        return exercise.rubric or ["Trả lời ngắn gọn, bám sát câu hỏi."]
+    return ["Xem lại yêu cầu của bài tập hiện tại."]
+
+
 @router.post("/{session_id}/chat", response_model=TutorChatResponse)
 async def chat_about_exercise(
     session_id: str,
@@ -252,21 +280,7 @@ async def chat_about_exercise(
     if not exercise:
         raise ExerciseGenerationError("No exercise context available for chat")
 
-    option_keys = sorted(exercise.options.keys())
-    options = [exercise.options[key] for key in option_keys if exercise.options.get(key)]
-    if not options:
-        if exercise.exercise_type == "true_false":
-            options = ["True", "False"]
-        elif exercise.exercise_type == "ordering":
-            options = exercise.items
-        elif exercise.exercise_type == "matching":
-            options = exercise.right_items
-        elif exercise.exercise_type == "fill_blank" and exercise.hint:
-            options = [f"Gợi ý: {exercise.hint}"]
-        elif exercise.exercise_type == "short_answer":
-            options = exercise.rubric or ["Trả lời ngắn gọn, bám sát câu hỏi."]
-        else:
-            options = ["Xem lại yêu cầu của bài tập hiện tại."]
+    options = _resolve_exercise_options(exercise)
 
     chat_history = await _get_tutor_chat_history(session, exercise.exercise_id)
 
@@ -326,21 +340,18 @@ async def chat_about_exercise(
         )
         return TutorChatResponse(explanation=explanation)
     except ValueError as exc:
+        logger.warning("[SessionRouter] Tutor chat ValueError: {}", exc)
         return JSONResponse(
-            {"detail": str(exc), "error": str(exc)},
+            {"detail": "Invalid tutor chat request", "error": "invalid_request"},
             status_code=400,
         )
     except RuntimeError as exc:
+        logger.warning("[SessionRouter] Tutor chat RuntimeError: {}", exc)
         return JSONResponse(
-            {"detail": str(exc), "error": str(exc)},
+            {"detail": "Tutor service temporarily unavailable", "error": "tutor_unavailable"},
             status_code=502,
         )
-    except Exception as exc:
-        logger.exception(f"[SessionRouter] Tutor chat failed unexpectedly: {exc}")
-        return JSONResponse(
-            {"detail": "Tutor chat failed unexpectedly", "error": "Tutor chat failed unexpectedly"},
-            status_code=500,
-        )
+    # Unexpected errors fall through to the global unexpected_exception_handler.
 
 
 @router.get("/{session_id}/status", response_model=SessionStatusResponse)
@@ -349,7 +360,7 @@ async def session_status(
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
 ):
-    session = await _resolve_user_session(manager, session_id, user_id)
+    await _resolve_user_session(manager, session_id, user_id)
     status = manager.get_session_status(session_id)
     if not status:
         raise SessionNotFoundError(session_id)

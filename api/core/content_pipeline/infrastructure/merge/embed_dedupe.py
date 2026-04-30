@@ -1,27 +1,25 @@
 """Embedding-based concept deduplication (fixed & schema-compliant)."""
 
 import warnings
-from typing import Dict, List, Set, Tuple
 
-import numpy as np
 from loguru import logger
+import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-from .....config import settings
-
-from ..llm.schemas import Concept, Relation
+from api.config import settings
+from api.core.content_pipeline.infrastructure.llm.schemas import Concept, Relation
 
 
 def deduplicate_by_embedding(
-    concepts: List[Concept],
-    similarity_threshold: float = None,
-) -> List[Concept]:
+    concepts: list[Concept],
+    similarity_threshold: float | None = None,
+) -> list[Concept]:
     """
     Deduplicate concepts using embedding similarity with connected components.
-    
-    .. deprecated:: 
-        This function is deprecated. Use LLM-based verification with 'same_concept' 
-        direction instead for more accurate concept merging. The LLM can better 
+
+    .. deprecated::
+        This function is deprecated. Use LLM-based verification with 'same_concept'
+        direction instead for more accurate concept merging. The LLM can better
         understand semantic equivalence and context than pure embedding similarity.
 
     - Build similarity graph where sim(i, j) >= threshold.
@@ -45,7 +43,7 @@ def deduplicate_by_embedding(
         DeprecationWarning,
         stacklevel=2
     )
-    
+
     if not concepts:
         return []
 
@@ -128,16 +126,16 @@ def deduplicate_by_embedding(
                 union(i, j)
 
     # Group by connected components
-    comp: Dict[int, List[int]] = {}
+    comp: dict[int, list[int]] = {}
     for k in range(n):
         rk = find(k)
         comp.setdefault(rk, []).append(with_emb_idx[k])
 
     # Merge components
-    id_map: Dict[str, str] = {}  # old_id -> canonical_id
-    merged_concepts: List[Concept] = []
+    id_map: dict[str, str] = {}  # old_id -> canonical_id
+    merged_concepts: list[Concept] = []
 
-    for root, member_idx_list in comp.items():
+    for member_idx_list in comp.values():
         if len(member_idx_list) == 1:
             # Single concept, no merge needed
             c = concepts[member_idx_list[0]]
@@ -171,7 +169,7 @@ def deduplicate_by_embedding(
     return final
 
 
-def _merge_component(group: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
+def _merge_component(group: list[Concept]) -> tuple[Concept, dict[str, str]]:
     """
     Merge a connected component (>=2 concepts) into a canonical concept.
 
@@ -185,8 +183,7 @@ def _merge_component(group: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
 
     def _selection_key(c: Concept) -> int:
         """Generate sort key for canonical selection."""
-        def_len = len(c.definition or "")
-        return def_len
+        return len(c.definition or "")
 
     canonical = max(group, key=_selection_key)
 
@@ -196,15 +193,15 @@ def _merge_component(group: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
         logger.debug(
             f"Mixed subject_id in merged group {concept_ids}; keeping '{canonical.subject_id}'")
 
-    ex_seen: Set[str] = set()
-    examples: List[str] = []
+    ex_seen: set[str] = set()
+    examples: list[str] = []
     for c in group:
         for ex in c.examples or []:
             if ex and ex not in ex_seen:
                 ex_seen.add(ex)
                 examples.append(ex)
 
-    f_seen: Set[str] = set()
+    f_seen: set[str] = set()
     formulas = []
     for c in group:
         for f in c.formulas or []:
@@ -258,10 +255,10 @@ def _merge_component(group: List[Concept]) -> Tuple[Concept, Dict[str, str]]:
 
 
 def _remap_and_dedup_relations(
-    relations: List[Relation],
-    id_map: Dict[str, str],
+    relations: list[Relation],
+    id_map: dict[str, str],
     self_id: str,
-) -> List[Relation]:
+) -> list[Relation]:
     """
     Remap target_id via id_map, drop self-loops, dedup by (type, target_id).
     Merge evidences; keep max confidence.
@@ -277,7 +274,7 @@ def _remap_and_dedup_relations(
     if not relations:
         return []
 
-    bucket: Dict[Tuple[str, str], Relation] = {}
+    bucket: dict[tuple[str, str], Relation] = {}
 
     for rel in relations:
         if rel is None or not getattr(rel, "target_id", None):

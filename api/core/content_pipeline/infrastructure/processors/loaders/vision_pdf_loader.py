@@ -5,20 +5,22 @@ an OpenAI-compatible chat completions endpoint with image_url to
 perform OCR on each page in parallel.
 """
 
-import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import contextlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any
+import uuid
 
-import fitz  # pymupdf
 import boto3
-import requests
 from botocore.client import Config
+import fitz  # pymupdf
 from loguru import logger
+import requests
 
-from ......config import get_settings
-from .....shared.llm import build_chat_completions_url, extract_llm_text
+from api.config import get_settings
+from api.core.shared.llm import build_chat_completions_url, extract_llm_text
+
 from .base import BaseLoader
 
 # ── OCR prompt ─────────────────────────────────────────────────────────
@@ -64,10 +66,10 @@ def _get_s3_client():
     )
 
 
-def _split_pdf_to_pages(file_path: str) -> List[bytes]:
+def _split_pdf_to_pages(file_path: str) -> list[bytes]:
     """Split a PDF file into individual single-page PDF byte buffers."""
     doc = fitz.open(file_path)
-    pages: List[bytes] = []
+    pages: list[bytes] = []
 
     for page_num in range(len(doc)):
         # Create a new single-page PDF
@@ -116,7 +118,7 @@ def _ocr_page_via_llm(
     api_key: str,
     request_timeout_sec: float,
     max_retries: int = 2,
-) -> Tuple[int, str]:
+) -> tuple[int, str]:
     """Call LLM chat completions endpoint to OCR a single page.
 
     Returns:
@@ -222,7 +224,7 @@ class VisionPDFLoader(BaseLoader):
 
     def __init__(
         self,
-        concurrency: Optional[int] = None,
+        concurrency: int | None = None,
         cleanup_s3: bool = True,
     ):
         """
@@ -262,7 +264,7 @@ class VisionPDFLoader(BaseLoader):
         """Check if file is a PDF."""
         return Path(file_path).suffix.lower() == ".pdf"
 
-    def load(self, file_path: str) -> Dict[str, Any]:
+    def load(self, file_path: str) -> dict[str, Any]:
         """
         Load PDF by splitting into pages, uploading to S3,
         and extracting text via LLM vision endpoint in parallel.
@@ -299,7 +301,7 @@ class VisionPDFLoader(BaseLoader):
             logger.info(
                 f"[VisionPDFLoader] Uploading {total_pages} pages to S3..."
             )
-            page_urls: List[Tuple[int, str]] = []
+            page_urls: list[tuple[int, str]] = []
             for i, page_bytes in enumerate(page_buffers):
                 url = _upload_page_to_s3(
                     self.s3_client,
@@ -316,7 +318,7 @@ class VisionPDFLoader(BaseLoader):
                 f"[VisionPDFLoader] Starting parallel OCR "
                 f"({self.concurrency} workers)..."
             )
-            results: Dict[int, str] = {}
+            results: dict[int, str] = {}
 
             with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
                 futures = {
@@ -392,12 +394,10 @@ class VisionPDFLoader(BaseLoader):
         except Exception as e:
             # Attempt cleanup even on failure
             if self.cleanup_s3:
-                try:
+                with contextlib.suppress(Exception):
                     _cleanup_s3_pages(
                         self.s3_client, self.bucket_name, job_id
                     )
-                except Exception:
-                    pass
             logger.error(
                 f"[VisionPDFLoader] Error processing {filename}: {e}",
                 exc_info=True,

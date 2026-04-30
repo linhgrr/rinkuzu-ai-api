@@ -1,15 +1,16 @@
 """ChromaDB storage for concepts with LangChain integration."""
 
-from typing import List, Optional, Dict, Any
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
 from pathlib import Path
+from typing import Any
+
 import chromadb
 from chromadb.config import Settings as ChromaSettings
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 from loguru import logger
 
-from ..embed.embedding_client import EmbeddingClient
-from ..llm.schemas import Concept
+from api.core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
+from api.core.content_pipeline.infrastructure.llm.schemas import Concept
 
 
 class ConceptChromaStore:
@@ -18,8 +19,8 @@ class ConceptChromaStore:
     def __init__(
         self,
         collection_name: str = "concepts",
-        persist_directory: Optional[str] = None,
-        embedding_client: Optional[EmbeddingClient] = None
+        persist_directory: str | None = None,
+        embedding_client: EmbeddingClient | None = None
     ):
         """
         Khởi tạo ChromaDB store với LangChain integration.
@@ -63,7 +64,7 @@ class ConceptChromaStore:
         )
 
         logger.info(
-            f"ConceptChromaStore initialized with LangChain Chroma",
+            "ConceptChromaStore initialized with LangChain Chroma",
             collection=self.collection_name,
             persist_dir=self.persist_directory,
             embedding_model=self.embedding_client.model_name
@@ -71,9 +72,9 @@ class ConceptChromaStore:
 
     def add_concepts(
         self,
-        concepts: List[Concept],
+        concepts: list[Concept],
         subject_id: str
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Thêm concepts vào ChromaDB.
 
@@ -117,7 +118,7 @@ class ConceptChromaStore:
             }
 
             # Thêm topic nếu có
-            if hasattr(concept, 'topic') and concept.topic:
+            if hasattr(concept, "topic") and concept.topic:
                 metadata["topic"] = concept.topic
 
             # Tạo LangChain Document
@@ -151,10 +152,10 @@ class ConceptChromaStore:
     def search_concepts(
         self,
         query: str,
-        subject_id: Optional[str] = None,
+        subject_id: str | None = None,
         k: int = 5,
-        filter_dict: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+        filter_dict: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """
         Tìm kiếm concepts sử dụng semantic search.
 
@@ -197,11 +198,11 @@ class ConceptChromaStore:
                     "score": float(score),
                     "content": doc.page_content
                 }
-                
+
                 # Thêm topic nếu có
                 if "topic" in doc.metadata:
                     result["topic"] = doc.metadata["topic"]
-                    
+
                 formatted_results.append(result)
 
             logger.debug(
@@ -212,7 +213,7 @@ class ConceptChromaStore:
             )
 
             return formatted_results
-            
+
         except Exception as e:
             logger.error(f"Error searching concepts: {e}")
             raise
@@ -220,7 +221,7 @@ class ConceptChromaStore:
     def get_concept_by_id(
         self,
         concept_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Retrieve a concept by its ID.
 
@@ -233,12 +234,12 @@ class ConceptChromaStore:
         try:
             results = self.vectorstore.get(ids=[concept_id])
 
-            if results and results['ids']:
+            if results and results["ids"]:
                 # Return first result
                 return {
-                    "concept_id": results['ids'][0],
-                    "metadata": results['metadatas'][0] if results['metadatas'] else {},
-                    "content": results['documents'][0] if results['documents'] else ""
+                    "concept_id": results["ids"][0],
+                    "metadata": results["metadatas"][0] if results["metadatas"] else {},
+                    "content": results["documents"][0] if results["documents"] else ""
                 }
 
             return None
@@ -263,10 +264,10 @@ class ConceptChromaStore:
                 self.collection_name)
             results = collection.get(where={"subject_id": subject_id})
 
-            if results and results['ids']:
+            if results and results["ids"]:
                 # Delete by IDs
-                collection.delete(ids=results['ids'])
-                deleted_count = len(results['ids'])
+                collection.delete(ids=results["ids"])
+                deleted_count = len(results["ids"])
 
                 logger.info(
                     f"Deleted {deleted_count} concepts for subject {subject_id}"
@@ -281,7 +282,7 @@ class ConceptChromaStore:
                 f"Error deleting concepts for subject {subject_id}: {e}")
             raise
 
-    def get_collection_stats(self) -> Dict[str, Any]:
+    def get_collection_stats(self) -> dict[str, Any]:
         """
         Get statistics about the collection.
 
@@ -325,17 +326,17 @@ class ConceptChromaStore:
         except Exception as e:
             logger.error(f"Error resetting collection: {e}")
             raise
-    
+
     def as_retriever(self, **kwargs):
         """
         Chuyển vectorstore thành retriever để sử dụng với LangChain chains.
-        
+
         Args:
             **kwargs: Arguments được pass vào retriever (search_type, search_kwargs, etc.)
-            
+
         Returns:
             VectorStoreRetriever instance
-            
+
         Example:
             retriever = store.as_retriever(
                 search_type="similarity",

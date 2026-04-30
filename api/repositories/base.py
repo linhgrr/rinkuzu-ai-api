@@ -4,10 +4,12 @@ repositories/base.py — Shared helpers for Mongo-backed repositories.
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from loguru import logger
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 T = TypeVar("T")
 

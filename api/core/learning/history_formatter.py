@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def _normalize_history_item(item: Any) -> dict[str, Any]:

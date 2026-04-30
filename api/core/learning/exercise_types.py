@@ -2,11 +2,11 @@
 exercise_types.py — Shared exercise type schemas, selection, and serialization.
 """
 
-from typing import Any, Dict, Literal, Optional, Sequence, cast
+from collections.abc import Sequence
 import random
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-
 
 BLOOM_VERBS = {
     1: "Remember (Nhớ: Định nghĩa, liệt kê, ghi nhớ)",
@@ -17,9 +17,10 @@ BLOOM_VERBS = {
     6: "Create (Sáng tạo: Thiết kế, chứng minh, tổng hợp)",
 }
 
-from enum import Enum
+from enum import StrEnum
 
-class ExerciseType(str, Enum):
+
+class ExerciseType(StrEnum):
     MCQ = "mcq"
     TRUE_FALSE = "true_false"
     FILL_BLANK = "fill_blank"
@@ -127,7 +128,7 @@ def shuffle_ordering_items(correct_order: Sequence[str], max_attempts: int = 5) 
     return items[1:] + items[:1]
 
 
-def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
+def serialize_exercise_result(result: ExerciseBaseOutput) -> dict[str, Any]:
     if isinstance(result, MCQOutput):
         return {
             "exercise_type": result.exercise_type,
@@ -234,7 +235,7 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> Dict[str, Any]:
 # Configuration-driven weight matrix for exercise type selection.
 # Structure: { bloom_level: { exercise_type: (weight_low_mastery, weight_mid_mastery, weight_high_mastery) } }
 # Mastery bins: Low (< 0.4), Mid (0.4 - 0.7), High (>= 0.7)
-EXERCISE_WEIGHTS: Dict[int, Dict[ExerciseType, tuple[int, int, int]]] = {
+EXERCISE_WEIGHTS: dict[int, dict[ExerciseType, tuple[int, int, int]]] = {
     1: {
         ExerciseType.TRUE_FALSE: (70, 40, 10),
         ExerciseType.MCQ:        (30, 60, 90),
@@ -267,12 +268,12 @@ EXERCISE_WEIGHTS: Dict[int, Dict[ExerciseType, tuple[int, int, int]]] = {
 }
 
 
-def select_exercise_type(bloom_level: int, mastery: Optional[float] = None) -> ExerciseType:
+def select_exercise_type(bloom_level: int, mastery: float | None = None) -> ExerciseType:
     mastery_value = 0.5 if mastery is None else max(0.0, min(1.0, float(mastery)))
     bloom_level = max(1, min(6, bloom_level))
-    
+
     weights_config = EXERCISE_WEIGHTS.get(bloom_level, EXERCISE_WEIGHTS[1])
-    
+
     # Determine the mastery bin index: 0 (Low), 1 (Mid), 2 (High)
     if mastery_value < 0.4:
         weight_index = 0
@@ -280,19 +281,18 @@ def select_exercise_type(bloom_level: int, mastery: Optional[float] = None) -> E
         weight_index = 1
     else:
         weight_index = 2
-        
+
     candidates: list[ExerciseType] = []
     weights: list[int] = []
-    
+
     for ex_type, w_tuple in weights_config.items():
         w = w_tuple[weight_index]
         if w > 0:
             candidates.append(ex_type)
             weights.append(w)
-            
+
     if not candidates:
         return ExerciseType.MCQ  # Safe fallback
-        
+
     # random.choices returns a list of k elements, we pluck the first
-    selected_type = random.choices(candidates, weights=weights, k=1)[0]
-    return selected_type
+    return random.choices(candidates, weights=weights, k=1)[0]

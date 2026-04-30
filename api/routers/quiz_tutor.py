@@ -3,13 +3,14 @@ routers/quiz_tutor.py — Quiz ask-AI endpoints backed by shared LLM runtime.
 """
 
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ..core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
-from ..dependencies import get_current_user
-from ..schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponse
+from api.core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
+from api.dependencies import get_current_user
+from api.schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponse
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 @router.post("/ask-ai", response_model=QuizTutorResponse)
 async def ask_ai_about_quiz(
     req: QuizTutorRequest,
-    user_id: str = Depends(get_current_user),
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
     del user_id
 

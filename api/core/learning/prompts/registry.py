@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
-
-from ..exercise_types import (
+from api.core.learning.exercise_types import (
     ExerciseType,
     FillBlankOutput,
     MatchingOutput,
@@ -16,7 +14,13 @@ from ..exercise_types import (
     TrueFalseOutput,
     serialize_exercise_result,
 )
+
 from .constants import EXPLANATION_GUIDANCE, NEGATIVE_CONSTRAINTS
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from pydantic import BaseModel
 
 
 @dataclass(frozen=True)

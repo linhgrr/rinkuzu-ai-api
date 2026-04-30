@@ -5,8 +5,8 @@ from .tutor_chat import create_tutor_chat_stream, generate_tutor_chat_response, 
 
 __all__ = [
     "create_quiz_tutor_stream",
-    "generate_quiz_tutor_response",
     "create_tutor_chat_stream",
+    "generate_quiz_tutor_response",
     "generate_tutor_chat_response",
     "sanitize_chat_input",
 ]

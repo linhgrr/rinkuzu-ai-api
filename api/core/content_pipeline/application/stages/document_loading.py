@@ -1,11 +1,13 @@
 """Document loading stage for the content pipeline."""
 
 from __future__ import annotations
-from typing import Any, Awaitable, Callable
 
-from ...domain.jobs import PipelineJob, PipelineStatus
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+
 from .execution import run_blocking_stage
-
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 LoadAndChunkFn = Callable[[str, str], list[Any]]

@@ -1,19 +1,23 @@
 """Extraction chain for concept extraction from chunks."""
 
-import os
-from typing import List, Tuple
 from concurrent.futures import ThreadPoolExecutor
+
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
+from loguru import logger
+
+from api.core.content_pipeline.infrastructure.prompts import (
+    EVIDENCE_VERIFICATION_PROMPT,
+    EXTRACTION_PROMPT,
+)
+from api.core.content_pipeline.infrastructure.utils.timeit import timeit
 
 from . import get_llm
 from .schemas import ConceptExtraction, EvidenceVerification
-from ..prompts import EXTRACTION_PROMPT, EVIDENCE_VERIFICATION_PROMPT
-from ..utils.timeit import timeit
-from loguru import logger
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate
-)
+
 
 class ExtractionChain:
     """Chain for extracting concepts from text chunks using exact structured outputs."""
@@ -80,12 +84,12 @@ class ExtractionChain:
     @timeit
     def extract_from_batch(
         self,
-        chunks: List[str],
+        chunks: list[str],
         subject_id: str,
         batch_size: int = 5,
         max_workers: int = 8,
         max_previous_concepts: int = 20,
-    ) -> List[ConceptExtraction]:
+    ) -> list[ConceptExtraction]:
         """
         Extract concepts from multiple chunks with sequential batching.
         """
@@ -99,8 +103,8 @@ class ExtractionChain:
             f"(sequential mode, max_previous_concepts={max_previous_concepts})"
         )
 
-        results: List[ConceptExtraction] = []
-        all_previous_concepts: List[tuple] = []  # [(concept_id, name), ...]
+        results: list[ConceptExtraction] = []
+        all_previous_concepts: list[tuple] = []  # [(concept_id, name), ...]
 
         for batch_idx, batch in enumerate(batches):
             context_window = all_previous_concepts[-max_previous_concepts:] if max_previous_concepts > 0 else []
@@ -130,13 +134,13 @@ class ExtractionChain:
                 )
 
         return results
-    
+
     def _process_batch(
         self,
-        batch_chunks: List[str],
+        batch_chunks: list[str],
         subject_id: str,
         batch_idx: int,
-        previous_concepts: List[tuple] | None = None,
+        previous_concepts: list[tuple] | None = None,
     ) -> ConceptExtraction:
         """
         Process a single batch of chunks relying SOLELY on native structured output.
@@ -173,24 +177,24 @@ class ExtractionChain:
             # Only do native API call, no regex JSON repairing required via `json_mode`
             max_retries = 3
             last_error = None
-            
+
             for attempt in range(max_retries):
                 try:
                     result = self.extraction_chain.invoke(invoke_args)
-                    
+
                     if not isinstance(result, ConceptExtraction):
                         raise ValueError(f"LLM API did not return a ConceptExtraction instance. Got: {type(result)}")
-                        
+
                     logger.info(f"Batch {batch_idx} extraction success: {len(result.concepts)} concepts")
                     return result
                 except Exception as e:
                     last_error = e
                     logger.warning(f"Batch {batch_idx} (Attempt {attempt+1}/{max_retries}) failed: {e}")
-            
+
             logger.error(f"Batch {batch_idx} exhausted max_retries ({max_retries}). Last error: {last_error}")
             return ConceptExtraction(
-                concepts=[], 
-                subject_id=subject_id, 
+                concepts=[],
+                subject_id=subject_id,
                 notes=f"Structured output failed after {max_retries} attempts. Error: {str(last_error)[:100]}"
             )
 
@@ -213,19 +217,19 @@ class ExtractionChain:
             pair_idx=-1,
             max_retries=3,
         )
-    
+
     @timeit
     def verify_relations_batch(
         self,
-        concept_pairs: List[Tuple[str, str]],
+        concept_pairs: list[tuple[str, str]],
         max_workers: int = 8,
-    ) -> List[EvidenceVerification]:
+    ) -> list[EvidenceVerification]:
         """
         Verify relations for multiple concept pairs in parallel.
         """
         logger.info(f"Verifying {len(concept_pairs)} concept pairs with {max_workers} workers")
-        
-        results = [None] * len(concept_pairs)  
+
+        results = [None] * len(concept_pairs)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_index = {}
             for idx, (concept_a, concept_b) in enumerate(concept_pairs):
@@ -236,7 +240,7 @@ class ExtractionChain:
                     idx
                 )
                 future_to_index[future] = idx
-            
+
             for future in future_to_index:
                 idx = future_to_index[future]
                 try:
@@ -253,7 +257,7 @@ class ExtractionChain:
                         evidences=[],
                         reasoning=f"Error during verification: {str(e)[:100]}"
                     )
-        
+
         return results
 
     def _verify_single_relation(
@@ -275,10 +279,10 @@ class ExtractionChain:
         for attempt in range(max_retries):
             try:
                 result = self.verification_chain.invoke(invoke_args)
-                
+
                 if not isinstance(result, EvidenceVerification):
                     raise ValueError(f"LLM API did not return EvidenceVerification instance. Got: {type(result)}")
-                    
+
                 logger.info(
                     f"Verified {pair_label}: {concept_a} <-> {concept_b} "
                     f"(has_relation={result.has_relation})"

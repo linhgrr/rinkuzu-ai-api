@@ -2,12 +2,13 @@
 repositories/pipeline_repo.py — MongoDB persistence for pipeline jobs.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 from loguru import logger
 
-from ..core.content_pipeline.domain.jobs import PipelineJob
-from ..core.content_pipeline.infrastructure.serializers import pipeline_job_to_document
+from api.core.content_pipeline.domain.jobs import PipelineJob
+from api.core.content_pipeline.infrastructure.serializers import pipeline_job_to_document
+
 from .base import MongoRepository
 
 
@@ -48,18 +49,18 @@ class PipelineRepository(MongoRepository):
 
         return await self._run_or_default("save", False, _save)
 
-    async def load(self, job_id: str) -> Optional[Dict[str, Any]]:
+    async def load(self, job_id: str) -> dict[str, Any] | None:
         """Load a pipeline job result from MongoDB."""
-        async def _load() -> Optional[Dict[str, Any]]:
+        async def _load() -> dict[str, Any] | None:
             return await self._db[self.COLLECTION].find_one(
                 {"job_id": job_id}, {"_id": 0}
             )
 
         return await self._run_or_default("load", None, _load)
 
-    async def load_for_user(self, job_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    async def load_for_user(self, job_id: str, user_id: str) -> dict[str, Any] | None:
         """Load a pipeline job only if it belongs to user_id."""
-        async def _load_for_user() -> Optional[Dict[str, Any]]:
+        async def _load_for_user() -> dict[str, Any] | None:
             return await self._db[self.COLLECTION].find_one(
                 {"job_id": job_id, "user_id": user_id}, {"_id": 0}
             )
@@ -68,15 +69,15 @@ class PipelineRepository(MongoRepository):
 
     async def load_many_for_user(
         self,
-        job_ids: List[str],
+        job_ids: list[str],
         user_id: str,
-        projection: Optional[Dict[str, int]] = None,
-    ) -> Dict[str, Dict[str, Any]]:
+        projection: dict[str, int] | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Load multiple pipeline jobs for a user in one round-trip."""
         if not job_ids:
             return {}
 
-        async def _load_many_for_user() -> Dict[str, Dict[str, Any]]:
+        async def _load_many_for_user() -> dict[str, dict[str, Any]]:
             cursor = self._db[self.COLLECTION].find(
                 {"job_id": {"$in": job_ids}, "user_id": user_id},
                 projection or {"_id": 0},
@@ -89,11 +90,11 @@ class PipelineRepository(MongoRepository):
     async def list_recent(
         self,
         limit: int = 20,
-        user_id: Optional[str] = None,
-        status: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        user_id: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
         """List recent pipeline jobs."""
-        async def _list_recent() -> List[Dict[str, Any]]:
+        async def _list_recent() -> list[dict[str, Any]]:
             query = {}
             if user_id:
                 query["user_id"] = user_id
@@ -107,9 +108,9 @@ class PipelineRepository(MongoRepository):
 
         return await self._run_or_default("list_recent", [], _list_recent)
 
-    async def delete(self, job_id: str, delete_sessions: bool = True) -> Dict[str, Any]:
+    async def delete(self, job_id: str, delete_sessions: bool = True) -> dict[str, Any]:
         """Delete a pipeline job and optionally its linked sessions."""
-        async def _delete() -> Dict[str, Any]:
+        async def _delete() -> dict[str, Any]:
             job_result = await self._db[self.COLLECTION].delete_one({"job_id": job_id})
             deleted_sessions = 0
 
@@ -133,9 +134,9 @@ class PipelineRepository(MongoRepository):
         job_id: str,
         user_id: str,
         delete_sessions: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete a pipeline job only if owned by user_id."""
-        async def _delete_for_user() -> Dict[str, Any]:
+        async def _delete_for_user() -> dict[str, Any]:
             job_result = await self._db[self.COLLECTION].delete_one(
                 {"job_id": job_id, "user_id": user_id}
             )

@@ -2,7 +2,7 @@
 schemas/quiz_tutor.py — Quiz ask-AI request/response models.
 """
 
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,11 +16,11 @@ class QuizTutorRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     question: str = Field(..., min_length=1, max_length=12000)
-    options: List[str] = Field(..., min_length=2, max_length=8)
-    user_question: Optional[str] = Field(default=None, alias="userQuestion", max_length=1000)
-    question_image: Optional[str] = Field(default=None, alias="questionImage")
-    option_images: List[Optional[str]] = Field(default_factory=list, alias="optionImages")
-    chat_history: List[QuizTutorChatMessage] = Field(default_factory=list, alias="chatHistory")
+    options: list[str] = Field(..., min_length=2, max_length=8)
+    user_question: str | None = Field(default=None, alias="userQuestion", max_length=1000)
+    question_image: str | None = Field(default=None, alias="questionImage")
+    option_images: list[str | None] = Field(default_factory=list, alias="optionImages")
+    chat_history: list[QuizTutorChatMessage] = Field(default_factory=list, alias="chatHistory")
     stream: bool = False
 
 
@@ -28,7 +28,7 @@ class QuizTutorResponseData(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     explanation: str
-    structured: Optional[dict] = None
+    structured: dict | None = None
     timestamp: str
     turn_count: int = Field(alias="turnCount")
 

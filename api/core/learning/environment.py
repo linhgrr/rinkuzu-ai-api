@@ -3,13 +3,13 @@ environment.py — Adaptive Learning Environment for API use
 Simplified version of env_rl.py that works with in-memory data instead of file paths.
 """
 
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional
 
-import numpy as np
-import torch
 import gymnasium as gym
 from gymnasium import spaces
 from loguru import logger
+import numpy as np
+import torch
 
 from .models import SaintModel
 
@@ -39,9 +39,9 @@ class AdaptiveLearningEnv(gym.Env):
     def __init__(
         self,
         saint_model: SaintModel,
-        concept_map: Dict[str, int],
-        prereq_graph: Optional[Dict[int, List[int]]] = None,
-        concept_blooms: Optional[Dict[int, List[int]]] = None,
+        concept_map: dict[str, int],
+        prereq_graph: dict[int, list[int]] | None = None,
+        concept_blooms: dict[int, list[int]] | None = None,
         max_steps: int = 9999,
         mastery_threshold: float = 0.75,
         novelty_bonus: float = 0.3,
@@ -51,7 +51,7 @@ class AdaptiveLearningEnv(gym.Env):
         mask_mastered: bool = True,
         deterministic_train: bool = False,
         max_seq_len: int = 200,
-        device: Optional[str] = None,
+        device: str | None = None,
         external_embeddings: Optional["torch.Tensor"] = None,
     ):
         super().__init__()
@@ -67,7 +67,7 @@ class AdaptiveLearningEnv(gym.Env):
         # Transitive prerequisite closure:
         # concept c is unlocked only when ALL ancestor prerequisites of c are mastered.
         self._prereq_ancestors = self._build_prereq_ancestors()
-        self._concept_blooms: Dict[int, List[int]] = {}
+        self._concept_blooms: dict[int, list[int]] = {}
         for i in range(self.n_concepts):
             self._concept_blooms[i] = list(range(1, 7))
 
@@ -97,11 +97,11 @@ class AdaptiveLearningEnv(gym.Env):
         self.n_actions = self.n_concepts * self.N_BLOOMS
         self.action_space = spaces.Discrete(self.n_actions)
 
-        self._concept_history: List[int] = []
-        self._bloom_history: List[int] = []
-        self._response_history: List[int] = []
+        self._concept_history: list[int] = []
+        self._bloom_history: list[int] = []
+        self._response_history: list[int] = []
         self._visited: set = set()
-        self._visit_counts: Dict[int, int] = {}
+        self._visit_counts: dict[int, int] = {}
         self._step_count: int = 0
         self._current_mastery = np.full(self.n_concepts, 0.5, dtype=np.float32)
         self._bloom_mastery = np.full((self.n_concepts, self.N_BLOOMS), 0.5, dtype=np.float32)
@@ -126,12 +126,12 @@ class AdaptiveLearningEnv(gym.Env):
         bloom = (action % self.N_BLOOMS) + 1
         return concept, bloom
 
-    def _build_prereq_ancestors(self) -> Dict[int, List[int]]:
+    def _build_prereq_ancestors(self) -> dict[int, list[int]]:
         """Precompute transitive prerequisite closure for each concept index."""
-        memo: Dict[int, Set[int]] = {}
-        visiting: Set[int] = set()
+        memo: dict[int, set[int]] = {}
+        visiting: set[int] = set()
 
-        def dfs(node: int) -> Set[int]:
+        def dfs(node: int) -> set[int]:
             if node in memo:
                 return memo[node]
             if node in visiting:
@@ -142,7 +142,7 @@ class AdaptiveLearningEnv(gym.Env):
                 }
 
             visiting.add(node)
-            ancestors: Set[int] = set()
+            ancestors: set[int] = set()
             for parent in self._prereq_graph.get(node, []):
                 if not (0 <= parent < self.n_concepts):
                     continue
@@ -173,7 +173,7 @@ class AdaptiveLearningEnv(gym.Env):
                     break
         return concept_prereq_ok
 
-    def get_prereq_ok_mask(self, threshold: Optional[float] = None) -> np.ndarray:
+    def get_prereq_ok_mask(self, threshold: float | None = None) -> np.ndarray:
         """Public helper for session/graph APIs to read current lock state."""
         th = self.mastery_threshold if threshold is None else float(threshold)
         return self._compute_prereq_ok_mask(th, recompute_if_dirty=True).copy()
@@ -343,7 +343,7 @@ class AdaptiveLearningEnv(gym.Env):
         assert len(concept_indices) == len(bloom_levels) == len(responses), \
             f"History length mismatch: {len(concept_indices)} concepts, {len(bloom_levels)} blooms, {len(responses)} responses"
 
-        for c_idx, bloom, resp in zip(concept_indices, bloom_levels, responses):
+        for c_idx, bloom, resp in zip(concept_indices, bloom_levels, responses, strict=False):
             self._concept_history.append(c_idx)
             self._bloom_history.append(bloom)
             self._response_history.append(int(resp))
@@ -365,7 +365,7 @@ class AdaptiveLearningEnv(gym.Env):
             float(np.mean(self._current_mastery)),
         )
 
-    def step(self, action: int, human_correct: Optional[bool] = None):
+    def step(self, action: int, human_correct: bool | None = None):
         assert self.action_space.contains(action)
 
         concept, bloom = self._decode_action(action)
@@ -376,11 +376,10 @@ class AdaptiveLearningEnv(gym.Env):
 
         if human_correct is not None:
             r = int(human_correct)
+        elif self.deterministic_train:
+            r = 1 if p_before >= 0.5 else 0
         else:
-            if self.deterministic_train:
-                r = 1 if p_before >= 0.5 else 0
-            else:
-                r = int(self.np_random.binomial(1, p_before))
+            r = int(self.np_random.binomial(1, p_before))
 
         self._concept_history.append(int(concept))
         self._bloom_history.append(bloom)

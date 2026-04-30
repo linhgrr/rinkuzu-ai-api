@@ -2,7 +2,6 @@
 schemas/knowledge.py — Knowledge graph and mastery Pydantic models.
 """
 
-from typing import List
 
 from pydantic import BaseModel
 
@@ -22,19 +21,19 @@ class KnowledgeEdgeResponse(BaseModel):
 
 
 class KnowledgeGraphResponse(BaseModel):
-    nodes: List[KnowledgeNodeResponse]
-    edges: List[KnowledgeEdgeResponse]
+    nodes: list[KnowledgeNodeResponse]
+    edges: list[KnowledgeEdgeResponse]
 
 
 class MasteryRow(BaseModel):
     concept_id: str
     concept_name: str
-    bloom_levels: List[float]
+    bloom_levels: list[float]
 
 
 class MasteryMatrixResponse(BaseModel):
-    matrix: List[MasteryRow]
-    bloom_labels: List[str]
+    matrix: list[MasteryRow]
+    bloom_labels: list[str]
 
 
 class ConceptPrereq(BaseModel):
@@ -49,8 +48,8 @@ class ConceptDetailResponse(BaseModel):
     definition: str
     mastery: float
     status: str
-    bloom_mastery: List[float]
-    prerequisites: List[ConceptPrereq]
-    dependents: List[ConceptPrereq]
+    bloom_mastery: list[float]
+    prerequisites: list[ConceptPrereq]
+    dependents: list[ConceptPrereq]
     visited: bool
     visit_count: int

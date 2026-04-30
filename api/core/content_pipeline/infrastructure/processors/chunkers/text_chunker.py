@@ -1,14 +1,14 @@
 """Text chunker using LangChain built-ins (Recursive/Markdown/HF tokenizer)."""
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
 
 import re
+from typing import Any
 
 from langchain_core.documents import Document
 from langchain_text_splitters import (
-    RecursiveCharacterTextSplitter,
     MarkdownHeaderTextSplitter,
+    RecursiveCharacterTextSplitter,
     TextSplitter,
 )
 
@@ -20,7 +20,7 @@ except Exception:
 
 from loguru import logger
 
-from ......config import settings
+from api.config import settings
 
 
 class TextChunker:
@@ -33,11 +33,11 @@ class TextChunker:
 
     def __init__(
         self,
-        chunk_size: Optional[int] = None,
-        chunk_overlap: Optional[int] = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
         use_hf_tokenizer: bool = False,
-        hf_model_name: Optional[str] = None,
-        markdown_headers: Optional[List[tuple[str, str]]] = None,
+        hf_model_name: str | None = None,
+        markdown_headers: list[tuple[str, str]] | None = None,
     ):
         """
         Args:
@@ -66,7 +66,7 @@ class TextChunker:
             )
             self.use_hf_tokenizer = False
 
-    def chunk(self, content: Dict[str, Any], doc_id: str) -> List[Document]:
+    def chunk(self, content: dict[str, Any], doc_id: str) -> list[Document]:
         """
         Args:
             content: dict từ loader (yêu cầu có 'text', tùy chọn 'pages' và 'metadata')
@@ -86,7 +86,7 @@ class TextChunker:
 
         # 1) Nếu nhìn giống có đề mục -> tách theo header markdown
         has_headers = self._looks_like_markdown_or_headings(text)
-        docs: List[Document]
+        docs: list[Document]
         if has_headers:
             md_splitter = MarkdownHeaderTextSplitter(self.markdown_headers)
             # -> List[Document] với metadata header
@@ -160,6 +160,4 @@ class TextChunker:
         if re.search(r"^#{1,6}\s+\S+", text, flags=re.MULTILINE):
             return True  # Markdown style
         # Dạng "1. Giới thiệu", "Chương 1", "Mục 2", "Section 2" ...
-        if re.search(r"(?m)^(?:\d+\.\s+|Chương|Mục|Phần|Chapter|Section)\b", text, flags=re.IGNORECASE):
-            return True
-        return False
+        return bool(re.search(r"(?m)^(?:\d+\.\s+|Chương|Mục|Phần|Chapter|Section)\b", text, flags=re.IGNORECASE))

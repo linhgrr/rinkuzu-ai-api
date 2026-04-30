@@ -3,12 +3,12 @@ subject_progress_snapshot.py — Shared helpers for serializing subject progress
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
 
-def build_subject_progress_snapshot(session) -> Dict[str, Any]:
+def build_subject_progress_snapshot(session) -> dict[str, Any]:
     env_stats = session.env.get_session_stats()
     concept_mastery = session.env.get_concept_mastery()
     bloom_mastery = session.env.get_mastery_matrix()

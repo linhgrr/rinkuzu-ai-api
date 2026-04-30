@@ -1,11 +1,11 @@
 """Utility functions."""
-from .timeit import timeit
+from .mime import get_file_type, guess_mime_type
 from .text import clean_text
-from .mime import guess_mime_type, get_file_type
+from .timeit import timeit
 
 __all__ = [
-    "timeit",
     "clean_text",
-    "guess_mime_type",
     "get_file_type",
+    "guess_mime_type",
+    "timeit",
 ]

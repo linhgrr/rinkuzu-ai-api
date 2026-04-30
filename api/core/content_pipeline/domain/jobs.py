@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
+import time
 from typing import Any
 
 
-class PipelineStatus(str, Enum):
+class PipelineStatus(StrEnum):
     """Authoritative lifecycle states for content pipeline jobs."""
 
     PENDING = "pending"

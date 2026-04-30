@@ -2,15 +2,13 @@
 chunk_chroma_store.py — ChromaDB storage for document chunks (RAG source).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from langchain_core.documents import Document
-from langchain_chroma import Chroma
 import chromadb
 from chromadb.config import Settings as ChromaSettings
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 from loguru import logger
-
-from .chroma_store import ConceptChromaStore
 
 
 class ChunkChromaStore:
@@ -19,8 +17,8 @@ class ChunkChromaStore:
     def __init__(
         self,
         collection_name: str = "document_chunks",
-        persist_directory: Optional[str] = None,
-        embedding_client: Optional[Any] = None,
+        persist_directory: str | None = None,
+        embedding_client: Any | None = None,
     ):
         if persist_directory is None:
             from pathlib import Path
@@ -35,7 +33,9 @@ class ChunkChromaStore:
         os.makedirs(self.persist_directory, exist_ok=True)
 
         if embedding_client is None:
-            from ..embed.embedding_client import EmbeddingClient
+            from api.core.content_pipeline.infrastructure.embed.embedding_client import (
+                EmbeddingClient,
+            )
             embedding_client = EmbeddingClient()
 
         self.embedding_client = embedding_client
@@ -63,10 +63,10 @@ class ChunkChromaStore:
 
     def add_chunks(
         self,
-        chunks: List[Document],
+        chunks: list[Document],
         job_id: str,
         subject_id: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Add document chunks to ChromaDB.
 
         Args:
@@ -106,7 +106,7 @@ class ChunkChromaStore:
         query: str,
         job_id: str,
         k: int = 3,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Async retrieval of relevant chunks for a query.
 
         Args:
@@ -125,7 +125,7 @@ class ChunkChromaStore:
         query: str,
         job_id: str,
         k: int = 3,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Synchronous retrieval (run in thread pool from async wrapper)."""
         try:
             results = self.vectorstore.similarity_search_with_score(

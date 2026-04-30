@@ -8,12 +8,11 @@ request-independent job scheduling and persistence out of the legacy
 from __future__ import annotations
 
 import asyncio
-import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Awaitable, Callable
+import uuid
 
-from ..domain.jobs import PipelineJob, PipelineStatus
-
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
 RunPipelineFn = Callable[[PipelineJob, str, float, float, bool], Awaitable[None]]

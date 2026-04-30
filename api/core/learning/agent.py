@@ -3,7 +3,6 @@ agent.py — D3QN action selection with topic coherence
 """
 
 import random
-from typing import Optional, Dict, Set
 
 import numpy as np
 import torch
@@ -16,7 +15,7 @@ def select_action(
     state: np.ndarray,
     action_mask: np.ndarray,
     device: torch.device,
-    n_concepts: int = None,
+    n_concepts: int | None = None,
     epsilon: float = 0.0,
 ) -> int:
     """Select action with epsilon-greedy + action masking (concept-agnostic).
@@ -30,13 +29,12 @@ def select_action(
     if random.random() < epsilon:
         valid = np.where(action_mask)[0]
         return int(np.random.choice(valid))
-    else:
-        with torch.no_grad():
-            state_t = torch.FloatTensor(state).unsqueeze(0).to(device)
-            q_values = q_net(state_t, n_concepts).squeeze(0)
-            mask_t = torch.BoolTensor(action_mask).to(device)
-            q_values[~mask_t] = float("-inf")
-            return int(q_values.argmax().item())
+    with torch.no_grad():
+        state_t = torch.FloatTensor(state).unsqueeze(0).to(device)
+        q_values = q_net(state_t, n_concepts).squeeze(0)
+        mask_t = torch.BoolTensor(action_mask).to(device)
+        q_values[~mask_t] = float("-inf")
+        return int(q_values.argmax().item())
 
 
 def select_topic_coherent_action(
@@ -45,10 +43,10 @@ def select_topic_coherent_action(
     action_mask: np.ndarray,
     device: torch.device,
     n_blooms: int = 6,
-    n_concepts: int = None,
-    current_topic: Optional[str] = None,
+    n_concepts: int | None = None,
+    current_topic: str | None = None,
     steps_in_topic: int = 0,
-    topic_to_concept_idxs: Optional[Dict[str, Set[int]]] = None,
+    topic_to_concept_idxs: dict[str, set[int]] | None = None,
     min_steps_per_topic: int = 3,
     topic_bias: float = 2.0,
 ) -> int:

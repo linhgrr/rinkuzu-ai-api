@@ -1,8 +1,10 @@
 """Timing utilities."""
 
-import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Any
+import time
+from typing import Any
+
 from loguru import logger
 
 

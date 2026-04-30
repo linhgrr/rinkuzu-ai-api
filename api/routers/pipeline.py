@@ -2,44 +2,38 @@
 routers/pipeline.py — Content pipeline endpoints.
 """
 
-import asyncio
-import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Annotated
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 import httpx
+from loguru import logger
 from pydantic import BaseModel
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from loguru import logger
-import aiofiles
-
-from ..config import settings
-
-from ..core.content_pipeline import (
-    PipelineStatus,
-)
-from ..core.shared import mongo_store
-from ..dependencies import (
+from api.config import get_settings
+from api.core.content_pipeline import PipelineStatus
+from api.core.shared import mongo_store
+from api.core.shared.url_fetch import UnsafeURLError, stream_download
+from api.dependencies import (
     get_content_pipeline_availability,
     get_content_pipeline_service,
     get_current_user,
     get_session_manager,
     get_session_service,
 )
-from ..exceptions import (
-    ServiceUnavailableError,
-    PipelineNotFoundError,
-    PipelineNotCompletedError,
-)
+from api.exceptions import PipelineNotCompletedError, PipelineNotFoundError, ServiceUnavailableError
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+_MAX_FILENAME_LENGTH = 200
+
 
 @router.get("/status")
-async def pipeline_status(availability: dict = Depends(get_content_pipeline_availability)):
+async def pipeline_status(availability: Annotated[dict, Depends(get_content_pipeline_availability)]):
     """Check if content pipeline runtime modules are available."""
     available = availability["available"]
     return {
@@ -52,7 +46,7 @@ async def pipeline_status(availability: dict = Depends(get_content_pipeline_avai
 class ProcessDocumentRequest(BaseModel):
     file_url: str
     filename: str
-    subject_id: Optional[str] = None
+    subject_id: str | None = None
     prs_threshold: float = 0.75
     min_confidence: float = 0.6
     apply_reduction: bool = True
@@ -61,8 +55,8 @@ class ProcessDocumentRequest(BaseModel):
 @router.post("/process")
 async def process_document(
     request: ProcessDocumentRequest,
-    user_id: str = Depends(get_current_user),
-    availability: dict = Depends(get_content_pipeline_availability),
+    user_id: Annotated[str, Depends(get_current_user)],
+    availability: Annotated[dict, Depends(get_content_pipeline_availability)],
     pipeline_service=Depends(get_content_pipeline_service),
 ):
     """Run the full content processing pipeline from an S3 uploaded file."""
@@ -81,23 +75,33 @@ async def process_document(
     if not mongo_store.is_available():
         raise ServiceUnavailableError("MongoDB persistence")
 
-    if not request.filename or not request.filename.lower().endswith(".pdf"):
+    # Sanitize filename — strip directory components, enforce .pdf, reject NUL / path seps
+    raw_name = Path(request.filename or "").name
+    if not raw_name or not raw_name.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    if len(raw_name) > _MAX_FILENAME_LENGTH or any(c in raw_name for c in ("\x00", "/", "\\")):
+        raise HTTPException(status_code=400, detail="Invalid filename.")
 
     file_id = uuid.uuid4().hex[:8]
-    save_path = UPLOAD_DIR / f"{file_id}_{request.filename}"
-    
-    # Download file from URL
+    save_path = (UPLOAD_DIR / f"{file_id}_{raw_name}").resolve()
+    if not save_path.is_relative_to(UPLOAD_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid filename.")
+
+    # Safe download — validates scheme, blocks private IPs, enforces size cap
+    settings = get_settings()
     try:
-        async with httpx.AsyncClient() as client:
-            async with client.stream("GET", request.file_url) as response:
-                response.raise_for_status()
-                async with aiofiles.open(save_path, "wb") as f:
-                    async for chunk in response.aiter_bytes(chunk_size=8192):
-                        await f.write(chunk)
-    except Exception:
-        logger.exception("[PipelineRouter] Failed to download file from URL {}", request.file_url)
-        raise HTTPException(status_code=500, detail="Failed to download file.")
+        await stream_download(
+            request.file_url,
+            save_path,
+            max_bytes=settings.download_max_bytes,
+            allowlist=settings.download_host_allowlist or None,
+        )
+    except UnsafeURLError as exc:
+        logger.warning("[PipelineRouter] Rejected unsafe URL: {}", exc)
+        raise HTTPException(status_code=400, detail="URL not allowed.") from None
+    except (httpx.HTTPError, OSError):
+        logger.exception("[PipelineRouter] Failed to download file from {}", request.file_url)
+        raise HTTPException(status_code=502, detail="Failed to download file.") from None
 
     try:
         job = await pipeline_service.start_job(
@@ -110,14 +114,14 @@ async def process_document(
             content_processor_available=availability["available"],
             content_processor_src=availability["src"] or "",
         )
-    except Exception:
+    except (RuntimeError, ValueError, OSError):
         logger.exception("[PipelineRouter] Failed to initialize pipeline job for {}", request.filename)
         try:
             if save_path.exists():
                 save_path.unlink()
         except OSError:
-            logger.warning(f"[PipelineRouter] Failed to cleanup upload {save_path}")
-        raise HTTPException(status_code=503, detail="Failed to initialize pipeline job.")
+            logger.warning("[PipelineRouter] Failed to cleanup upload {}", save_path)
+        raise HTTPException(status_code=500, detail="Failed to initialize pipeline job.") from None
 
     return {
         "job_id": job.job_id,
@@ -130,7 +134,7 @@ async def process_document(
 
 
 @router.get("/jobs/{job_id}")
-async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
+async def get_job_status(job_id: str, user_id: Annotated[str, Depends(get_current_user)]):
     """Get pipeline job status and progress."""
     job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
@@ -228,8 +232,8 @@ async def create_session_from_pipeline(
     # Fire eager prefetch
     try:
         background_tasks.add_task(exercise_svc.eager_generate_first_exercise, session)
-    except Exception as exc:
-        logger.warning(f"[PipelineRouter] Failed to schedule eager prefetch: {exc}")
+    except TypeError as exc:
+        logger.warning("[PipelineRouter] Failed to schedule eager prefetch: {}", exc)
 
     return {
         "session_id": session.session_id,

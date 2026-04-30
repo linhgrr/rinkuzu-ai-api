@@ -1,6 +1,6 @@
 """Learning domain modules."""
 
-__all__ = ["ExerciseRecord", "SessionManager", "SessionState", "ExerciseService"]
+__all__ = ["ExerciseRecord", "ExerciseService", "SessionManager", "SessionState"]
 
 
 def __getattr__(name: str):

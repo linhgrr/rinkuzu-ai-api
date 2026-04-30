@@ -2,12 +2,10 @@
 exceptions.py — Domain exceptions and global FastAPI exception handlers.
 """
 
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
-
 
 # ── Domain Exceptions ───────────────────────────────────────
 
@@ -89,10 +87,14 @@ async def validation_exception_handler(
         request.url.path,
         exc.errors(),
     )
+    safe_errors = [
+        {"loc": e.get("loc"), "msg": e.get("msg"), "type": e.get("type")}
+        for e in exc.errors()
+    ]
     detail = "Invalid request"
     return JSONResponse(
         status_code=422,
-        content={"detail": detail, "error": detail, "meta": exc.errors()},
+        content={"detail": detail, "error": detail, "meta": safe_errors},
     )
 
 

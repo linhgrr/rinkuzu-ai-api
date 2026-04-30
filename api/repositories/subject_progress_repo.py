@@ -2,7 +2,7 @@
 repositories/subject_progress_repo.py — MongoDB persistence for subject-level learning history.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 from .base import MongoRepository
 
@@ -35,8 +35,8 @@ class SubjectProgressRepository(MongoRepository):
 
         return await self._run_or_default("save_snapshot", False, _save_snapshot)
 
-    async def load_for_user(self, job_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-        async def _load_for_user() -> Optional[Dict[str, Any]]:
+    async def load_for_user(self, job_id: str, user_id: str) -> dict[str, Any] | None:
+        async def _load_for_user() -> dict[str, Any] | None:
             return await self._db[self.COLLECTION].find_one(
                 {"job_id": job_id, "user_id": user_id},
                 {"_id": 0},
@@ -48,8 +48,8 @@ class SubjectProgressRepository(MongoRepository):
         self,
         session_id: str,
         user_id: str,
-    ) -> Optional[Dict[str, Any]]:
-        async def _load_by_session_for_user() -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
+        async def _load_by_session_for_user() -> dict[str, Any] | None:
             return await self._db[self.COLLECTION].find_one(
                 {"last_session_id": session_id, "user_id": user_id},
                 {"_id": 0},
@@ -61,11 +61,11 @@ class SubjectProgressRepository(MongoRepository):
             _load_by_session_for_user,
         )
 
-    async def load_many_for_user(self, job_ids: List[str], user_id: str) -> Dict[str, Dict[str, Any]]:
+    async def load_many_for_user(self, job_ids: list[str], user_id: str) -> dict[str, dict[str, Any]]:
         if not job_ids:
             return {}
 
-        async def _load_many_for_user() -> Dict[str, Dict[str, Any]]:
+        async def _load_many_for_user() -> dict[str, dict[str, Any]]:
             cursor = self._db[self.COLLECTION].find(
                 {"job_id": {"$in": job_ids}, "user_id": user_id},
                 {"_id": 0},
@@ -75,8 +75,8 @@ class SubjectProgressRepository(MongoRepository):
 
         return await self._run_or_default("load_many_for_user", {}, _load_many_for_user)
 
-    async def list_recent(self, limit: int = 50, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        async def _list_recent() -> List[Dict[str, Any]]:
+    async def list_recent(self, limit: int = 50, user_id: str | None = None) -> list[dict[str, Any]]:
+        async def _list_recent() -> list[dict[str, Any]]:
             query = {}
             if user_id:
                 query["user_id"] = user_id

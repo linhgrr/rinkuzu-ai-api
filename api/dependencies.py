@@ -2,15 +2,15 @@
 dependencies.py — FastAPI dependency injection functions.
 """
 
-from fastapi import Request, Header, HTTPException
+from fastapi import Header, HTTPException, Request
 
 from .config import Settings, get_settings
 from .exceptions import ServiceUnavailableError
 
 
 def get_current_user(
-    x_user_id: str = Header(default=None),
-    x_service_token: str = Header(default=None),
+    x_user_id: str | None = Header(default=None),
+    x_service_token: str | None = Header(default=None),
 ):
     """Extract user ID from headers."""
     required_service_token = get_settings().internal_service_token

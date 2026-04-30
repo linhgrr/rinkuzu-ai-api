@@ -5,18 +5,17 @@ routers/quiz_extract.py — Quiz extraction endpoints via LLM.
 import json
 import re
 import time
+from typing import Annotated
 import uuid
-from typing import Optional
 
+from fastapi import APIRouter, Depends, Form, HTTPException
 import httpx
-
-from fastapi import APIRouter, Form, HTTPException, Depends
 from loguru import logger
 
-from ..config import get_settings
-from ..dependencies import get_current_user
-from ..core.content_pipeline.infrastructure.runtime import get_s3_client
-from ..core.shared.llm import build_chat_completions_url, extract_llm_text
+from api.config import get_settings
+from api.core.content_pipeline.infrastructure.runtime import get_s3_client
+from api.core.shared.llm import build_chat_completions_url, extract_llm_text
+from api.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 MAX_PDF_BYTES = 50 * 1024 * 1024
@@ -98,7 +97,7 @@ async def _invoke_pdf_extract_llm(
     prompt: str,
     model: str,
     base_url: str,
-    api_key: Optional[str],
+    api_key: str | None,
 ) -> list:
     endpoint = build_chat_completions_url(base_url)
     timeout_sec = max(1.0, float(get_settings().llm_timeout_sec))
@@ -161,8 +160,8 @@ def _validate_quiz_extract_dependencies(settings, s3_client) -> None:
 
 @router.post("/extract")
 async def extract_quiz(
-    s3_key: str = Form(...),
-    user_prompt: Optional[str] = Form(None),
+    s3_key: Annotated[str, Form()],
+    user_prompt: Annotated[str | None, Form()] = None,
     user_id: str = Depends(get_current_user),
 ):
     """Extract quiz questions from a PDF already uploaded to S3."""
@@ -233,7 +232,7 @@ async def extract_quiz(
 
         prompt = EXTRACTION_PROMPT.replace(
             "<<<USER_PROMPT>>>",
-            user_prompt if user_prompt else "No additional constraints.",
+            user_prompt or "No additional constraints.",
         )
 
         pdf_url = _build_s3_object_url(

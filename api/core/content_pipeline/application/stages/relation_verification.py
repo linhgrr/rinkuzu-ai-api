@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from ...domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+
 from .execution import run_blocking_stage
-
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 VerifiedRelation = tuple[str, str, Any]
@@ -35,7 +36,7 @@ def filter_verified_relations(
 ) -> list[VerifiedRelation]:
     """Keep only relations that passed verifier checks and confidence threshold."""
     verified: list[VerifiedRelation] = []
-    for (source_id, target_id), evaluation in zip(candidate_pairs, verifications):
+    for (source_id, target_id), evaluation in zip(candidate_pairs, verifications, strict=False):
         if evaluation and evaluation.has_relation and evaluation.confidence >= min_confidence:
             verified.append((source_id, target_id, evaluation))
     return verified

@@ -2,38 +2,33 @@
 schemas — Re-export all Pydantic models for backward compatibility.
 """
 
-from .session import (
-    SessionCreateRequest,
-    SessionCreateResponse,
-    SessionStatusResponse,
-)
 from .exercise import (
     ExerciseOption,
-    NextConceptResponse,
-    TheoryResponse,
     ExerciseResponse,
+    NextConceptResponse,
     SubmitAnswerPayload,
     SubmitAnswerRequest,
     SubmitAnswerResponse,
+    TheoryResponse,
     TutorChatMessage,
     TutorChatRequest,
     TutorChatResponse,
 )
+from .history import (
+    SubjectHistoryDetailResponse,
+    SubjectHistoryListResponse,
+    SubjectHistoryResponse,
+    SubjectProgressListResponse,
+    SubjectProgressSummaryResponse,
+)
 from .knowledge import (
-    KnowledgeNodeResponse,
+    ConceptDetailResponse,
+    ConceptPrereq,
     KnowledgeEdgeResponse,
     KnowledgeGraphResponse,
-    MasteryRow,
+    KnowledgeNodeResponse,
     MasteryMatrixResponse,
-    ConceptPrereq,
-    ConceptDetailResponse,
-)
-from .history import (
-    SubjectHistoryResponse,
-    SubjectHistoryListResponse,
-    SubjectProgressSummaryResponse,
-    SubjectProgressListResponse,
-    SubjectHistoryDetailResponse,
+    MasteryRow,
 )
 from .quiz_tutor import (
     QuizTutorChatMessage,
@@ -41,35 +36,40 @@ from .quiz_tutor import (
     QuizTutorResponse,
     QuizTutorResponseData,
 )
+from .session import (
+    SessionCreateRequest,
+    SessionCreateResponse,
+    SessionStatusResponse,
+)
 
 __all__ = [
-    "SessionCreateRequest",
-    "SessionCreateResponse",
-    "SessionStatusResponse",
+    "ConceptDetailResponse",
+    "ConceptPrereq",
     "ExerciseOption",
-    "NextConceptResponse",
-    "TheoryResponse",
     "ExerciseResponse",
-    "SubmitAnswerPayload",
-    "SubmitAnswerRequest",
-    "SubmitAnswerResponse",
-    "TutorChatMessage",
-    "TutorChatRequest",
-    "TutorChatResponse",
-    "KnowledgeNodeResponse",
     "KnowledgeEdgeResponse",
     "KnowledgeGraphResponse",
-    "MasteryRow",
+    "KnowledgeNodeResponse",
     "MasteryMatrixResponse",
-    "ConceptPrereq",
-    "ConceptDetailResponse",
-    "SubjectHistoryResponse",
-    "SubjectHistoryListResponse",
-    "SubjectProgressSummaryResponse",
-    "SubjectProgressListResponse",
-    "SubjectHistoryDetailResponse",
+    "MasteryRow",
+    "NextConceptResponse",
     "QuizTutorChatMessage",
     "QuizTutorRequest",
     "QuizTutorResponse",
     "QuizTutorResponseData",
+    "SessionCreateRequest",
+    "SessionCreateResponse",
+    "SessionStatusResponse",
+    "SubjectHistoryDetailResponse",
+    "SubjectHistoryListResponse",
+    "SubjectHistoryResponse",
+    "SubjectProgressListResponse",
+    "SubjectProgressSummaryResponse",
+    "SubmitAnswerPayload",
+    "SubmitAnswerRequest",
+    "SubmitAnswerResponse",
+    "TheoryResponse",
+    "TutorChatMessage",
+    "TutorChatRequest",
+    "TutorChatResponse",
 ]

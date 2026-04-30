@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import Any
 
-from ....config import get_settings
-from ..domain.jobs import PipelineJob, PipelineStatus
-from ..infrastructure.runtime import (
+from loguru import logger
+
+from api.config import get_settings
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.infrastructure.runtime import (
     calculate_file_hash,
     get_content_processor_bindings,
     get_s3_client,
 )
+
 from .stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
@@ -38,7 +43,6 @@ from .stages.result_assembly import (
     serialize_concepts,
     serialize_prerequisite_edges,
 )
-
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
@@ -94,6 +98,16 @@ class PipelineRunner:
         self._persist_job_state = persist_job_state
         self._chunk_chroma_store = chunk_chroma_store
         self._document_chunks_col = document_chunks_col
+
+    @staticmethod
+    def _cleanup_upload(file_path: str) -> None:
+        path = Path(file_path)
+        try:
+            if path.exists():
+                path.unlink()
+                logger.debug("[PipelineRunner] Deleted upload {}", file_path)
+        except OSError as exc:
+            logger.warning("[PipelineRunner] Failed to delete upload {}: {}", file_path, exc)
 
     async def run(
         self,
@@ -261,9 +275,11 @@ class PipelineRunner:
                 save_job=self._save_job,
             )
             return
-        except Exception as exc:
+        except BaseException as exc:
             await persist_terminal_failure(
                 job,
                 error=exc,
                 save_job=self._save_job,
             )
+        finally:
+            self._cleanup_upload(file_path)

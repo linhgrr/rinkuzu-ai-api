@@ -23,3 +23,16 @@ Thumbs.db
 uploads/
 temp/
 .worktrees
+
+# Vector DB local data
+api/core/chroma_db/
+**/chroma.sqlite3
+**/chroma.sqlite3-journal
+**/chroma.sqlite3-shm
+**/chroma.sqlite3-wal
+
+# Build artifacts
+.ruff_cache/
+*.egg-info/
+build/
+dist/

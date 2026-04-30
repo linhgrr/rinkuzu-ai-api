@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
@@ -10,6 +10,9 @@ from .constants import (
     SCORE_ANCHORS,
     THEORY_EXAMPLES_CONSTRAINT,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class TheoryOutput(BaseModel):

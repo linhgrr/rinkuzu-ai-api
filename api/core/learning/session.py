@@ -10,21 +10,22 @@ Exercise-related logic (generation, submission, prefetch) is delegated
 to the learning exercise service.
 """
 
-import uuid
-import time
 import asyncio
-from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
+import time
+from typing import Any
+import uuid
 
+from loguru import logger
 import numpy as np
 import torch
-from loguru import logger
 
-from ...config import get_settings
-from .exercise_types import ExerciseType
-from .models import load_saint_model, load_dqn_model, DuelingQNetwork, SaintModel
+from api.config import get_settings
+from api.core.shared import mongo_store
+
 from .environment import AdaptiveLearningEnv
-from ..shared import mongo_store
+from .exercise_types import ExerciseType
+from .models import DuelingQNetwork, load_dqn_model, load_saint_model
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
 _MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
@@ -40,20 +41,20 @@ class ExerciseRecord:
     correct_option: str
     explanation: str
     exercise_type: ExerciseType = ExerciseType.MCQ
-    sentence: Optional[str] = None
-    options: Dict[str, str] = field(default_factory=dict)
-    statement: Optional[str] = None
-    hint: Optional[str] = None
-    items: List[str] = field(default_factory=list)
-    pairs: List[Dict[str, str]] = field(default_factory=list)
-    right_items: List[str] = field(default_factory=list)
-    rubric: List[str] = field(default_factory=list)
+    sentence: str | None = None
+    options: dict[str, str] = field(default_factory=dict)
+    statement: str | None = None
+    hint: str | None = None
+    items: list[str] = field(default_factory=list)
+    pairs: list[dict[str, str]] = field(default_factory=list)
+    right_items: list[str] = field(default_factory=list)
+    rubric: list[str] = field(default_factory=list)
     correct_answer: Any = None
     explanation_correct: str = ""
     explanation_incorrect: str = ""
-    theory: Optional[Dict[str, Any]] = None
-    user_answer: Optional[Any] = None
-    is_correct: Optional[bool] = None
+    theory: dict[str, Any] | None = None
+    user_answer: Any | None = None
+    is_correct: bool | None = None
     timestamp: float = field(default_factory=time.time)
 
 
@@ -63,25 +64,25 @@ class SessionState:
     env: AdaptiveLearningEnv
     q_net: DuelingQNetwork
     device: torch.device
-    concept_map: Dict[str, int]
-    concept_names: Dict[str, str]
-    concept_definitions: Dict[str, str]
-    prereq_graph: Dict[int, List[int]]
+    concept_map: dict[str, int]
+    concept_names: dict[str, str]
+    concept_definitions: dict[str, str]
+    prereq_graph: dict[int, list[int]]
     current_obs: np.ndarray
-    user_id: Optional[str] = None
-    current_exercise: Optional[ExerciseRecord] = None
-    exercise_history: List[ExerciseRecord] = field(default_factory=list)
+    user_id: str | None = None
+    current_exercise: ExerciseRecord | None = None
+    exercise_history: list[ExerciseRecord] = field(default_factory=list)
     total_correct: int = 0
     total_answered: int = 0
-    job_id: Optional[str] = None
+    job_id: str | None = None
     created_at: float = field(default_factory=time.time)
     accessed_at: float = field(default_factory=time.time)
     status: str = "active"
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    concept_theories: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    _prefetch_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    tutor_chat_history: List[Dict[str, str]] = field(default_factory=list)
-    tutor_chat_exercise_id: Optional[str] = None
+    concept_theories: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _prefetch_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
+    tutor_chat_history: list[dict[str, str]] = field(default_factory=list)
+    tutor_chat_exercise_id: str | None = None
 
 
 class SessionManager:
@@ -104,9 +105,9 @@ class SessionManager:
         self,
         saint_path: str,
         dqn_path: str,
-        concepts_data: Optional[Dict] = None,
-        prereq_data: Optional[List[Dict]] = None,
-        device: Optional[str] = None,
+        concepts_data: dict | None = None,
+        prereq_data: list[dict] | None = None,
+        device: str | None = None,
     ):
         self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self._saint_path = saint_path
@@ -123,8 +124,8 @@ class SessionManager:
         self._concept_names, self._concept_defs = self._build_concept_info()
 
         # Active sessions
-        self._sessions: Dict[str, SessionState] = {}
-        self._recovery_locks: Dict[str, asyncio.Lock] = {}
+        self._sessions: dict[str, SessionState] = {}
+        self._recovery_locks: dict[str, asyncio.Lock] = {}
 
     # ── Properties ──────────────────────────────────────────
 
@@ -142,20 +143,20 @@ class SessionManager:
 
     # ── Internal helpers ────────────────────────────────────
 
-    def _build_prereq_graph(self) -> Dict[int, List[int]]:
+    def _build_prereq_graph(self) -> dict[int, list[int]]:
         return self._build_prereq_graph_from_edges(self._prereq_data, self._concept_map)
 
     @staticmethod
-    def _build_id_to_concept_map(concept_map: Dict[str, int]) -> Dict[int, str]:
+    def _build_id_to_concept_map(concept_map: dict[str, int]) -> dict[int, str]:
         return {v: k for k, v in concept_map.items()}
 
     @classmethod
     def _build_prereq_graph_from_edges(
         cls,
-        prereq_edges: List[Dict],
-        concept_map: Dict[str, int],
-    ) -> Dict[int, List[int]]:
-        graph: Dict[int, List[int]] = {}
+        prereq_edges: list[dict],
+        concept_map: dict[str, int],
+    ) -> dict[int, list[int]]:
+        graph: dict[int, list[int]] = {}
         dropped = 0
         for edge in prereq_edges:
             src = str(edge.get("source", "")).strip()
@@ -179,12 +180,12 @@ class SessionManager:
     @classmethod
     def _build_concept_info_from_data(
         cls,
-        concepts_data: Dict[str, Any],
-        concept_map: Dict[str, int],
+        concepts_data: dict[str, Any],
+        concept_map: dict[str, int],
     ):
-        names: Dict[str, str] = {}
-        defs: Dict[str, str] = {}
-        theories: Dict[str, Dict[str, Any]] = {}
+        names: dict[str, str] = {}
+        defs: dict[str, str] = {}
+        theories: dict[str, dict[str, Any]] = {}
         id_to_concept = cls._build_id_to_concept_map(concept_map)
 
         for cid_raw, cdata in concepts_data.items():
@@ -217,7 +218,7 @@ class SessionManager:
             logger.info("[Session] ✓ Text encoder ready")
         return cls._text_encoder
 
-    def _encode_concepts(self, concept_names_ordered: List[str]) -> np.ndarray:
+    def _encode_concepts(self, concept_names_ordered: list[str]) -> np.ndarray:
         """Encode concept names into 768d embeddings."""
         encoder = self._get_text_encoder()
         embeddings = encoder.encode(concept_names_ordered, show_progress_bar=False, batch_size=32)
@@ -230,7 +231,7 @@ class SessionManager:
         if len(self._sessions) > max_size:
             sorted_keys = sorted(
                 self._sessions.keys(),
-                key=lambda k: getattr(self._sessions[k], 'accessed_at', getattr(self._sessions[k], 'created_at', 0))
+                key=lambda k: getattr(self._sessions[k], "accessed_at", getattr(self._sessions[k], "created_at", 0))
             )
             # Remove oldest 20%
             for k in sorted_keys[:max_size // 5]:
@@ -251,7 +252,7 @@ class SessionManager:
             self._recovery_locks.pop(session_id, None)
 
     @staticmethod
-    def build_subject_progress_snapshot(session: SessionState) -> Dict[str, Any]:
+    def build_subject_progress_snapshot(session: SessionState) -> dict[str, Any]:
         return build_subject_progress_snapshot(session)
 
     async def persist_subject_progress(self, session: SessionState) -> bool:
@@ -263,7 +264,7 @@ class SessionManager:
             self.build_subject_progress_snapshot(session),
         )
 
-    async def create_session(self, max_steps: int = 9999, user_id: Optional[str] = None) -> SessionState:
+    async def create_session(self, max_steps: int = 9999, user_id: str | None = None) -> SessionState:
         """Create a new learning session."""
         session_id = str(uuid.uuid4())[:8]
 
@@ -276,7 +277,7 @@ class SessionManager:
             deterministic_train=False,
             device=str(self._device),
         )
-        obs, info = env.reset(seed=42)
+        obs, _info = env.reset(seed=42)
 
         session = SessionState(
             session_id=session_id,
@@ -298,7 +299,7 @@ class SessionManager:
             raise RuntimeError(f"Failed to persist subject progress for {session.session_id}")
         return session
 
-    def get_session(self, session_id: str) -> Optional[SessionState]:
+    def get_session(self, session_id: str) -> SessionState | None:
         session = self._sessions.get(session_id)
         if session:
             session.accessed_at = time.time()
@@ -306,15 +307,15 @@ class SessionManager:
 
     async def create_session_from_pipeline(
         self,
-        concepts_data: Dict[str, Any],
-        concept_map: Dict[str, int],
-        prereq_edges: List[Dict],
+        concepts_data: dict[str, Any],
+        concept_map: dict[str, int],
+        prereq_edges: list[dict],
         max_steps: int = 9999,
-        precomputed_embeddings: Optional[List[List[float]]] = None,
-        job_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-        history_source_doc: Optional[Dict[str, Any]] = None,
+        precomputed_embeddings: list[list[float]] | None = None,
+        job_id: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        history_source_doc: dict[str, Any] | None = None,
     ) -> SessionState:
         """Create a learning session from PDF pipeline output."""
         session_id = session_id or str(uuid.uuid4())[:8]
@@ -359,7 +360,7 @@ class SessionManager:
             device=str(self._device),
             external_embeddings=external_embeddings,
         )
-        obs, info = env.reset(seed=42)
+        obs, _info = env.reset(seed=42)
 
         # Load saved subject progress from MongoDB
         prev_history = []
@@ -451,7 +452,7 @@ class SessionManager:
         self,
         session_id: str,
         user_id: str,
-    ) -> Optional[SessionState]:
+    ) -> SessionState | None:
         """Get active in-memory session; recover from MongoDB when missing.
 
         Recovery path:
@@ -526,7 +527,7 @@ class SessionManager:
 
     # ── Query Methods ───────────────────────────────────────
 
-    def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session_status(self, session_id: str) -> dict[str, Any] | None:
         """Get full session status."""
         session = self.get_session(session_id)
         if not session:
@@ -568,7 +569,7 @@ class SessionManager:
             return "in_progress"
         return "available"
 
-    def get_knowledge_graph(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_knowledge_graph(self, session_id: str) -> dict[str, Any] | None:
         """Get knowledge graph with mastery overlay."""
         session = self.get_session(session_id)
         if not session:
@@ -606,7 +607,7 @@ class SessionManager:
 
         return {"nodes": nodes, "edges": edges}
 
-    def get_mastery_matrix(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_mastery_matrix(self, session_id: str) -> dict[str, Any] | None:
         """Get full mastery matrix (concepts × bloom levels)."""
         session = self.get_session(session_id)
         if not session:
@@ -628,7 +629,7 @@ class SessionManager:
             "Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"
         ]}
 
-    def get_concept_detail(self, session_id: str, concept_id: str) -> Optional[Dict[str, Any]]:
+    def get_concept_detail(self, session_id: str, concept_id: str) -> dict[str, Any] | None:
         """Get detailed info for a specific concept."""
         session = self.get_session(session_id)
         if not session or concept_id not in session.concept_map:

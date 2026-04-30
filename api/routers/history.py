@@ -2,18 +2,18 @@
 history.py — Endpoints for querying persisted subject progress and pipeline jobs from MongoDB.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
-from ..config import get_settings
-from ..core.shared import mongo_store
-from ..dependencies import get_current_user
-from ..exceptions import PipelineNotFoundError
-from ..schemas import (
+from api.config import get_settings
+from api.core.shared import mongo_store
+from api.dependencies import get_current_user
+from api.exceptions import PipelineNotFoundError
+from api.schemas import (
+    SubjectHistoryDetailResponse,
     SubjectHistoryListResponse,
     SubjectProgressListResponse,
-    SubjectHistoryDetailResponse,
 )
 
 router = APIRouter(prefix="/api/history", tags=["history"])
@@ -110,7 +110,7 @@ def _build_subject_progress_summary(
 
 @router.get("/subjects", response_model=SubjectHistoryListResponse)
 async def list_subjects(
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
     user_id: str = Depends(get_current_user),
 ):
     """List all completed pipeline jobs (= subjects) enriched with mastery stats."""
@@ -147,7 +147,7 @@ async def list_subjects(
 
 @router.get("/subjects/progress", response_model=SubjectProgressListResponse)
 async def list_subject_progress(
-    limit: int = Query(default=50, ge=1, le=500),
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
     user_id: str = Depends(get_current_user),
 ):
     """List recent subject-level progress records."""
@@ -170,7 +170,7 @@ async def list_subject_progress(
 @router.get("/subjects/{job_id}", response_model=SubjectHistoryDetailResponse)
 async def get_subject_history(
     job_id: str,
-    user_id: str = Depends(get_current_user),
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
     """Get subject-level learning history for one pipeline job."""
     job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
@@ -183,7 +183,7 @@ async def get_subject_history(
 
 @router.get("/pipeline-jobs")
 async def list_pipeline_jobs(
-    limit: int = Query(default=20, ge=1, le=500),
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
     user_id: str = Depends(get_current_user),
 ):
     """List recent pipeline jobs."""
@@ -192,7 +192,7 @@ async def list_pipeline_jobs(
 
 
 @router.get("/pipeline-jobs/{job_id}")
-async def get_pipeline_job(job_id: str, user_id: str = Depends(get_current_user)):
+async def get_pipeline_job(job_id: str, user_id: Annotated[str, Depends(get_current_user)]):
     """Get full pipeline job result."""
     doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
     if not doc:

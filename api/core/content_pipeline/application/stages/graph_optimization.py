@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from api.config import get_settings
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
-from ...domain.jobs import PipelineJob, PipelineStatus
-from .graph_building import build_partial_graph
 from .execution import run_blocking_stage
-
+from .graph_building import build_partial_graph
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 

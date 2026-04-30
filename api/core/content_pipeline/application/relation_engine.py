@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from .ports import PersistJobStateFn, RelationDiscoveryResult
 from .stages.prerequisite_ranking import rank_candidate_prerequisites
 from .stages.relation_verification import verify_candidate_relations
-from ..domain.jobs import PipelineJob
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from api.core.content_pipeline.domain.jobs import PipelineJob
 
 
 class DefaultRelationEngine:

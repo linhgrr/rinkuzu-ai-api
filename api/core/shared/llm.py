@@ -5,15 +5,14 @@ llm.py — Shared LLM helpers for the API codebase.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from loguru import logger
 
-from ...config import get_settings
+from api.config import get_settings
 
-
-_shared_llm: Optional[ChatOpenAI] = None
+_shared_llm: ChatOpenAI | None = None
 _structured_llms: dict[str, Any] = {}
 
 
@@ -92,21 +91,21 @@ def get_embeddings(**kwargs) -> OpenAIEmbeddings:
     )
 
 
-def build_chat_completions_url(base_url: Optional[str]) -> str:
+def build_chat_completions_url(base_url: str | None) -> str:
     if not base_url:
         raise RuntimeError("LLM base URL is not configured")
     return f"{_normalize_openai_base_url(base_url)}/chat/completions"
 
 
-def _resolve_shared_llm_model(explicit_model: Optional[str]) -> Optional[str]:
+def _resolve_shared_llm_model(explicit_model: str | None) -> str | None:
     settings = get_settings()
     return settings.exercise_llm_model or explicit_model
 
 
 def initialize_shared_llm(
-    base_url: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
 ) -> ChatOpenAI:
     """Initialize and cache the shared adaptive-learning ChatOpenAI client."""
     global _shared_llm, _structured_llms

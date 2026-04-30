@@ -1,15 +1,16 @@
 """Post-processing for extracted concepts."""
 
-from typing import List, Optional, Set
 import re
 import unicodedata
 
-from .schemas import Concept, Relation
-from ..utils import clean_text
 from loguru import logger
 
+from api.core.content_pipeline.infrastructure.utils import clean_text
 
-def postprocess_concepts(concepts: List[Concept]) -> List[Concept]:
+from .schemas import Concept, Relation
+
+
+def postprocess_concepts(concepts: list[Concept]) -> list[Concept]:
     """
     Post-process extracted concepts.
 
@@ -29,17 +30,17 @@ def postprocess_concepts(concepts: List[Concept]) -> List[Concept]:
             getattr(concept, "concept_id", "") or ""
         )
 
-    concept_ids: Set[str] = {
+    concept_ids: set[str] = {
         c.concept_id for c in concepts if getattr(c, "concept_id", None)}
 
-    processed: List[Concept] = []
+    processed: list[Concept] = []
     for concept in concepts:
         concept.name = clean_text(getattr(concept, "name", "")) or ""
         concept.definition = clean_text(
             getattr(concept, "definition", "")) or ""
 
         ex_seen = set()
-        cleaned_examples: List[str] = []
+        cleaned_examples: list[str] = []
         for ex in getattr(concept, "examples", []) or []:
             ex_clean = clean_text(ex)
             if ex_clean and ex_clean not in ex_seen:
@@ -47,7 +48,7 @@ def postprocess_concepts(concepts: List[Concept]) -> List[Concept]:
                 cleaned_examples.append(ex_clean)
         concept.examples = cleaned_examples
 
-        cleaned_relations: List[Relation] = []
+        cleaned_relations: list[Relation] = []
         for rel in getattr(concept, "relations", []) or []:
             pr = _postprocess_relation(rel, concept_ids)
             if pr and _is_valid_relation(pr, concept_ids):
@@ -60,9 +61,9 @@ def postprocess_concepts(concepts: List[Concept]) -> List[Concept]:
     return processed
 
 
-def _postprocess_relation(relation: Optional[Relation], concept_ids: Set[str]) -> Optional[Relation]:
+def _postprocess_relation(relation: Relation | None, concept_ids: set[str]) -> Relation | None:
     """Post-process a single relation.
-    
+
     NOTE: We do NOT drop relations whose target_id is not in concept_ids,
     because the target may be a concept from a different extraction batch.
     The graph builder will handle missing targets gracefully.
@@ -88,7 +89,7 @@ def _postprocess_relation(relation: Optional[Relation], concept_ids: Set[str]) -
     return relation
 
 
-def _is_valid_relation(relation: Optional[Relation], concept_ids: Set[str]) -> bool:
+def _is_valid_relation(relation: Relation | None, concept_ids: set[str]) -> bool:
     """Check if a relation is valid.
 
     Args:
@@ -134,9 +135,8 @@ def normalize_concept_name(name: str) -> str:
 
     normalized = re.sub(r"[^\w\s]", " ", normalized)
 
-    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return re.sub(r"\s+", " ", normalized).strip()
 
-    return normalized
 
 
 def normalize_concept_id(concept_id: str) -> str:

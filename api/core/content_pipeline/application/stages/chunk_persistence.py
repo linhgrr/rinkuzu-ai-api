@@ -9,16 +9,18 @@ Chunks are stored in both:
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 import time
-from typing import Any, Awaitable, Callable, List, Optional
+from typing import TYPE_CHECKING, Any
 
-from langchain_core.documents import Document as LangChainDocument
 from loguru import logger
 
-from .....core.shared import mongo_store
-from ...domain.jobs import PipelineJob, PipelineStatus
-from ...infrastructure.storage.chunk_chroma_store import ChunkChromaStore
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
+if TYPE_CHECKING:
+    from langchain_core.documents import Document as LangChainDocument
+
+    from api.core.content_pipeline.infrastructure.storage.chunk_chroma_store import ChunkChromaStore
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 
@@ -26,9 +28,9 @@ PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitabl
 async def persist_document_chunks(
     job: PipelineJob,
     *,
-    chunks: List[LangChainDocument],
-    chunk_chroma_store: Optional[ChunkChromaStore],
-    mongo_collection: Optional[Any],  # AsyncIOMotorCollection
+    chunks: list[LangChainDocument],
+    chunk_chroma_store: ChunkChromaStore | None,
+    mongo_collection: Any | None,  # AsyncIOMotorCollection
     persist_job_state: PersistJobStateFn,
 ) -> int:
     """Persist document chunks to MongoDB and ChromaDB.

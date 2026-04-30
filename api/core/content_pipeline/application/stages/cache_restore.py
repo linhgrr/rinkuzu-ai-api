@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 import json
 import time
-from typing import Awaitable, Callable
 
 from loguru import logger
 
-from ...domain.jobs import PipelineJob, PipelineStatus
-from .execution import run_blocking_stage
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
+from .execution import run_blocking_stage
 
 LoadMongoJobFn = Callable[[str], Awaitable[dict | None]]
 SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]

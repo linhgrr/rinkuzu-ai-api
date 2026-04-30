@@ -2,12 +2,11 @@
 config.py — Centralized application settings using Pydantic BaseSettings.
 """
 
+from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,17 +26,23 @@ class Settings(BaseSettings):
     dqn_path: str = str(BASE_DIR / "models" / "dqn_best.pt")
 
     # ── App Config ──────────────────────────────────────────
+    environment: str = "dev"  # dev | staging | prod — controls docs visibility
     cors_origins: list[str] = ["*"]
-    internal_service_token: Optional[str] = None
+    internal_service_token: str | None = None
+
+    # ── Download safety ─────────────────────────────────────
+    # empty list = allow any non-private HTTPS host
+    download_host_allowlist: list[str] = []
+    download_max_bytes: int = 100 * 1024 * 1024  # 100 MB
 
     # ── MongoDB ─────────────────────────────────────────────
-    mongo_url: Optional[str] = None
+    mongo_url: str | None = None
 
     # ── LLM ─────────────────────────────────────────────────
-    llm_api_key: Optional[str] = None
-    llm_base_url: Optional[str] = None
-    llm_model: Optional[str] = None
-    exercise_llm_model: Optional[str] = Field(
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    exercise_llm_model: str | None = Field(
         default=None,
         validation_alias=AliasChoices("EXERCISE_LLM_MODEL", "ADAPTIVE_EXERCISE_LLM_MODEL"),
     )
@@ -48,7 +53,7 @@ class Settings(BaseSettings):
         default=8,
         validation_alias=AliasChoices("LLM_MAX_WORKERS", "ADAPTIVE_LLM_MAX_WORKERS"),
     )
-    llm_max_concurrency: Optional[int] = Field(
+    llm_max_concurrency: int | None = Field(
         default=None,
         validation_alias=AliasChoices("LLM_MAX_CONCURRENCY", "ADAPTIVE_LLM_MAX_CONCURRENCY"),
     )
@@ -56,7 +61,7 @@ class Settings(BaseSettings):
         default=120,
         validation_alias=AliasChoices("LLM_REQUEST_TIMEOUT_SEC", "ADAPTIVE_LLM_TIMEOUT_SEC"),
     )
-    llm_prefetch_timeout_sec: Optional[float] = Field(
+    llm_prefetch_timeout_sec: float | None = Field(
         default=None,
         validation_alias=AliasChoices("LLM_PREFETCH_TIMEOUT_SEC", "ADAPTIVE_PREFETCH_LLM_TIMEOUT_SEC"),
     )
@@ -73,7 +78,7 @@ class Settings(BaseSettings):
     embedding_model: str = "keepitreal/vietnamese-sbert"
     embedding_batch_size: int = 32
     use_vi_tokenizer: bool = False
-    max_seq_length: Optional[int] = None
+    max_seq_length: int | None = None
     chunk_size: int = 1000
     chunk_overlap: int = 200
     prs_threshold: float = 0.75
@@ -88,23 +93,23 @@ class Settings(BaseSettings):
     )
     pdf_ocr_concurrency: int = 5
     vision_pdf_request_timeout_sec: float = 120
-    vision_agent_api_key: Optional[str] = None
+    vision_agent_api_key: str | None = None
     content_pipeline_job_timeout_sec: float = 1800
     content_pipeline_stage_timeout_sec: float = 300
     content_pipeline_graph_cycle_timeout_sec: float = 900
 
     # ── S3 Cache ────────────────────────────────────────────
-    s3_endpoint_url: Optional[str] = None
-    s3_access_key_id: Optional[str] = None
-    s3_secret_access_key: Optional[str] = None
-    s3_bucket_name: Optional[str] = None
+    s3_endpoint_url: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_bucket_name: str | None = None
 
     # ── LangChain / LangSmith ──────────────────────────────
     langchain_tracing_v2: bool = Field(
         default=False,
         validation_alias=AliasChoices("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING"),
     )
-    langchain_api_key: Optional[str] = Field(
+    langchain_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("LANGCHAIN_API_KEY", "LANGSMITH_API_KEY"),
     )
@@ -118,23 +123,17 @@ class Settings(BaseSettings):
     )
 
     # ── Google/Gemini (legacy) ──────────────────────────────
-    google_api_key: Optional[str] = None
-    gemini_api_key: Optional[str] = None
+    google_api_key: str | None = None
+    gemini_api_key: str | None = None
 
     @property
     def s3_available(self) -> bool:
         return all([self.s3_endpoint_url, self.s3_access_key_id, self.s3_secret_access_key])
 
 
-# Singleton — imported by dependencies.py
-_settings: Optional[Settings] = None
-
-
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+    return Settings()
 
 
 # Module-level alias for code importing `api.config.settings` directly.

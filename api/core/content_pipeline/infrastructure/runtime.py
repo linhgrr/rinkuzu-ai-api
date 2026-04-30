@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import boto3
 from botocore.client import Config
 from loguru import logger
 
-from ....config import get_settings
-from ..application.ports import RelationEngine
+from api.config import get_settings
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from api.core.content_pipeline.application.ports import RelationEngine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CONTENT_PROCESSOR_SRC = str(PROJECT_ROOT)
@@ -40,7 +43,7 @@ class ContentProcessorBindings:
 
 def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str):
     """Import theory generation lazily to avoid runtime circular imports."""
-    from ...learning.exercise_gen import generate_theory
+    from api.core.learning.exercise_gen import generate_theory
 
     return generate_theory(concept_name, concept_definition)
 
@@ -68,11 +71,12 @@ def calculate_file_hash(file_path: str) -> str:
 
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:
-    from ..application.relation_engine import DefaultRelationEngine
-    from .processors.factory import FileLoaderFactory
+    from api.core.content_pipeline.application.relation_engine import DefaultRelationEngine
+
+    from .llm import get_llm
     from .llm.extract_chain import ExtractionChain
     from .llm.postprocess import postprocess_concepts
-    from .llm import get_llm
+    from .processors.factory import FileLoaderFactory
 
     def _get_embedding_client_cls():
         from .embed.embedding_client import EmbeddingClient
@@ -87,7 +91,7 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
     def _build_relation_engine(*, extraction_chain):
         try:
             from .embed.prereq_ranking import rank_prerequisites
-        except ModuleNotFoundError as exc:
+        except ModuleNotFoundError:
             def rank_prerequisites(*_args, **_kwargs):
                 raise ModuleNotFoundError(
                     "Optional embedding dependencies are required for prerequisite ranking"

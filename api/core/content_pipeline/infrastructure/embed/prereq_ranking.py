@@ -1,21 +1,19 @@
 """Prerequisite ranking using embeddings."""
 
-from typing import Dict, List, Tuple
 
-import numpy as np
 from loguru import logger
+import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-from .....config import settings
-
-from ..llm.schemas import Concept
-from ..utils import timeit
+from api.config import settings
+from api.core.content_pipeline.infrastructure.llm.schemas import Concept
+from api.core.content_pipeline.infrastructure.utils import timeit
 
 
 @timeit
 def rank_prerequisites(
-    concepts: List[Concept],
-    prs_threshold: float = None,
+    concepts: list[Concept],
+    prs_threshold: float | None = None,
 ):
     """
     Rank and add prerequisite edges using embeddings.
@@ -63,9 +61,9 @@ def rank_prerequisites(
 
 
 def _compute_prerequisite_scores(
-    concepts: List[Concept],
+    concepts: list[Concept],
     threshold: float,
-) -> List[Tuple[str, str, float]]:
+) -> list[tuple[str, str, float]]:
     """
     Compute PRS scores for concept pairs.
 

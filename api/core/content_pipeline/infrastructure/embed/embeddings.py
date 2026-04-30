@@ -1,14 +1,14 @@
 """Embedding computation for concepts."""
 
-from typing import List
 
 from loguru import logger
 
-from ..llm.schemas import Concept
+from api.core.content_pipeline.infrastructure.llm.schemas import Concept
+
 from .embedding_client import EmbeddingClient
 
 
-def compute_embedding_for_concepts(concepts: List[Concept],
+def compute_embedding_for_concepts(concepts: list[Concept],
                                    client: EmbeddingClient) -> None:
     """
     Compute embeddings for concepts IN-PLACE.

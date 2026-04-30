@@ -6,7 +6,7 @@ from typing import List
 
 from loguru import logger
 
-from .....config import settings
+from api.config import settings
 
 __all__ = [
     "EmbeddingClient",
@@ -28,11 +28,11 @@ def __getattr__(name: str):
 
 
 def compute_embeddings_batch(
-    texts: List[str],
+    texts: list[str],
     batch_size: int = 50,
     truncate_long_texts: bool = True,
     max_length: int = 256,
-) -> List[List[float]]:
+) -> list[list[float]]:
     from .embedding_client import EmbeddingClient
 
     client = EmbeddingClient(

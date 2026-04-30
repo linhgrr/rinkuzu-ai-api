@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..domain.jobs import PipelineJob
+if TYPE_CHECKING:
+    from api.core.content_pipeline.domain.jobs import PipelineJob
 
 
 def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:

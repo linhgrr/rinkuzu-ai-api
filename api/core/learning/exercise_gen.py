@@ -5,11 +5,12 @@ exercise_gen.py — LLM-powered exercise generation and answer evaluation.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from ..shared.llm import get_structured_llm, resolve_retry_policy, sleep_before_retry
+from api.core.shared.llm import get_structured_llm, resolve_retry_policy, sleep_before_retry
+
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
 from .prompts import (
     TheoryOutput,
@@ -19,13 +20,16 @@ from .prompts import (
     get_prompt_spec,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 
 def _build_generation_spec(
     concept_name: str,
     concept_definition: str,
     bloom_level: int,
     exercise_type: ExerciseType,
-    recent_same_concept_exercises: Optional[Sequence[Dict[str, Any]]] = None,
+    recent_same_concept_exercises: Sequence[dict[str, Any]] | None = None,
     subject_context: str = "",
 ):
     spec = get_prompt_spec(exercise_type)
@@ -44,10 +48,10 @@ def generate_exercise(
     concept_name: str,
     concept_definition: str,
     bloom_level: int,
-    mastery: Optional[float] = None,
-    recent_same_concept_exercises: Optional[Sequence[Dict[str, Any]]] = None,
+    mastery: float | None = None,
+    recent_same_concept_exercises: Sequence[dict[str, Any]] | None = None,
     subject_context: str = "",
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Generate an exercise via LLM with a type selected from Bloom level and mastery."""
     exercise_type = select_exercise_type(bloom_level, mastery)
     logger.info(
@@ -97,7 +101,7 @@ def evaluate_short_answer(
     rubric: Sequence[str],
     sample_answer: str,
     student_answer: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Evaluate short-answer exercises against a rubric using structured LLM output."""
     logger.info(f"[LLM-Grade] Short answer grading for concept: {concept_name}")
     structured_grader_llm = get_structured_llm(ShortAnswerEvaluationOutput)
@@ -137,7 +141,7 @@ def generate_theory(
     concept_name: str,
     concept_definition: str,
     bloom_level: int = 2,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Generate a concise theory summary and examples via LLM using robust json schema."""
     logger.info(f"[LLM-Theory] Concept: {concept_name} | Bloom: {bloom_level}")
     structured_theory_llm = get_structured_llm(TheoryOutput)

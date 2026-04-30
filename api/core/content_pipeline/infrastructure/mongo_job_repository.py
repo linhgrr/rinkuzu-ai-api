@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ....repositories.pipeline_repo import PipelineRepository
-from ..application.ports import JobRepository
-from ..domain.jobs import PipelineJob
+from api.core.content_pipeline.application.ports import JobRepository
+from api.repositories.pipeline_repo import PipelineRepository
+
+if TYPE_CHECKING:
+    from api.core.content_pipeline.domain.jobs import PipelineJob
 
 
 class MongoJobRepository(JobRepository):
@@ -16,7 +18,7 @@ class MongoJobRepository(JobRepository):
         self._repository = repository
 
     @classmethod
-    def from_db(cls, db: Any) -> "MongoJobRepository":
+    def from_db(cls, db: Any) -> MongoJobRepository:
         return cls(PipelineRepository(db))
 
     async def save(self, job: PipelineJob) -> bool:

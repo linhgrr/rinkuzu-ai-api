@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Protocol
 
-from ..domain.jobs import PipelineJob, PipelineStatus
-
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 PersistJobStateFn = Callable[
     [PipelineJob, PipelineStatus, str, float],

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
-from ..exercise_types import BLOOM_VERBS, ExerciseType
-from ..history_formatter import format_exercise_history
+from api.core.learning.exercise_types import BLOOM_VERBS, ExerciseType
+from api.core.learning.history_formatter import format_exercise_history
+
 from .constants import (
     BLOOM_LEVEL_GUIDANCE,
     COMMON_RULES,
@@ -18,6 +19,9 @@ from .constants import (
 )
 from .few_shots import FEW_SHOT_EXAMPLES, FEW_SHOT_HIGH_BLOOM, FEW_SHOT_NON_STEM
 from .registry import get_prompt_spec
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class PromptBuilder:
@@ -89,7 +93,7 @@ class PromptBuilder:
         self,
         type_spec: str,
         negative_constraints: str,
-        recent_exercises: Optional[Sequence[dict[str, Any]]],
+        recent_exercises: Sequence[dict[str, Any]] | None,
     ) -> str:
         sections: list[str] = []
 
@@ -115,7 +119,7 @@ class PromptBuilder:
         # --- Constraints ---
         sections.append(
             "<constraints>\n"
-            + "Ràng buộc negative constraints:\n" + negative_constraints + "\n"
+             "Ràng buộc negative constraints:\n" + negative_constraints + "\n"
             + "Hướng dẫn explanation:\n" + self.spec.explanation_guidance + "\n"
             + "</constraints>"
         )
@@ -164,7 +168,7 @@ class PromptBuilder:
 
     def build_messages(
         self,
-        recent_exercises: Optional[Sequence[dict[str, Any]]] = None,
+        recent_exercises: Sequence[dict[str, Any]] | None = None,
     ) -> list[BaseMessage]:
         return [
             SystemMessage(content=self.build_system_message()),
@@ -183,7 +187,7 @@ def build_exercise_messages(
     concept_definition: str,
     bloom_level: int,
     exercise_type: ExerciseType,
-    recent_exercises: Optional[Sequence[dict[str, Any]]] = None,
+    recent_exercises: Sequence[dict[str, Any]] | None = None,
     subject_context: str = "",
 ) -> list[BaseMessage]:
     builder = PromptBuilder(

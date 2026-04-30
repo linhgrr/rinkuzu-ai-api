@@ -4,11 +4,9 @@ Knowledge router — Knowledge graph and mastery endpoints.
 
 from fastapi import APIRouter, Depends
 
-from ..schemas import (
-    KnowledgeGraphResponse, MasteryMatrixResponse, ConceptDetailResponse,
-)
-from ..dependencies import get_session_manager, get_current_user
-from ..exceptions import SessionNotFoundError
+from api.dependencies import get_current_user, get_session_manager
+from api.exceptions import SessionNotFoundError
+from api.schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
 
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
 

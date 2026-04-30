@@ -1,23 +1,22 @@
 """Factory for creating file loaders."""
 
-from pathlib import Path
-from typing import Dict, Type, Optional, List
 
 from langchain_core.documents import Document
 from loguru import logger
 
-from ..utils import get_file_type
-from .errors import LoaderNotFoundError, UnsupportedFormatError
+from api.core.content_pipeline.infrastructure.utils import get_file_type
+
+from .errors import LoaderNotFoundError
 from .loaders.base import BaseLoader
 
 
 class FileLoaderFactory:
     """Factory for creating appropriate loaders for files."""
 
-    _loaders: Dict[str, Type[BaseLoader]] = {}
+    _loaders: dict[str, type[BaseLoader]] = {}
 
     @classmethod
-    def register(cls, file_type: str, loader_class: Type[BaseLoader]):
+    def register(cls, file_type: str, loader_class: type[BaseLoader]):
         """Register a loader for a file type."""
         cls._loaders[file_type] = loader_class
         logger.info(f"Registered loader for {file_type}")
@@ -49,7 +48,7 @@ class FileLoaderFactory:
         cls,
         file_path: str,
         doc_id: str,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Load file and chunk its content.
 
@@ -71,7 +70,7 @@ class FileLoaderFactory:
             chunks = chunker.chunk(content, doc_id)
 
             logger.info(
-                f"Loaded and chunked file",
+                "Loaded and chunked file",
                 file_path=file_path,
                 num_chunks=len(chunks),
             )
@@ -90,8 +89,8 @@ class FileLoaderFactory:
         # hiện tại chỉ có TextChunker
         # TODO: Thêm các chunker đặc biệt cho slide, video nếu cần
         chunker_map = {
-            'pdf': TextChunker(),
-            'text': TextChunker(),
+            "pdf": TextChunker(),
+            "text": TextChunker(),
         }
 
         return chunker_map.get(file_type, TextChunker())
@@ -106,7 +105,7 @@ def _register_default_loaders():
     # Try VisionPDFLoader first (preferred)
     try:
         from .loaders.vision_pdf_loader import VisionPDFLoader
-        FileLoaderFactory.register('pdf', VisionPDFLoader)
+        FileLoaderFactory.register("pdf", VisionPDFLoader)
         logger.info("Registered VisionPDFLoader for 'pdf' type (S3 + LLM OCR)")
         return  # Done — no need for fallback
     except (ImportError, ValueError) as e:
@@ -115,7 +114,7 @@ def _register_default_loaders():
     # Fallback to Landing AI PDFLoader
     try:
         from .loaders.pdf_loader import PDFLoader
-        FileLoaderFactory.register('pdf', PDFLoader)
+        FileLoaderFactory.register("pdf", PDFLoader)
         logger.info("Registered PDFLoader for 'pdf' type (Landing AI fallback)")
     except ImportError as e:
         logger.warning(f"PDFLoader not available: {e}")

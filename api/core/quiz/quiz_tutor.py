@@ -4,25 +4,29 @@ quiz_tutor.py — Quiz ask-AI generation and streaming via shared LLM backend.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import AsyncIterator, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import httpx
 from loguru import logger
 
-from ...config import get_settings
-from ..shared.llm import (
+from api.config import get_settings
+from api.core.shared.llm import (
     build_chat_completions_url,
     extract_llm_text,
     resolve_llm_api_key,
     resolve_retry_policy,
     sleep_before_retry,
 )
+
 from .tutor_chat import (
     TUTOR_SYSTEM_PROMPT,
     build_tutor_prompt,
     validate_chat_input,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 def _resolve_quiz_tutor_model() -> str:
@@ -30,7 +34,7 @@ def _resolve_quiz_tutor_model() -> str:
     return settings.exercise_llm_model or settings.llm_model or "gemini-3.0-pro"
 
 
-def _build_headers(*, accept: str) -> Dict[str, str]:
+def _build_headers(*, accept: str) -> dict[str, str]:
     headers = {
         "Content-Type": "application/json",
         "Accept": accept,
@@ -41,7 +45,7 @@ def _build_headers(*, accept: str) -> Dict[str, str]:
     return headers
 
 
-def _extract_completion_text(payload: Dict) -> str:
+def _extract_completion_text(payload: dict) -> str:
     choices = payload.get("choices") or []
     if not choices:
         return ""
@@ -52,12 +56,12 @@ def _extract_completion_text(payload: Dict) -> str:
 def _build_messages(
     *,
     question: str,
-    options: List[str],
-    user_question: Optional[str],
-    chat_history: List[Dict[str, str]],
-    question_image: Optional[str],
-    option_images: Optional[List[Optional[str]]],
-) -> List[Dict]:
+    options: list[str],
+    user_question: str | None,
+    chat_history: list[dict[str, str]],
+    question_image: str | None,
+    option_images: list[str | None] | None,
+) -> list[dict]:
     prompt = build_tutor_prompt(
         question=question,
         options=options,
@@ -65,7 +69,7 @@ def _build_messages(
         chat_history=chat_history,
     )
 
-    user_content: List[Dict] = [{"type": "text", "text": prompt}]
+    user_content: list[dict] = [{"type": "text", "text": prompt}]
     if question_image:
         user_content.append({
             "type": "image_url",
@@ -94,13 +98,13 @@ def _build_messages(
 def _build_payload(
     *,
     question: str,
-    options: List[str],
-    user_question: Optional[str],
-    chat_history: List[Dict[str, str]],
-    question_image: Optional[str],
-    option_images: Optional[List[Optional[str]]],
+    options: list[str],
+    user_question: str | None,
+    chat_history: list[dict[str, str]],
+    question_image: str | None,
+    option_images: list[str | None] | None,
     stream: bool,
-) -> Dict:
+) -> dict:
     return {
         "model": _resolve_quiz_tutor_model(),
         "temperature": 0.7,
@@ -119,12 +123,12 @@ def _build_payload(
 def generate_quiz_tutor_response(
     *,
     question: str,
-    options: List[str],
-    user_question: Optional[str],
-    chat_history: Optional[List[Dict[str, str]]] = None,
-    question_image: Optional[str] = None,
-    option_images: Optional[List[Optional[str]]] = None,
-) -> Dict:
+    options: list[str],
+    user_question: str | None,
+    chat_history: list[dict[str, str]] | None = None,
+    question_image: str | None = None,
+    option_images: list[str | None] | None = None,
+) -> dict:
     if user_question:
         validation_error = validate_chat_input(user_question)
         if validation_error:
@@ -144,7 +148,7 @@ def generate_quiz_tutor_response(
 
     max_retries, backoff_sec = resolve_retry_policy()
     timeout = httpx.Timeout(settings.llm_timeout_sec)
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
 
     with httpx.Client(timeout=timeout) as client:
         for attempt in range(1, max_retries + 1):
@@ -184,11 +188,11 @@ def generate_quiz_tutor_response(
 async def create_quiz_tutor_stream(
     *,
     question: str,
-    options: List[str],
-    user_question: Optional[str],
-    chat_history: Optional[List[Dict[str, str]]] = None,
-    question_image: Optional[str] = None,
-    option_images: Optional[List[Optional[str]]] = None,
+    options: list[str],
+    user_question: str | None,
+    chat_history: list[dict[str, str]] | None = None,
+    question_image: str | None = None,
+    option_images: list[str | None] | None = None,
 ) -> AsyncIterator[bytes]:
     if user_question:
         validation_error = validate_chat_input(user_question)

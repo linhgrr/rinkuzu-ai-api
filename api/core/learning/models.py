@@ -4,11 +4,10 @@ Ported from saint_model.py and train_dqn.py
 """
 
 import math
-from typing import Optional
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class PositionalEncoding(nn.Module):
@@ -98,11 +97,11 @@ class SaintModel(nn.Module):
         self,
         concept_ids: torch.Tensor,
         bloom_levels: torch.Tensor,
-        responses: Optional[torch.Tensor] = None,
-        src_key_padding_mask: Optional[torch.Tensor] = None,
-        decoder_input: Optional[torch.Tensor] = None,
+        responses: torch.Tensor | None = None,
+        src_key_padding_mask: torch.Tensor | None = None,
+        decoder_input: torch.Tensor | None = None,
         return_logits: bool = False,
-        external_embeddings: Optional[torch.Tensor] = None,
+        external_embeddings: torch.Tensor | None = None,
     ) -> torch.Tensor:
         B, T = concept_ids.shape
         device = concept_ids.device
@@ -151,9 +150,9 @@ class SaintModel(nn.Module):
         bloom_levels: torch.Tensor,
         decoder_input: torch.Tensor,
         query_position: int,
-        external_embeddings: Optional[torch.Tensor] = None,
+        external_embeddings: torch.Tensor | None = None,
     ):
-        B, T = concept_ids.shape
+        _B, T = concept_ids.shape
         device = concept_ids.device
 
         emb_source = external_embeddings if external_embeddings is not None else self.concept_emb_matrix
@@ -237,8 +236,7 @@ class DuelingQNetwork(nn.Module):
         v = self.value(features)                                                         # (B*N, 1)
         a = self.advantage(features)                                                     # (B*N, 6)
         q = v + a - a.mean(dim=1, keepdim=True)                                         # (B*N, 6)
-        q = q.view(B, n_concepts * self.N_BLOOMS)                                       # (B, N*6)
-        return q
+        return q.view(B, n_concepts * self.N_BLOOMS)                                       # (B, N*6)
 
 
 def load_saint_model(checkpoint_path: str, device: torch.device):
