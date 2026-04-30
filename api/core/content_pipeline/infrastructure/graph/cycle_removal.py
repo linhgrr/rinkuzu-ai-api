@@ -194,8 +194,6 @@ class CycleRemover:
                     graph.remove_edge(first_edge["source"], first_edge["target"])
                     edges_removed = 1
 
-            return edges_removed
-
         except Exception as e:
             logger.error(f"Error in LLM cycle removal: {e}")
             if cycle_edges:
@@ -204,6 +202,8 @@ class CycleRemover:
                 graph.remove_edge(first_edge["source"], first_edge["target"])
                 return 1
             return 0
+        else:
+            return edges_removed
 
     def _format_cycle_info(
         self,

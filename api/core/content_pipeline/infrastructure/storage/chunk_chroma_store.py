@@ -2,6 +2,8 @@
 chunk_chroma_store.py — ChromaDB storage for document chunks (RAG source).
 """
 
+import asyncio
+from pathlib import Path
 from typing import Any
 
 import chromadb
@@ -9,6 +11,12 @@ from chromadb.config import Settings as ChromaSettings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from loguru import logger
+
+from api.core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
+
+_DEFAULT_PERSIST_DIRECTORY = str(
+    Path(__file__).parent.parent.parent.parent / "chroma_db"
+)
 
 
 class ChunkChromaStore:
@@ -20,22 +28,12 @@ class ChunkChromaStore:
         persist_directory: str | None = None,
         embedding_client: Any | None = None,
     ):
-        if persist_directory is None:
-            from pathlib import Path
-            persist_directory = str(
-                Path(__file__).parent.parent.parent.parent / "chroma_db"
-            )
-
-        self.persist_directory = persist_directory
+        self.persist_directory = persist_directory or _DEFAULT_PERSIST_DIRECTORY
         self.collection_name = collection_name
 
-        import os
-        os.makedirs(self.persist_directory, exist_ok=True)
+        Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
 
         if embedding_client is None:
-            from api.core.content_pipeline.infrastructure.embed.embedding_client import (
-                EmbeddingClient,
-            )
             embedding_client = EmbeddingClient()
 
         self.embedding_client = embedding_client
@@ -117,7 +115,6 @@ class ChunkChromaStore:
         Returns:
             List of top-k relevant Documents with page_content and metadata.
         """
-        import asyncio
         return await asyncio.to_thread(self._retrieve_sync, query, job_id, k)
 
     def _retrieve_sync(
@@ -139,10 +136,11 @@ class ChunkChromaStore:
                 job_id=job_id,
                 k=k,
             )
-            return docs
         except Exception as exc:
             logger.warning(f"RAG retrieval failed: {exc}")
             return []
+        else:
+            return docs
 
     def as_retriever(self, **kwargs):
         """Expose as LangChain retriever for future chain usage."""

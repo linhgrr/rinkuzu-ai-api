@@ -92,6 +92,7 @@ class PipelineService:
         file_path: str,
         prs_threshold: float,
         min_confidence: float,
+        *,
         apply_reduction: bool,
     ) -> None:
         try:

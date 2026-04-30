@@ -3,7 +3,8 @@ environment.py — Adaptive Learning Environment for API use
 Simplified version of env_rl.py that works with in-memory data instead of file paths.
 """
 
-from typing import Optional
+import copy
+from typing import ClassVar, Optional
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -12,6 +13,11 @@ import numpy as np
 import torch
 
 from .models import SaintModel
+
+_N_BLOOMS = 6
+_CONCEPT_FEAT_DIM = 8  # bloom_mastery(6) + visited(1) + prereq_ok(1)
+_BLOOM_APPLY_IDX = 2  # index for Bloom level 3 (Apply) in 0-based array
+_INITIAL_MASTERY = 0.5
 
 
 class AdaptiveLearningEnv(gym.Env):
@@ -23,18 +29,18 @@ class AdaptiveLearningEnv(gym.Env):
         [0 : d_model]                              SAINT encoder hidden state
         [d_model]                                   step / max_steps
         [d_model+1]                                 coverage fraction
-      [global_dim : global_dim + N*8]             per-concept features (×N)
+      [global_dim : global_dim + N*8]             per-concept features (xN)
         Per concept i (8 dims):
           [0:6]   bloom_mastery (6 levels)
           [6]     visited (0/1)
           [7]     prereq_ok (0/1)
 
-    Action: flat index 0..(N*6-1) → concept = action // 6, bloom = (action % 6) + 1
+    Action: flat index 0..(N*6-1) -> concept = action // 6, bloom = (action % 6) + 1
     """
 
-    metadata = {"render_modes": []}
-    N_BLOOMS = 6
-    CONCEPT_FEAT_DIM = 8  # bloom_mastery(6) + visited(1) + prereq_ok(1)
+    metadata: ClassVar[dict] = {"render_modes": []}
+    N_BLOOMS = _N_BLOOMS
+    CONCEPT_FEAT_DIM = _CONCEPT_FEAT_DIM  # bloom_mastery(6) + visited(1) + prereq_ok(1)
 
     def __init__(
         self,
@@ -48,6 +54,7 @@ class AdaptiveLearningEnv(gym.Env):
         mastery_gain_coeff: float = 1.0,
         repeat_decay: float = 0.5,
         cov_bonus: float = 10.0,
+        *,
         mask_mastered: bool = True,
         deterministic_train: bool = False,
         max_seq_len: int = 200,
@@ -67,9 +74,12 @@ class AdaptiveLearningEnv(gym.Env):
         # Transitive prerequisite closure:
         # concept c is unlocked only when ALL ancestor prerequisites of c are mastered.
         self._prereq_ancestors = self._build_prereq_ancestors()
-        self._concept_blooms: dict[int, list[int]] = {}
-        for i in range(self.n_concepts):
-            self._concept_blooms[i] = list(range(1, 7))
+        # Use caller-provided bloom availability per concept; default to all 6 levels.
+        provided_blooms = concept_blooms or {}
+        self._concept_blooms: dict[int, list[int]] = {
+            i: list(provided_blooms.get(i, range(1, _N_BLOOMS + 1)))
+            for i in range(self.n_concepts)
+        }
 
         self.max_steps = max_steps
         self.mastery_threshold = mastery_threshold
@@ -103,10 +113,10 @@ class AdaptiveLearningEnv(gym.Env):
         self._visited: set = set()
         self._visit_counts: dict[int, int] = {}
         self._step_count: int = 0
-        self._current_mastery = np.full(self.n_concepts, 0.5, dtype=np.float32)
-        self._bloom_mastery = np.full((self.n_concepts, self.N_BLOOMS), 0.5, dtype=np.float32)
+        self._current_mastery = np.full(self.n_concepts, _INITIAL_MASTERY, dtype=np.float32)
+        self._bloom_mastery = np.full((self.n_concepts, self.N_BLOOMS), _INITIAL_MASTERY, dtype=np.float32)
         self._current_hidden = np.zeros(self.d_model, dtype=np.float32)
-        self._initial_mastery: float = 0.5
+        self._initial_mastery: float = _INITIAL_MASTERY
         self._mastery_dirty: bool = False
 
         self._precompute_valid_bloom_mask()
@@ -114,9 +124,9 @@ class AdaptiveLearningEnv(gym.Env):
     def _precompute_valid_bloom_mask(self):
         self._valid_bloom_mask = np.zeros(self.n_actions, dtype=bool)
         for c in range(self.n_concepts):
-            valid_blooms = self._concept_blooms.get(c, list(range(1, 7)))
+            valid_blooms = self._concept_blooms.get(c, list(range(1, _N_BLOOMS + 1)))
             for b in valid_blooms:
-                if 1 <= b <= 6:
+                if 1 <= b <= _N_BLOOMS:
                     self._valid_bloom_mask[c * self.N_BLOOMS + (b - 1)] = True
             if not self._valid_bloom_mask[c * self.N_BLOOMS:(c + 1) * self.N_BLOOMS].any():
                 self._valid_bloom_mask[c * self.N_BLOOMS:(c + 1) * self.N_BLOOMS] = True
@@ -159,7 +169,7 @@ class AdaptiveLearningEnv(gym.Env):
             for concept_idx in range(self.n_concepts)
         }
 
-    def _compute_prereq_ok_mask(self, threshold: float, recompute_if_dirty: bool) -> np.ndarray:
+    def _compute_prereq_ok_mask(self, threshold: float, *, recompute_if_dirty: bool) -> np.ndarray:
         """Compute concept unlock mask from transitive prerequisite closure."""
         if recompute_if_dirty and self._mastery_dirty:
             self._compute_mastery_vector()
@@ -178,43 +188,43 @@ class AdaptiveLearningEnv(gym.Env):
         th = self.mastery_threshold if threshold is None else float(threshold)
         return self._compute_prereq_ok_mask(th, recompute_if_dirty=True).copy()
 
-    def _build_history_tensors(self, seq_len, T, batch_size=1):
-        concept_hist = self._concept_history[-T:] if T > 0 else []
-        bloom_hist = self._bloom_history[-T:] if T > 0 else []
-        response_hist = self._response_history[-T:] if T > 0 else []
+    def _build_history_tensors(self, seq_len, seq_t, batch_size=1):
+        concept_hist = self._concept_history[-seq_t:] if seq_t > 0 else []
+        bloom_hist = self._bloom_history[-seq_t:] if seq_t > 0 else []
+        response_hist = self._response_history[-seq_t:] if seq_t > 0 else []
 
         exercise_ids = torch.zeros(batch_size, seq_len, dtype=torch.long, device=self.device)
         bloom_ids = torch.zeros(batch_size, seq_len, dtype=torch.long, device=self.device)
 
-        if T > 0:
+        if seq_t > 0:
             c_tensor = torch.tensor(concept_hist, dtype=torch.long, device=self.device) + 1
             b_tensor = torch.tensor(bloom_hist, dtype=torch.long, device=self.device)
-            exercise_ids[:, :T] = c_tensor.unsqueeze(0).expand(batch_size, -1)
-            bloom_ids[:, :T] = b_tensor.unsqueeze(0).expand(batch_size, -1)
+            exercise_ids[:, :seq_t] = c_tensor.unsqueeze(0).expand(batch_size, -1)
+            bloom_ids[:, :seq_t] = b_tensor.unsqueeze(0).expand(batch_size, -1)
 
-        SOS = self._model.SOS_IDX
-        decoder_input = torch.full((batch_size, seq_len), SOS, dtype=torch.long, device=self.device)
-        if T > 0:
+        sos_idx = self._model.SOS_IDX
+        decoder_input = torch.full((batch_size, seq_len), sos_idx, dtype=torch.long, device=self.device)
+        if seq_t > 0:
             r_tensor = torch.tensor(response_hist, dtype=torch.long, device=self.device)
-            decoder_input[:, 1:T + 1] = r_tensor.unsqueeze(0).expand(batch_size, -1)
+            decoder_input[:, 1:seq_t + 1] = r_tensor.unsqueeze(0).expand(batch_size, -1)
 
         return exercise_ids, bloom_ids, decoder_input
 
     @torch.no_grad()
     def _compute_hidden_state(self):
-        T_full = len(self._concept_history)
-        T = min(T_full, self.max_seq_len - 1)
-        seq_len = T + 1
+        t_full = len(self._concept_history)
+        seq_t = min(t_full, self.max_seq_len - 1)
+        seq_len = seq_t + 1
 
-        exercise_ids, bloom_ids, decoder_input = self._build_history_tensors(seq_len, T, batch_size=1)
-        exercise_ids[0, T] = 1
-        bloom_ids[0, T] = 3
+        exercise_ids, bloom_ids, decoder_input = self._build_history_tensors(seq_len, seq_t, batch_size=1)
+        exercise_ids[0, seq_t] = 1
+        bloom_ids[0, seq_t] = _BLOOM_APPLY_IDX + 1  # Bloom level 3 (Apply)
 
         hidden_state, _ = self._model.get_state_and_predictions(
             concept_ids=exercise_ids,
             bloom_levels=bloom_ids,
             decoder_input=decoder_input,
-            query_position=T,
+            query_position=seq_t,
             external_embeddings=self._external_embeddings,
         )
         self._current_hidden = hidden_state[0].cpu().numpy()
@@ -225,35 +235,36 @@ class AdaptiveLearningEnv(gym.Env):
         for c in range(self.n_concepts):
             # Concept mastery = Bloom 3 (Apply) mastery
             # Student can still practice higher blooms, but unlock is based on B3
-            self._current_mastery[c] = float(self._bloom_mastery[c, 2])  # index 2 = Bloom 3
+            self._current_mastery[c] = float(self._bloom_mastery[c, _BLOOM_APPLY_IDX])  # index 2 = Bloom 3
         self._mastery_dirty = False
 
     @torch.no_grad()
     def _compute_bloom_mastery_vector(self):
-        N = self.n_concepts
-        T_full = len(self._concept_history)
-        T = min(T_full, self.max_seq_len - 1)
-        seq_len = T + 1
+        n_concepts = self.n_concepts
+        t_full = len(self._concept_history)
+        seq_t = min(t_full, self.max_seq_len - 1)
+        seq_len = seq_t + 1
 
-        pairs = []
-        for c in range(N):
-            for b in self._concept_blooms.get(c, list(range(1, 7))):
-                if 1 <= b <= 6:
-                    pairs.append((c, b))
+        pairs = [
+            (c, b)
+            for c in range(n_concepts)
+            for b in self._concept_blooms.get(c, list(range(1, _N_BLOOMS + 1)))
+            if 1 <= b <= _N_BLOOMS
+        ]
 
         if not pairs:
             return
 
-        CHUNK = 100
-        for start in range(0, len(pairs), CHUNK):
-            chunk = pairs[start:start + CHUNK]
+        chunk_size = 100
+        for start in range(0, len(pairs), chunk_size):
+            chunk = pairs[start:start + chunk_size]
             n_chunk = len(chunk)
 
-            exercise_ids, bloom_ids, decoder_input = self._build_history_tensors(seq_len, T, batch_size=n_chunk)
+            exercise_ids, bloom_ids, decoder_input = self._build_history_tensors(seq_len, seq_t, batch_size=n_chunk)
 
             for i, (c, b) in enumerate(chunk):
-                exercise_ids[i, T] = c + 1
-                bloom_ids[i, T] = b
+                exercise_ids[i, seq_t] = c + 1
+                bloom_ids[i, seq_t] = b
 
             output = self._model(
                 concept_ids=exercise_ids,
@@ -262,20 +273,20 @@ class AdaptiveLearningEnv(gym.Env):
                 decoder_input=decoder_input,
                 external_embeddings=self._external_embeddings,
             )
-            preds = output[:, T].cpu().numpy().astype(np.float32)
+            preds = output[:, seq_t].cpu().numpy().astype(np.float32)
 
             for i, (c, b) in enumerate(chunk):
                 self._bloom_mastery[c, b - 1] = preds[i]
 
     @torch.no_grad()
     def _predict_single_concept(self, concept_idx, bloom_level=None):
-        T_full = len(self._concept_history)
-        T = min(T_full, self.max_seq_len - 1)
-        seq_len = T + 1
+        t_full = len(self._concept_history)
+        seq_t = min(t_full, self.max_seq_len - 1)
+        seq_len = seq_t + 1
 
-        exercise_ids, bloom_ids, decoder_input = self._build_history_tensors(seq_len, T, batch_size=1)
-        exercise_ids[0, T] = concept_idx + 1
-        bloom_ids[0, T] = bloom_level if bloom_level is not None else 3
+        exercise_ids, bloom_ids, decoder_input = self._build_history_tensors(seq_len, seq_t, batch_size=1)
+        exercise_ids[0, seq_t] = concept_idx + 1
+        bloom_ids[0, seq_t] = bloom_level if bloom_level is not None else (_BLOOM_APPLY_IDX + 1)
 
         output = self._model(
             concept_ids=exercise_ids,
@@ -284,7 +295,7 @@ class AdaptiveLearningEnv(gym.Env):
             decoder_input=decoder_input,
             external_embeddings=self._external_embeddings,
         )
-        return float(output[0, T].cpu().item())
+        return float(output[0, seq_t].cpu().item())
 
     def _build_obs(self) -> np.ndarray:
         """Build concept-agnostic observation: global_state + per-concept features."""
@@ -295,7 +306,7 @@ class AdaptiveLearningEnv(gym.Env):
         obs[self.d_model] = self._step_count / max(self.max_steps, 1)
         obs[self.d_model + 1] = len(self._visited) / self.n_concepts
 
-        # Per-concept features: [bloom_mastery(6) | visited(1) | prereq_ok(1)] × N
+        # Per-concept features: [bloom_mastery(6) | visited(1) | prereq_ok(1)] x N
         # Precompute prereq_ok for all concepts
         th = self.mastery_threshold
         concept_prereq_ok = self._compute_prereq_ok_mask(
@@ -305,13 +316,13 @@ class AdaptiveLearningEnv(gym.Env):
         offset = self.global_dim
         for c in range(self.n_concepts):
             base = offset + c * self.CONCEPT_FEAT_DIM
-            obs[base:base + 6] = self._bloom_mastery[c]          # bloom mastery (6)
+            obs[base:base + _N_BLOOMS] = self._bloom_mastery[c]   # bloom mastery (6)
             obs[base + 6] = 1.0 if c in self._visited else 0.0   # visited
             obs[base + 7] = concept_prereq_ok[c]                  # prereq_ok
 
         return obs
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, _options=None):
         super().reset(seed=seed)
         self._concept_history = []
         self._bloom_history = []
@@ -319,7 +330,7 @@ class AdaptiveLearningEnv(gym.Env):
         self._visited = set()
         self._visit_counts = {}
         self._step_count = 0
-        self._bloom_mastery = np.full((self.n_concepts, self.N_BLOOMS), 0.5, dtype=np.float32)
+        self._bloom_mastery = np.full((self.n_concepts, self.N_BLOOMS), _INITIAL_MASTERY, dtype=np.float32)
 
         self._compute_hidden_state()
         self._compute_mastery_vector()
@@ -365,7 +376,7 @@ class AdaptiveLearningEnv(gym.Env):
             float(np.mean(self._current_mastery)),
         )
 
-    def step(self, action: int, human_correct: bool | None = None):
+    def step(self, action: int, *, human_correct: bool | None = None):
         assert self.action_space.contains(action)
 
         concept, bloom = self._decode_action(action)
@@ -377,7 +388,7 @@ class AdaptiveLearningEnv(gym.Env):
         if human_correct is not None:
             r = int(human_correct)
         elif self.deterministic_train:
-            r = 1 if p_before >= 0.5 else 0
+            r = 1 if p_before >= _INITIAL_MASTERY else 0
         else:
             r = int(self.np_random.binomial(1, p_before))
 
@@ -396,8 +407,8 @@ class AdaptiveLearningEnv(gym.Env):
 
         p_after = self._predict_single_concept(concept, bloom_level=bloom)
         self._bloom_mastery[concept, bloom - 1] = p_after
-        valid_blooms = self._concept_blooms.get(concept, list(range(1, 7)))
-        valid_indices = [b - 1 for b in valid_blooms if 1 <= b <= 6]
+        valid_blooms = self._concept_blooms.get(concept, list(range(1, _N_BLOOMS + 1)))
+        valid_indices = [b - 1 for b in valid_blooms if 1 <= b <= _N_BLOOMS]
         self._current_mastery[concept] = float(np.max(
             self._bloom_mastery[concept, valid_indices]
         )) if valid_indices else p_after
@@ -428,39 +439,49 @@ class AdaptiveLearningEnv(gym.Env):
         }
         return self._build_obs(), reward, terminated, False, info
 
-    def action_masks(self) -> np.ndarray:
-        th = self.mastery_threshold
-        concept_prereq_ok = self._compute_prereq_ok_mask(
-            th, recompute_if_dirty=True
-        )
-
-        masks = np.zeros(self.n_actions, dtype=bool)
+    def _fill_masks_for_concept(
+        self,
+        masks: np.ndarray,
+        concept_prereq_ok: np.ndarray,
+        th: float,
+        *,
+        apply_mastery_cap: bool,
+    ) -> None:
+        """Fill action masks for all concepts, respecting prereq and bloom-sequential unlock."""
         for c in range(self.n_concepts):
             if not concept_prereq_ok[c]:
                 continue
-            for b_idx in range(self.N_BLOOMS):
-                action_id = c * self.N_BLOOMS + b_idx
-                if not self._valid_bloom_mask[action_id]:
-                    continue
-                # Sequential bloom unlock: bloom k+1 requires bloom k mastery
-                if b_idx > 0 and self._bloom_mastery[c, b_idx - 1] < th:
-                    continue
-                if self.mask_mastered and self._bloom_mastery[c, b_idx] >= th:
-                    continue
-                masks[action_id] = True
+            self._fill_masks_for_blooms(masks, c, th, apply_mastery_cap=apply_mastery_cap)
+
+    def _fill_masks_for_blooms(
+        self,
+        masks: np.ndarray,
+        concept: int,
+        th: float,
+        *,
+        apply_mastery_cap: bool,
+    ) -> None:
+        """Fill bloom-level masks for a single concept."""
+        for b_idx in range(self.N_BLOOMS):
+            action_id = concept * self.N_BLOOMS + b_idx
+            if not self._valid_bloom_mask[action_id]:
+                continue
+            if b_idx > 0 and self._bloom_mastery[concept, b_idx - 1] < th:
+                continue
+            if apply_mastery_cap and self._bloom_mastery[concept, b_idx] >= th:
+                continue
+            masks[action_id] = True
+
+    def action_masks(self) -> np.ndarray:
+        th = self.mastery_threshold
+        concept_prereq_ok = self._compute_prereq_ok_mask(th, recompute_if_dirty=True)
+
+        masks = np.zeros(self.n_actions, dtype=bool)
+        self._fill_masks_for_concept(masks, concept_prereq_ok, th, apply_mastery_cap=self.mask_mastered)
 
         if not masks.any():
             # Fallback 1: keep prerequisite lock, only relax "mask_mastered".
-            for c in range(self.n_concepts):
-                if not concept_prereq_ok[c]:
-                    continue
-                for b_idx in range(self.N_BLOOMS):
-                    action_id = c * self.N_BLOOMS + b_idx
-                    if not self._valid_bloom_mask[action_id]:
-                        continue
-                    if b_idx > 0 and self._bloom_mastery[c, b_idx - 1] < th:
-                        continue
-                    masks[action_id] = True
+            self._fill_masks_for_concept(masks, concept_prereq_ok, th, apply_mastery_cap=False)
 
         if not masks.any():
             # Fallback 2 (degenerate graph/cycle): keep env trainable instead of crashing.
@@ -506,7 +527,6 @@ class AdaptiveLearningEnv(gym.Env):
         all mutable state so that calling ``step()`` on the snapshot does not
         affect the original environment.
         """
-        import copy
         snap = copy.copy(self)  # shallow — shares _model, _external_embeddings, etc.
         # Deep-copy every mutable field
         snap._concept_history = list(self._concept_history)

@@ -13,9 +13,10 @@ from langchain_text_splitters import (
 )
 
 try:
-    from transformers import AutoTokenizer  # noqa: F401
+    from transformers import AutoTokenizer
     _HAS_TRANSFORMERS = True
 except Exception:
+    AutoTokenizer = None  # type: ignore[assignment,misc]
     _HAS_TRANSFORMERS = False
 
 from loguru import logger
@@ -35,6 +36,7 @@ class TextChunker:
         self,
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
+        *,
         use_hf_tokenizer: bool = False,
         hf_model_name: str | None = None,
         markdown_headers: list[tuple[str, str]] | None = None,
@@ -126,23 +128,22 @@ class TextChunker:
         - Nếu use_hf_tokenizer=True và có HF tokenizer: dùng from_huggingface_tokenizer (đếm theo token).
         - Ngược lại dùng RecursiveCharacterTextSplitter (đếm theo ký tự).
         """
-        if self.use_hf_tokenizer and self.hf_model_name:
+        if self.use_hf_tokenizer and self.hf_model_name and AutoTokenizer is not None:
             try:
-                # local import (optional dep)
-                from transformers import AutoTokenizer
                 tokenizer = AutoTokenizer.from_pretrained(
                     self.hf_model_name, trust_remote_code=True)
                 splitter = TextSplitter.from_huggingface_tokenizer(
                     tokenizer=tokenizer,
                     chunk_size=self.chunk_size,
                     chunk_overlap=self.chunk_overlap,
-                )  # API: TextSplitter.from_huggingface_tokenizer(...). :contentReference[oaicite:4]{index=4}
-                logger.debug("Using HF tokenizer-based TextSplitter")
-                return splitter
+                )
             except Exception as e:
                 logger.warning(
                     f"HF tokenizer init failed ({e}). Fallback RecursiveCharacterTextSplitter."
                 )
+            else:
+                logger.debug("Using HF tokenizer-based TextSplitter")
+                return splitter
 
         # Fallback / mặc định: RecursiveCharacterTextSplitter (ổn định, khuyến nghị). :contentReference[oaicite:5]{index=5}
         return RecursiveCharacterTextSplitter(

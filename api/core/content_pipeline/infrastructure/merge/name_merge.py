@@ -30,8 +30,34 @@ def merge_by_name(concepts: list[Concept]) -> list[Concept]:
         if norm_name:
             name_to_concepts[norm_name].append(concept)
 
+    merged = _group_and_merge(concepts, name_to_concepts)
+    id_map_global = _build_global_id_map(concepts, name_to_concepts)
+
+    final = []
+    for concept in merged:
+        remapped = concept.copy(deep=True)
+        remapped.relations = _remap_relations(
+            remapped.relations,
+            id_map_global,
+            self_id=remapped.concept_id,
+        )
+        final.append(remapped)
+
+    reduction = len(concepts) - len(final)
+    logger.info(
+        f"Merged {len(concepts)} concepts into {len(final)} by name (reduction={reduction})"
+    )
+
+    return final
+
+
+def _group_and_merge(
+    concepts: list[Concept],
+    name_to_concepts: dict[str, list[Concept]],
+) -> list[Concept]:
+    """Group concepts by normalized name and merge each group."""
     merged = []
-    processed = set()
+    processed: set[str] = set()
 
     for concept in concepts:
         concept_id = concept.concept_id
@@ -51,44 +77,30 @@ def merge_by_name(concepts: list[Concept]) -> list[Concept]:
             merged.append(concept)
             processed.add(concept_id)
         else:
-            merged_concept, _id_map = _merge_concepts(similar_concepts)
+            merged_concept, _ = _merge_concepts(similar_concepts)
             merged.append(merged_concept)
-
-            # Mark all as processed
             for c in similar_concepts:
                 processed.add(c.concept_id)
 
-    # Remap relations across all merged concepts
-    final = []
-    id_map_global = {}
+    return merged
 
-    # Build global id mapping
+
+def _build_global_id_map(
+    concepts: list[Concept],
+    name_to_concepts: dict[str, list[Concept]],
+) -> dict[str, str]:
+    """Build a mapping from old concept IDs to canonical concept IDs."""
+    id_map: dict[str, str] = {}
     for concept in concepts:
         norm_name = normalize_concept_name(concept.name)
         similar = name_to_concepts[norm_name]
         if len(similar) > 1:
             canonical_id = _select_canonical(similar).concept_id
             for c in similar:
-                id_map_global[c.concept_id] = canonical_id
+                id_map[c.concept_id] = canonical_id
         else:
-            id_map_global[concept.concept_id] = concept.concept_id
-
-    # Remap relations
-    for concept in merged:
-        concept = concept.copy(deep=True)
-        concept.relations = _remap_relations(
-            concept.relations,
-            id_map_global,
-            self_id=concept.concept_id
-        )
-        final.append(concept)
-
-    reduction = len(concepts) - len(final)
-    logger.info(
-        f"Merged {len(concepts)} concepts into {len(final)} by name (reduction={reduction})"
-    )
-
-    return final
+            id_map[concept.concept_id] = concept.concept_id
+    return id_map
 
 
 def _select_canonical(concepts: list[Concept]) -> Concept:
@@ -100,10 +112,31 @@ def _select_canonical(concepts: list[Concept]) -> Concept:
     2. First in list (stable fallback)
     """
     def _key(c: Concept) -> int:
-        def_len = len(c.definition or "")
-        return -def_len
+        return -len(c.definition or "")
 
     return min(concepts, key=_key)
+
+
+def _merge_embeddings(
+    concepts: list[Concept],
+    canonical: Concept,
+    attr: str,
+    label: str,
+) -> list[float] | None:
+    """Average embeddings from a group of concepts, with consistency validation."""
+    emb_list = [
+        np.asarray(getattr(c, attr), dtype=float)
+        for c in concepts if getattr(c, attr) is not None
+    ]
+    if not emb_list:
+        return None
+    emb_shapes = [e.shape for e in emb_list]
+    if len(set(emb_shapes)) > 1:
+        logger.warning(
+            f"Inconsistent {label} shapes in merge group: {set(emb_shapes)}, using canonical"
+        )
+        return getattr(canonical, attr) or emb_list[0].tolist()
+    return np.mean(emb_list, axis=0).tolist()
 
 
 def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
@@ -119,10 +152,8 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
     if len(concepts) == 1:
         return concepts[0], {concepts[0].concept_id: concepts[0].concept_id}
 
-    # Select canonical concept
     canonical = _select_canonical(concepts)
 
-    # Check for mixed subject_ids
     subject_ids = {c.subject_id for c in concepts}
     if len(subject_ids) > 1:
         concept_ids = [c.concept_id for c in concepts]
@@ -130,7 +161,6 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
             f"Mixed subject_id in merged group {concept_ids}; keeping '{canonical.subject_id}'"
         )
 
-    # Merge examples (preserve order, dedup)
     ex_seen: set[str] = set()
     examples: list[str] = []
     for c in concepts:
@@ -140,7 +170,6 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
                 ex_seen.add(ex_clean)
                 examples.append(ex_clean)
 
-    # Merge formulas (dedup by latex)
     f_seen: set[str] = set()
     formulas: list[dict] = []
     for c in concepts:
@@ -150,45 +179,15 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
                 f_seen.add(key)
                 formulas.append(f.model_dump())
 
-    # Collect all relations (will be cleaned and remapped later)
-    all_relations: list[dict] = []
-    for c in concepts:
-        all_relations.extend([rel.model_dump() for rel in (c.relations or [])])
-
-    # Average embeddings (with dimension validation)
-    # Average name_embedding
-    name_emb_list = [
-        np.asarray(c.name_embedding, dtype=float)
-        for c in concepts if c.name_embedding is not None
+    all_relations: list[dict] = [
+        rel.model_dump() for c in concepts for rel in (c.relations or [])
     ]
-    avg_name_embedding = None
-    if name_emb_list:
-        emb_shapes = [e.shape for e in name_emb_list]
-        if len(set(emb_shapes)) > 1:
-            logger.warning(
-                f"Inconsistent name_embedding shapes in merge group: {set(emb_shapes)}, using canonical"
-            )
-            avg_name_embedding = canonical.name_embedding or name_emb_list[0].tolist()
-        else:
-            avg_name_embedding = np.mean(name_emb_list, axis=0).tolist()
 
-    # Average definition_embedding
-    def_emb_list = [
-        np.asarray(c.definition_embedding, dtype=float)
-        for c in concepts if c.definition_embedding is not None
-    ]
-    avg_definition_embedding = None
-    if def_emb_list:
-        emb_shapes = [e.shape for e in def_emb_list]
-        if len(set(emb_shapes)) > 1:
-            logger.warning(
-                f"Inconsistent definition_embedding shapes in merge group: {set(emb_shapes)}, using canonical"
-            )
-            avg_definition_embedding = canonical.definition_embedding or def_emb_list[0].tolist()
-        else:
-            avg_definition_embedding = np.mean(def_emb_list, axis=0).tolist()
+    avg_name_embedding = _merge_embeddings(concepts, canonical, "name_embedding", "name_embedding")
+    avg_definition_embedding = _merge_embeddings(
+        concepts, canonical, "definition_embedding", "definition_embedding"
+    )
 
-    # Create merged concept
     merged = Concept(
         concept_id=canonical.concept_id,
         subject_id=canonical.subject_id,
@@ -196,12 +195,11 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
         definition=canonical.definition,
         examples=examples,
         formulas=formulas,
-        relations=all_relations,  # Will be cleaned after global mapping
+        relations=all_relations,
         name_embedding=avg_name_embedding,
         definition_embedding=avg_definition_embedding,
     )
 
-    # Build id map (all -> canonical)
     id_map = {c.concept_id: canonical.concept_id for c in concepts}
 
     return merged, id_map
@@ -225,17 +223,14 @@ def _remap_relations(
         if rel is None or not getattr(rel, "target_id", None):
             continue
 
-        # Remap target to canonical id
         tgt = id_map.get(rel.target_id, rel.target_id)
 
         if not tgt or tgt == self_id:
-            # Drop invalid or self-loop
             continue
 
         key = (rel.type, tgt)
 
         if key not in bucket:
-            # Create new relation entry
             new_rel = Relation(
                 type=rel.type,
                 target_id=tgt,
@@ -244,12 +239,10 @@ def _remap_relations(
             )
             bucket[key] = new_rel
 
-        # Merge scores (keep max confidence)
         cur = bucket[key]
         if rel.confidence is not None:
             cur.confidence = max(cur.confidence or 0.0, rel.confidence)
 
-        # Merge evidence text (concatenate if multiple, separated by newline)
         if hasattr(rel, "evidence") and rel.evidence:
             rel_evidence = clean_text(rel.evidence)
             if rel_evidence:

@@ -159,26 +159,6 @@ def _ocr_page_via_llm(
             )
             resp.raise_for_status()
             data = resp.json()
-
-            # Extract content from OpenAI-compatible response
-            content = extract_llm_text(
-                data.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-            )
-
-            if not content:
-                logger.warning(
-                    f"[VisionPDFLoader] Page {page_num}: empty response from LLM"
-                )
-                return (page_num, "")
-
-            logger.info(
-                f"[VisionPDFLoader] Page {page_num} OCR completed "
-                f"({len(content)} chars)"
-            )
-            return (page_num, content)
-
         except Exception as e:
             last_error = e
             if attempt < max_retries:
@@ -193,6 +173,26 @@ def _ocr_page_via_llm(
                     f"[VisionPDFLoader] Page {page_num} failed after "
                     f"{max_retries + 1} attempts: {last_error}"
                 )
+            continue
+
+        # Extract content from OpenAI-compatible response
+        content = extract_llm_text(
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+
+        if not content:
+            logger.warning(
+                f"[VisionPDFLoader] Page {page_num}: empty response from LLM"
+            )
+            return (page_num, "")
+
+        logger.info(
+            f"[VisionPDFLoader] Page {page_num} OCR completed "
+            f"({len(content)} chars)"
+        )
+        return (page_num, content)
 
     return (page_num, f"[OCR_ERROR: {last_error}]")
 
@@ -208,8 +208,8 @@ def _cleanup_s3_pages(s3_client, bucket_name: str, job_id: str):
             try:
                 s3_client.delete_object(Bucket=bucket_name, Key=obj["Key"])
                 deleted += 1
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.debug(f"[VisionPDFLoader] Skipped cleanup for {obj['Key']}: {cleanup_err}")
         if deleted:
             logger.info(
                 f"[VisionPDFLoader] Cleaned up {deleted} temp files "
@@ -225,6 +225,7 @@ class VisionPDFLoader(BaseLoader):
     def __init__(
         self,
         concurrency: int | None = None,
+        *,
         cleanup_s3: bool = True,
     ):
         """
@@ -289,13 +290,13 @@ class VisionPDFLoader(BaseLoader):
             f"[VisionPDFLoader] Starting OCR for: {filename} (job: {job_id})"
         )
 
-        try:
-            # Step 1: Split PDF into pages
-            page_buffers = _split_pdf_to_pages(file_path)
-            total_pages = len(page_buffers)
+        page_buffers = _split_pdf_to_pages(file_path)
+        total_pages = len(page_buffers)
+        if total_pages == 0:
+            raise ValueError(f"PDF has 0 pages: {file_path}")
 
-            if total_pages == 0:
-                raise ValueError(f"PDF has 0 pages: {file_path}")
+        try:
+            # Step 1: pages already split above
 
             # Step 2: Upload all pages to S3
             logger.info(
@@ -382,8 +383,7 @@ class VisionPDFLoader(BaseLoader):
                 f"{len(page_chunks)}/{total_pages} pages extracted, "
                 f"{len(full_text)} chars total"
             )
-
-            return {
+            result = {
                 "text": full_text,
                 "markdown": full_text,
                 "chunks": page_chunks,
@@ -403,3 +403,5 @@ class VisionPDFLoader(BaseLoader):
                 exc_info=True,
             )
             raise
+        else:
+            return result

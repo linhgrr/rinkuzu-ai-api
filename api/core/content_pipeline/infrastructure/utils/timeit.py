@@ -24,15 +24,6 @@ def timeit(func: Callable) -> Callable:
 
         try:
             result = func(*args, **kwargs)
-            elapsed = time.time() - start_time
-
-            logger.info(
-                f"Function {func.__name__} completed",
-                elapsed_seconds=round(elapsed, 2),
-            )
-
-            return result
-
         except Exception as e:
             elapsed = time.time() - start_time
             logger.error(
@@ -41,6 +32,13 @@ def timeit(func: Callable) -> Callable:
                 error=str(e),
             )
             raise
+        else:
+            elapsed = time.time() - start_time
+            logger.info(
+                f"Function {func.__name__} completed",
+                elapsed_seconds=round(elapsed, 2),
+            )
+            return result
 
     return wrapper
 

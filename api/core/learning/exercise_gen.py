@@ -75,12 +75,6 @@ def generate_exercise(
         try:
             logger.debug(f"[LLM] ⏳ generate_exercise attempt {attempt}/{max_retries}")
             result = structured_exercise_llm.invoke(messages)
-            if not isinstance(result, schema):
-                raise ValueError(f"LLM returned invalid type: {type(result)}")
-
-            elapsed = time.time() - t0
-            logger.info(f"[LLM] ✓ Exercise generated in {elapsed:.2f}s")
-            return serializer(result)
         except Exception as exc:
             logger.warning(
                 f"[LLM] ⚠ generate_exercise attempt {attempt}/{max_retries} failed "
@@ -88,6 +82,18 @@ def generate_exercise(
             )
             if attempt < max_retries:
                 sleep_before_retry(attempt, backoff_sec)
+            continue
+        if not isinstance(result, schema):
+            logger.warning(
+                f"[LLM] ⚠ generate_exercise attempt {attempt}/{max_retries} failed "
+                f"(will_retry={attempt < max_retries}): invalid type {type(result)}"
+            )
+            if attempt < max_retries:
+                sleep_before_retry(attempt, backoff_sec)
+            continue
+        elapsed = time.time() - t0
+        logger.info(f"[LLM] ✓ Exercise generated in {elapsed:.2f}s")
+        return serializer(result)
 
     elapsed = time.time() - t0
     logger.error(f"[LLM] ✗ generate_exercise failed after {elapsed:.2f}s")
@@ -118,12 +124,6 @@ def evaluate_short_answer(
         try:
             logger.debug(f"[LLM] ⏳ evaluate_short_answer attempt {attempt}/{max_retries}")
             result = structured_grader_llm.invoke(messages)
-            if not isinstance(result, ShortAnswerEvaluationOutput):
-                raise ValueError(f"LLM returned invalid type: {type(result)}")
-
-            elapsed = time.time() - t0
-            logger.info(f"[LLM] ✓ Short answer graded in {elapsed:.2f}s")
-            return result.model_dump()
         except Exception as exc:
             logger.warning(
                 f"[LLM] ⚠ evaluate_short_answer attempt {attempt}/{max_retries} failed "
@@ -131,6 +131,18 @@ def evaluate_short_answer(
             )
             if attempt < max_retries:
                 sleep_before_retry(attempt, backoff_sec)
+            continue
+        if not isinstance(result, ShortAnswerEvaluationOutput):
+            logger.warning(
+                f"[LLM] ⚠ evaluate_short_answer attempt {attempt}/{max_retries} failed "
+                f"(will_retry={attempt < max_retries}): invalid type {type(result)}"
+            )
+            if attempt < max_retries:
+                sleep_before_retry(attempt, backoff_sec)
+            continue
+        elapsed = time.time() - t0
+        logger.info(f"[LLM] ✓ Short answer graded in {elapsed:.2f}s")
+        return result.model_dump()
 
     elapsed = time.time() - t0
     logger.error(f"[LLM] ✗ evaluate_short_answer failed after {elapsed:.2f}s")
@@ -162,12 +174,6 @@ def generate_theory(
         try:
             logger.debug(f"[LLM] ⏳ generate_theory attempt {attempt}/{max_retries}")
             result = structured_theory_llm.invoke(messages)
-            if not isinstance(result, TheoryOutput):
-                raise ValueError(f"LLM returned invalid type: {type(result)}")
-
-            elapsed = time.time() - t0
-            logger.info(f"[LLM] ✓ Theory generated in {elapsed:.2f}s")
-            return result.model_dump()
         except Exception as exc:
             logger.warning(
                 f"[LLM] ⚠ generate_theory attempt {attempt}/{max_retries} failed "
@@ -175,6 +181,18 @@ def generate_theory(
             )
             if attempt < max_retries:
                 sleep_before_retry(attempt, backoff_sec)
+            continue
+        if not isinstance(result, TheoryOutput):
+            logger.warning(
+                f"[LLM] ⚠ generate_theory attempt {attempt}/{max_retries} failed "
+                f"(will_retry={attempt < max_retries}): invalid type {type(result)}"
+            )
+            if attempt < max_retries:
+                sleep_before_retry(attempt, backoff_sec)
+            continue
+        elapsed = time.time() - t0
+        logger.info(f"[LLM] ✓ Theory generated in {elapsed:.2f}s")
+        return result.model_dump()
 
     elapsed = time.time() - t0
     logger.error(f"[LLM] ✗ generate_theory failed after {elapsed:.2f}s")

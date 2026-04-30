@@ -33,7 +33,8 @@ class SubjectProgressRepository(MongoRepository):
             )
             return True
 
-        return await self._run_or_default("save_snapshot", False, _save_snapshot)
+        save_default: bool = False
+        return await self._run_or_default("save_snapshot", save_default, _save_snapshot)
 
     async def load_for_user(self, job_id: str, user_id: str) -> dict[str, Any] | None:
         async def _load_for_user() -> dict[str, Any] | None:

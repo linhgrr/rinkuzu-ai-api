@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import networkx as nx
+
 from api.config import get_settings
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
@@ -40,8 +42,6 @@ async def optimize_graph(
         "Removing cycles, building DAG...",
         0.90,
     )
-
-    import networkx as nx
 
     cycle_stats: dict[str, Any] | None = None
     if not nx.is_directed_acyclic_graph(graph):

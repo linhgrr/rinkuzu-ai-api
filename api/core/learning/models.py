@@ -100,10 +100,11 @@ class SaintModel(nn.Module):
         responses: torch.Tensor | None = None,
         src_key_padding_mask: torch.Tensor | None = None,
         decoder_input: torch.Tensor | None = None,
-        return_logits: bool = False,
         external_embeddings: torch.Tensor | None = None,
+        *,
+        return_logits: bool = False,
     ) -> torch.Tensor:
-        B, T = concept_ids.shape
+        batch_size, seq_len = concept_ids.shape
         device = concept_ids.device
 
         emb_source = external_embeddings if external_embeddings is not None else self.concept_emb_matrix
@@ -115,7 +116,7 @@ class SaintModel(nn.Module):
         encoder_input = self.pos_enc(encoder_input)
 
         if src_key_padding_mask is None:
-            src_key_padding_mask = (concept_ids == 0)
+            src_key_padding_mask = concept_ids == 0
 
         memory = self.encoder(encoder_input, src_key_padding_mask=src_key_padding_mask)
 
@@ -123,13 +124,13 @@ class SaintModel(nn.Module):
             dec_emb = self.response_emb(decoder_input)
         else:
             resp_idx = self._responses_to_idx(responses)
-            shifted = torch.full((B, T), self.SOS_IDX, dtype=torch.long, device=device)
+            shifted = torch.full((batch_size, seq_len), self.SOS_IDX, dtype=torch.long, device=device)
             shifted[:, 1:] = resp_idx[:, :-1]
             dec_emb = self.response_emb(shifted)
 
         dec_emb = dec_emb + bloom_out
         dec_emb = self.pos_enc(dec_emb)
-        causal_mask = self._make_causal_mask(T, device)
+        causal_mask = self._make_causal_mask(seq_len, device)
 
         dec_out = self.decoder(
             dec_emb, memory,
@@ -152,7 +153,7 @@ class SaintModel(nn.Module):
         query_position: int,
         external_embeddings: torch.Tensor | None = None,
     ):
-        _B, T = concept_ids.shape
+        _batch_size, seq_len = concept_ids.shape
         device = concept_ids.device
 
         emb_source = external_embeddings if external_embeddings is not None else self.concept_emb_matrix
@@ -162,13 +163,13 @@ class SaintModel(nn.Module):
         bloom_out = self.bloom_proj(bloom_emb)
         encoder_input = concept_out + bloom_out
         encoder_input = self.pos_enc(encoder_input)
-        src_key_padding_mask = (concept_ids == 0)
+        src_key_padding_mask = concept_ids == 0
         memory = self.encoder(encoder_input, src_key_padding_mask=src_key_padding_mask)
 
         dec_emb = self.response_emb(decoder_input)
         dec_emb = dec_emb + bloom_out
         dec_emb = self.pos_enc(dec_emb)
-        causal_mask = self._make_causal_mask(T, device)
+        causal_mask = self._make_causal_mask(seq_len, device)
         dec_out = self.decoder(
             dec_emb, memory,
             tgt_mask=causal_mask,
@@ -194,7 +195,7 @@ class DuelingQNetwork(nn.Module):
 
     Observation layout (flat):
         [0 : global_dim]                          global state (SAINT hidden + progress)
-        [global_dim : global_dim + N*concept_feat_dim]  per-concept features (bloom×6 + visited + prereq_ok)
+        [global_dim : global_dim + N*concept_feat_dim]  per-concept features (bloom*6 + visited + prereq_ok)
     """
 
     CONCEPT_FEAT_DIM = 8   # bloom_mastery(6) + visited(1) + prereq_ok(1)
@@ -223,20 +224,20 @@ class DuelingQNetwork(nn.Module):
         Returns:
             Q values:    (B, n_concepts * N_BLOOMS)
         """
-        B = flat_obs.shape[0]
-        global_state = flat_obs[:, :self.global_dim]                                    # (B, G)
-        concept_flat = flat_obs[:, self.global_dim:]                                     # (B, N*8)
-        concept_features = concept_flat.view(B, n_concepts, self.CONCEPT_FEAT_DIM)      # (B, N, 8)
+        batch_size = flat_obs.shape[0]
+        global_state = flat_obs[:, :self.global_dim]
+        concept_flat = flat_obs[:, self.global_dim:]
+        concept_features = concept_flat.view(batch_size, n_concepts, self.CONCEPT_FEAT_DIM)
 
-        g = global_state.unsqueeze(1).expand(B, n_concepts, -1)                         # (B, N, G)
-        x = torch.cat([g, concept_features], dim=-1)                                    # (B, N, G+8)
-        x = x.view(B * n_concepts, -1)                                                  # (B*N, 138)
+        g = global_state.unsqueeze(1).expand(batch_size, n_concepts, -1)
+        x = torch.cat([g, concept_features], dim=-1)
+        x = x.view(batch_size * n_concepts, -1)
 
-        features = self.backbone(x)                                                      # (B*N, H)
-        v = self.value(features)                                                         # (B*N, 1)
-        a = self.advantage(features)                                                     # (B*N, 6)
-        q = v + a - a.mean(dim=1, keepdim=True)                                         # (B*N, 6)
-        return q.view(B, n_concepts * self.N_BLOOMS)                                       # (B, N*6)
+        features = self.backbone(x)
+        v = self.value(features)
+        a = self.advantage(features)
+        q = v + a - a.mean(dim=1, keepdim=True)
+        return q.view(batch_size, n_concepts * self.N_BLOOMS)
 
 
 def load_saint_model(checkpoint_path: str, device: torch.device):

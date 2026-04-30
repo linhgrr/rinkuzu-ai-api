@@ -1,5 +1,6 @@
 """Compatibility entrypoints for the unified content pipeline."""
 
+import functools
 
 from api.core.shared import mongo_store
 
@@ -17,6 +18,7 @@ async def process_pdf(
     subject_id: str | None = None,
     prs_threshold: float = 0.75,
     min_confidence: float = 0.6,
+    *,
     apply_reduction: bool = True,
     user_id: str | None = None,
 ) -> PipelineJob:
@@ -37,6 +39,7 @@ async def _run_pipeline(
     file_path: str,
     prs_threshold: float,
     min_confidence: float,
+    *,
     apply_reduction: bool,
 ):
     await get_pipeline_runner().run(
@@ -48,26 +51,18 @@ async def _run_pipeline(
     )
 
 
-_pipeline_service: PipelineService | None = None
-_pipeline_runner: PipelineRunner | None = None
-
-
+@functools.lru_cache(maxsize=1)
 def get_pipeline_service() -> PipelineService:
-    global _pipeline_service
-    if _pipeline_service is None:
-        _pipeline_service = PipelineService(
-            save_job=mongo_store.save_pipeline_job,
-            run_pipeline=_run_pipeline,
-        )
-    return _pipeline_service
+    return PipelineService(
+        save_job=mongo_store.save_pipeline_job,
+        run_pipeline=_run_pipeline,
+    )
 
 
+@functools.lru_cache(maxsize=1)
 def get_pipeline_runner() -> PipelineRunner:
-    global _pipeline_runner
-    if _pipeline_runner is None:
-        _pipeline_runner = PipelineRunner(
-            load_job=mongo_store.load_pipeline_job,
-            save_job=mongo_store.save_pipeline_job,
-            persist_job_state=get_pipeline_service().persist_job_state,
-        )
-    return _pipeline_runner
+    return PipelineRunner(
+        load_job=mongo_store.load_pipeline_job,
+        save_job=mongo_store.save_pipeline_job,
+        persist_job_state=get_pipeline_service().persist_job_state,
+    )

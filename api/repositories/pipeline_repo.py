@@ -2,7 +2,7 @@
 repositories/pipeline_repo.py — MongoDB persistence for pipeline jobs.
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 from loguru import logger
 
@@ -16,7 +16,7 @@ class PipelineRepository(MongoRepository):
     """Data access layer for pipeline jobs in MongoDB."""
 
     COLLECTION = "al_pipeline_jobs"
-    SUMMARY_PROJECTION = {
+    SUMMARY_PROJECTION: ClassVar[dict[str, int]] = {
         "_id": 0,
         "job_id": 1,
         "filename": 1,
@@ -47,7 +47,8 @@ class PipelineRepository(MongoRepository):
             logger.info("[PipelineRepo] saved job_id={}", job.job_id)
             return True
 
-        return await self._run_or_default("save", False, _save)
+        save_default: bool = False
+        return await self._run_or_default("save", save_default, _save)
 
     async def load(self, job_id: str) -> dict[str, Any] | None:
         """Load a pipeline job result from MongoDB."""
@@ -108,7 +109,7 @@ class PipelineRepository(MongoRepository):
 
         return await self._run_or_default("list_recent", [], _list_recent)
 
-    async def delete(self, job_id: str, delete_sessions: bool = True) -> dict[str, Any]:
+    async def delete(self, job_id: str, *, delete_sessions: bool = True) -> dict[str, Any]:
         """Delete a pipeline job and optionally its linked sessions."""
         async def _delete() -> dict[str, Any]:
             job_result = await self._db[self.COLLECTION].delete_one({"job_id": job_id})
@@ -133,6 +134,7 @@ class PipelineRepository(MongoRepository):
         self,
         job_id: str,
         user_id: str,
+        *,
         delete_sessions: bool = True,
     ) -> dict[str, Any]:
         """Delete a pipeline job only if owned by user_id."""

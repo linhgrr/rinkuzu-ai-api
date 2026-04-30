@@ -18,6 +18,7 @@ import uuid
 
 from loguru import logger
 import numpy as np
+from sentence_transformers import SentenceTransformer
 import torch
 
 from api.config import get_settings
@@ -29,6 +30,8 @@ from .models import DuelingQNetwork, load_dqn_model, load_saint_model
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
 _MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
+_MIN_STORED_MAX_STEPS = 50   # sessions stored with max_steps <= this are treated as unbounded
+_DEFAULT_MAX_STEPS = 9999
 
 
 @dataclass
@@ -209,10 +212,9 @@ class SessionManager:
         return names, defs, theories
 
     @classmethod
-    def _get_text_encoder(cls):
+    def _get_text_encoder(cls) -> SentenceTransformer:
         """Lazy-load sentence-transformer (same model used in SAINT training)."""
         if cls._text_encoder is None:
-            from sentence_transformers import SentenceTransformer
             logger.info(f"[Session] Loading text encoder: {cls._TEXT_MODEL_NAME}")
             cls._text_encoder = SentenceTransformer(cls._TEXT_MODEL_NAME)
             logger.info("[Session] ✓ Text encoder ready")
@@ -305,67 +307,42 @@ class SessionManager:
             session.accessed_at = time.time()
         return session
 
-    async def create_session_from_pipeline(
+    def _build_external_embeddings(
         self,
-        concepts_data: dict[str, Any],
         concept_map: dict[str, int],
-        prereq_edges: list[dict],
-        max_steps: int = 9999,
-        precomputed_embeddings: list[list[float]] | None = None,
-        job_id: str | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
-        history_source_doc: dict[str, Any] | None = None,
-    ) -> SessionState:
-        """Create a learning session from PDF pipeline output."""
-        session_id = session_id or str(uuid.uuid4())[:8]
-
-        prereq_graph = self._build_prereq_graph_from_edges(prereq_edges, concept_map)
-
-        names, defs, theories = self._build_concept_info_from_data(concepts_data, concept_map)
-        id_to_concept = self._build_id_to_concept_map(concept_map)
-
-        # Build concept embeddings for SAINT
-        n_pipeline = len(concept_map)
+        id_to_concept: dict[int, str],
+        names: dict[str, str],
+        defs: dict[str, str],
+        precomputed_embeddings: list[list[float]] | None,
+    ):
+        n = len(concept_map)
         if precomputed_embeddings is not None:
             logger.info(f"[Session] Using precomputed embeddings ({len(precomputed_embeddings)} concepts)")
             raw_emb = np.array(precomputed_embeddings, dtype=np.float32)
         else:
-            ordered_names = []
-            for idx in range(n_pipeline):
+            ordered_texts = []
+            for idx in range(n):
                 cid = id_to_concept.get(idx, str(idx))
                 name = names.get(cid, cid)
                 definition = defs.get(cid, "")
-                text = f"{name}: {definition}" if definition else name
-                ordered_names.append(text)
-            logger.info(f"[Session] Encoding {n_pipeline} new concepts...")
-            raw_emb = self._encode_concepts(ordered_names)
+                ordered_texts.append(f"{name}: {definition}" if definition else name)
+            logger.info(f"[Session] Encoding {n} new concepts...")
+            raw_emb = self._encode_concepts(ordered_texts)
             logger.info(f"[Session] ✓ Embeddings shape: {raw_emb.shape}")
 
         emb_dim = raw_emb.shape[1] if len(raw_emb.shape) > 1 else 0
-        if emb_dim > 0:
-            padded = np.zeros((n_pipeline + 1, emb_dim), dtype=np.float32)
-            padded[1:n_pipeline + 1] = raw_emb
-            external_embeddings = torch.from_numpy(padded).to(self._device)
-        else:
-            external_embeddings = None
+        if emb_dim == 0:
+            return None
+        padded = np.zeros((n + 1, emb_dim), dtype=np.float32)
+        padded[1 : n + 1] = raw_emb
+        return torch.from_numpy(padded).to(self._device)
 
-        env = AdaptiveLearningEnv(
-            saint_model=self._saint_model,
-            concept_map=concept_map,
-            prereq_graph=prereq_graph,
-            max_steps=max_steps,
-            mastery_threshold=self._mastery_threshold,
-            deterministic_train=False,
-            device=str(self._device),
-            external_embeddings=external_embeddings,
-        )
-        obs, _info = env.reset(seed=42)
-
-        # Load saved subject progress from MongoDB
-        prev_history = []
-        total_correct = 0
-        total_answered = 0
+    async def _load_session_history(
+        self,
+        job_id: str | None,
+        user_id: str | None,
+        history_source_doc: dict[str, Any] | None,
+    ) -> tuple[list[dict], int, int]:
         if history_source_doc:
             prev_history = history_source_doc.get("exercise_history") or []
             total_correct = history_source_doc.get("total_correct", 0)
@@ -373,49 +350,29 @@ class SessionManager:
             logger.info(
                 f"[Session] Rehydrating session from provided subject progress with {len(prev_history)} exercises"
             )
-        elif job_id:
-            try:
-                subject_progress = await mongo_store.load_subject_progress_for_job(job_id, user_id=user_id)
-                if subject_progress and subject_progress.get("exercise_history"):
-                    prev_history = subject_progress["exercise_history"]
-                    total_correct = subject_progress.get("total_correct", 0)
-                    total_answered = subject_progress.get("total_answered", 0)
-                    logger.info(
-                        f"[Session] Found saved subject progress with {len(prev_history)} exercises for job {job_id}"
-                    )
-                else:
-                    logger.info(f"[Session] No saved subject progress for job {job_id}, starting fresh")
-            except Exception as e:
-                logger.warning(f"[Session] Error loading saved subject progress: {e}, starting fresh")
+            return prev_history, total_correct, total_answered
 
-        # Inject history into environment
-        if prev_history:
-            concept_indices = [ex["concept_idx"] for ex in prev_history]
-            bloom_levels = [ex["bloom_level"] for ex in prev_history]
-            responses = [1 if ex.get("is_correct") else 0 for ex in prev_history]
-            env.inject_history(concept_indices, bloom_levels, responses)
-            obs = env._build_obs()
+        if not job_id:
+            return [], 0, 0
 
-        session = SessionState(
-            session_id=session_id,
-            user_id=user_id,
-            env=env,
-            q_net=self._q_net,
-            device=self._device,
-            concept_map=concept_map,
-            concept_names=names,
-            concept_definitions=defs,
-            prereq_graph=prereq_graph,
-            current_obs=obs,
-            total_correct=total_correct,
-            total_answered=total_answered,
-            job_id=job_id,
-            created_at=(history_source_doc or {}).get("created_at", time.time()),
-            status=(history_source_doc or {}).get("status", "active"),
-            concept_theories=theories,
-        )
+        try:
+            subject_progress = await mongo_store.load_subject_progress_for_job(job_id, user_id=user_id)
+        except Exception as e:
+            logger.warning(f"[Session] Error loading saved subject progress: {e}, starting fresh")
+            return [], 0, 0
 
-        # Restore exercise history records
+        if subject_progress and subject_progress.get("exercise_history"):
+            prev_history = subject_progress["exercise_history"]
+            logger.info(
+                f"[Session] Found saved subject progress with {len(prev_history)} exercises for job {job_id}"
+            )
+            return prev_history, subject_progress.get("total_correct", 0), subject_progress.get("total_answered", 0)
+
+        logger.info(f"[Session] No saved subject progress for job {job_id}, starting fresh")
+        return [], 0, 0
+
+    @staticmethod
+    def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
         for ex in prev_history:
             session.exercise_history.append(ExerciseRecord(
                 exercise_id=ex.get("exercise_id", ""),
@@ -441,6 +398,73 @@ class SessionManager:
                 is_correct=ex.get("is_correct"),
                 timestamp=ex.get("timestamp", 0),
             ))
+
+    async def create_session_from_pipeline(
+        self,
+        concepts_data: dict[str, Any],
+        concept_map: dict[str, int],
+        prereq_edges: list[dict],
+        max_steps: int = 9999,
+        precomputed_embeddings: list[list[float]] | None = None,
+        job_id: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        history_source_doc: dict[str, Any] | None = None,
+    ) -> "SessionState":
+        """Create a learning session from PDF pipeline output."""
+        session_id = session_id or str(uuid.uuid4())[:8]
+
+        prereq_graph = self._build_prereq_graph_from_edges(prereq_edges, concept_map)
+        names, defs, theories = self._build_concept_info_from_data(concepts_data, concept_map)
+        id_to_concept = self._build_id_to_concept_map(concept_map)
+
+        external_embeddings = self._build_external_embeddings(
+            concept_map, id_to_concept, names, defs, precomputed_embeddings
+        )
+
+        env = AdaptiveLearningEnv(
+            saint_model=self._saint_model,
+            concept_map=concept_map,
+            prereq_graph=prereq_graph,
+            max_steps=max_steps,
+            mastery_threshold=self._mastery_threshold,
+            deterministic_train=False,
+            device=str(self._device),
+            external_embeddings=external_embeddings,
+        )
+        obs, _info = env.reset(seed=42)
+
+        prev_history, total_correct, total_answered = await self._load_session_history(
+            job_id, user_id, history_source_doc
+        )
+
+        if prev_history:
+            env.inject_history(
+                [ex["concept_idx"] for ex in prev_history],
+                [ex["bloom_level"] for ex in prev_history],
+                [1 if ex.get("is_correct") else 0 for ex in prev_history],
+            )
+            obs = env._build_obs()
+
+        session = SessionState(
+            session_id=session_id,
+            user_id=user_id,
+            env=env,
+            q_net=self._q_net,
+            device=self._device,
+            concept_map=concept_map,
+            concept_names=names,
+            concept_definitions=defs,
+            prereq_graph=prereq_graph,
+            current_obs=obs,
+            total_correct=total_correct,
+            total_answered=total_answered,
+            job_id=job_id,
+            created_at=(history_source_doc or {}).get("created_at", time.time()),
+            status=(history_source_doc or {}).get("status", "active"),
+            concept_theories=theories,
+        )
+        self._restore_exercise_records(session, prev_history)
 
         self._register_session(session)
         if not await self.persist_subject_progress(session):
@@ -499,9 +523,9 @@ class SessionManager:
             )
             return None
 
-        max_steps = int(session_doc.get("max_steps") or 50)
-        if max_steps <= 50:
-            max_steps = 9999
+        max_steps = int(session_doc.get("max_steps") or _MIN_STORED_MAX_STEPS)
+        if max_steps <= _MIN_STORED_MAX_STEPS:
+            max_steps = _DEFAULT_MAX_STEPS
 
         try:
             recovered = await self.create_session_from_pipeline(
@@ -518,12 +542,11 @@ class SessionManager:
             logger.info(
                 f"[Session] Recovered session={session_id} for user={user_id} from Mongo"
             )
-            return recovered
         except Exception as exc:
-            logger.warning(
-                f"[Session] Failed recovering session={session_id}: {exc}"
-            )
+            logger.warning(f"[Session] Failed recovering session={session_id}: {exc}")
             return None
+        else:
+            return recovered
 
     # ── Query Methods ───────────────────────────────────────
 
@@ -559,7 +582,7 @@ class SessionManager:
         }
 
     @staticmethod
-    def _resolve_concept_status(mastery: float, visited: bool, prereq_ok: bool) -> str:
+    def _resolve_concept_status(mastery: float, *, visited: bool, prereq_ok: bool) -> str:
         """Status priority: prerequisite lock > mastered > in-progress > available."""
         if not prereq_ok:
             return "locked"
@@ -585,7 +608,7 @@ class SessionManager:
             mastery = float(concept_mastery[idx])
             visited = session.env.is_concept_visited(idx)
             status = self._resolve_concept_status(
-                mastery=mastery,
+                mastery,
                 visited=visited,
                 prereq_ok=bool(prereq_ok_mask[idx]),
             )
@@ -608,7 +631,7 @@ class SessionManager:
         return {"nodes": nodes, "edges": edges}
 
     def get_mastery_matrix(self, session_id: str) -> dict[str, Any] | None:
-        """Get full mastery matrix (concepts × bloom levels)."""
+        """Get full mastery matrix (concepts x bloom levels)."""
         session = self.get_session(session_id)
         if not session:
             return None

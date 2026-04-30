@@ -203,8 +203,9 @@ async def get_pipeline_job(job_id: str, user_id: Annotated[str, Depends(get_curr
 @router.delete("/subjects/{job_id}")
 async def delete_subject(
     job_id: str,
-    delete_sessions: bool = True,
     user_id: str = Depends(get_current_user),
+    *,
+    delete_sessions: bool = True,
 ):
     """Delete a subject (pipeline job) and optionally its sessions."""
     result = await mongo_store.delete_pipeline_job_for_user(

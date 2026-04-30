@@ -80,40 +80,40 @@ class PDFLoader(BaseLoader):
             # Parse PDF using Landing AI
             results = parse(file_path)
 
-            if not results:
-                raise ValueError(
-                    f"Landing AI returned no results for: {file_path}")
-
-            result = results[0]
-
-            markdown_content = result.markdown or ""
-
-            chunks = result.chunks if hasattr(result, "chunks") else []
-
-            # Prepare metadata
-            metadata = {
-                "file_name": Path(file_path).name,
-                "file_path": str(Path(file_path).absolute()),
-                "source": "landing_ai",
-                "num_chunks": len(chunks) if chunks else 0,
-            }
-
-            logger.info(
-                "Successfully parsed PDF",
-                file_path=file_path,
-                num_chunks=len(chunks) if chunks else 0,
-                markdown_length=len(markdown_content),
-            )
-
-            return {
-                "text": markdown_content,
-                "markdown": markdown_content,
-                "chunks": chunks,
-                "metadata": metadata,
-                "structured_data": chunks,
-            }
-
         except Exception as e:
             logger.error(
                 f"Error loading PDF with Landing AI: {e!s}", exc_info=True)
             raise
+
+        if not results:
+            raise ValueError(
+                f"Landing AI returned no results for: {file_path}")
+
+        result = results[0]
+
+        markdown_content = result.markdown or ""
+
+        chunks = result.chunks if hasattr(result, "chunks") else []
+
+        # Prepare metadata
+        metadata = {
+            "file_name": Path(file_path).name,
+            "file_path": str(Path(file_path).absolute()),
+            "source": "landing_ai",
+            "num_chunks": len(chunks) if chunks else 0,
+        }
+
+        logger.info(
+            "Successfully parsed PDF",
+            file_path=file_path,
+            num_chunks=len(chunks) if chunks else 0,
+            markdown_length=len(markdown_content),
+        )
+
+        return {
+            "text": markdown_content,
+            "markdown": markdown_content,
+            "chunks": chunks,
+            "metadata": metadata,
+            "structured_data": chunks,
+        }

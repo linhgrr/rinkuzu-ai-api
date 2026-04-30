@@ -72,6 +72,7 @@ async def try_restore_completed_job_from_s3(
     job.status = PipelineStatus.LOADING
     job.current_step = "Kiểm tra cache trên S3..."
     job.progress = 0.02
+    saved = False
     try:
         response = await run_blocking_stage(
             s3_client.get_object,
@@ -87,11 +88,10 @@ async def try_restore_completed_job_from_s3(
         job.progress = 1.0
         job.completed_at = time.time()
         logger.info(f"[Pipeline] Job {job.job_id} loaded from S3 cache {cache_key}")
-
         saved = await save_job(job)
-        if not saved:
-            raise RuntimeError("Failed to persist S3-cached pipeline result to MongoDB")
-        return cache_key
     except Exception:
         logger.debug(f"[Pipeline] Cache miss: {cache_key}")
         return cache_key
+    if not saved:
+        raise RuntimeError("Failed to persist S3-cached pipeline result to MongoDB")
+    return cache_key

@@ -13,10 +13,20 @@ from api.config import get_settings
 from api.repositories.pipeline_repo import PipelineRepository
 from api.repositories.subject_progress_repo import SubjectProgressRepository
 
-_mongo_available = False
-_pipeline_repo: PipelineRepository | None = None
-_subject_progress_repo: SubjectProgressRepository | None = None
-_mongo_client: Any | None = None  # motor AsyncIOMotorClient
+try:
+    import motor.motor_asyncio as _motor
+    _MOTOR_AVAILABLE = True
+except ImportError:
+    _motor = None  # type: ignore[assignment]
+    _MOTOR_AVAILABLE = False
+
+# Module-level state stored in a dict to avoid `global` statements.
+_state: dict[str, Any] = {
+    "available": False,
+    "pipeline_repo": None,
+    "subject_progress_repo": None,
+    "client": None,
+}
 
 
 async def init_mongo(mongo_url: str | None = None) -> bool:
@@ -24,8 +34,6 @@ async def init_mongo(mongo_url: str | None = None) -> bool:
 
     Returns True if successful, False otherwise.
     """
-    global _mongo_available, _pipeline_repo, _subject_progress_repo, _mongo_client
-
     if not mongo_url:
         mongo_url = get_settings().mongo_url
 
@@ -33,69 +41,79 @@ async def init_mongo(mongo_url: str | None = None) -> bool:
         logger.warning("[MongoDB] MONGO_URL not set — persistence disabled")
         return False
 
+    if not _MOTOR_AVAILABLE or _motor is None:
+        logger.warning("[MongoDB] motor package not available — persistence disabled")
+        return False
+
     try:
-        import motor.motor_asyncio
-        client = motor.motor_asyncio.AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
+        client = _motor.AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
         await client.admin.command("ping")
         db = client["adaptive_learning"]
-        _mongo_client = client
+        _state["client"] = client
 
-        _pipeline_repo = PipelineRepository(db)
-        _subject_progress_repo = SubjectProgressRepository(db)
+        pipeline_repo = PipelineRepository(db)
+        subject_progress_repo = SubjectProgressRepository(db)
 
-        await _pipeline_repo.ensure_indexes()
-        await _subject_progress_repo.ensure_indexes()
+        await pipeline_repo.ensure_indexes()
+        await subject_progress_repo.ensure_indexes()
 
-        _mongo_available = True
+        _state["pipeline_repo"] = pipeline_repo
+        _state["subject_progress_repo"] = subject_progress_repo
+        _state["available"] = True
         logger.info("[MongoDB] ✓ Connected to adaptive_learning database")
-        return True
     except Exception as e:
         logger.warning(f"[MongoDB] ✗ Could not connect: {e} — persistence disabled")
-        _mongo_available = False
+        _state["available"] = False
         return False
+    else:
+        return True
 
 
 def is_available() -> bool:
-    return _mongo_available
+    return bool(_state["available"])
 
 
 def _get_db():
     """Return the adaptive_learning database if MongoDB is connected, else None."""
-    if _mongo_client is None:
+    client = _state["client"]
+    if client is None:
         return None
-    return _mongo_client["adaptive_learning"]
+    return client["adaptive_learning"]
 
 
 def get_pipeline_repo() -> PipelineRepository | None:
-    return _pipeline_repo
+    return _state["pipeline_repo"]
 
 
 def get_subject_progress_repo() -> SubjectProgressRepository | None:
-    return _subject_progress_repo
+    return _state["subject_progress_repo"]
 
 
 # ── Backward-compatible module-level functions ──────────────
 # Used by content_pipeline.py which imports from this module directly.
 
 async def save_subject_progress(job_id: str, user_id: str, doc: dict[str, Any]) -> bool:
-    if not _subject_progress_repo:
+    repo = _state["subject_progress_repo"]
+    if not repo:
         return False
-    return await _subject_progress_repo.save_snapshot(job_id, user_id, doc)
+    return await repo.save_snapshot(job_id, user_id, doc)
 
 
 async def load_subject_progress_for_user(job_id: str, user_id: str) -> dict[str, Any] | None:
-    if not _subject_progress_repo:
+    repo = _state["subject_progress_repo"]
+    if not repo:
         return None
-    return await _subject_progress_repo.load_for_user(job_id, user_id)
+    return await repo.load_for_user(job_id, user_id)
 
 
 async def load_subject_progress_by_session_for_user(
     session_id: str,
     user_id: str,
 ) -> dict[str, Any] | None:
-    if not _subject_progress_repo:
+    repo = _state["subject_progress_repo"]
+    if not repo:
         return None
-    return await _subject_progress_repo.load_by_session_for_user(session_id, user_id)
+    return await repo.load_by_session_for_user(session_id, user_id)
 
 
 async def load_session_doc_for_user(
@@ -123,39 +141,45 @@ async def find_latest_session_for_job(
 
 
 async def load_subject_progress_map(job_ids: list[str], user_id: str) -> dict[str, dict[str, Any]]:
-    if not _subject_progress_repo:
+    repo = _state["subject_progress_repo"]
+    if not repo:
         return {}
-    return await _subject_progress_repo.load_many_for_user(job_ids, user_id)
+    return await repo.load_many_for_user(job_ids, user_id)
 
 
 async def list_subject_progress(limit: int = 50, user_id: str | None = None) -> list:
-    if not _subject_progress_repo:
+    repo = _state["subject_progress_repo"]
+    if not repo:
         return []
-    return await _subject_progress_repo.list_recent(limit, user_id)
+    return await repo.list_recent(limit, user_id)
 
 
 async def delete_subject_progress_for_user(job_id: str, user_id: str) -> int:
-    if not _subject_progress_repo:
+    repo = _state["subject_progress_repo"]
+    if not repo:
         return 0
-    return await _subject_progress_repo.delete_for_user(job_id, user_id)
+    return await repo.delete_for_user(job_id, user_id)
 
 
 async def save_pipeline_job(job) -> bool:
-    if not _pipeline_repo:
+    repo = _state["pipeline_repo"]
+    if not repo:
         return False
-    return await _pipeline_repo.save(job)
+    return await repo.save(job)
 
 
 async def load_pipeline_job(job_id: str) -> dict[str, Any] | None:
-    if not _pipeline_repo:
+    repo = _state["pipeline_repo"]
+    if not repo:
         return None
-    return await _pipeline_repo.load(job_id)
+    return await repo.load(job_id)
 
 
 async def load_pipeline_job_for_user(job_id: str, user_id: str) -> dict[str, Any] | None:
-    if not _pipeline_repo:
+    repo = _state["pipeline_repo"]
+    if not repo:
         return None
-    return await _pipeline_repo.load_for_user(job_id, user_id)
+    return await repo.load_for_user(job_id, user_id)
 
 
 async def load_pipeline_job_map_for_user(
@@ -163,28 +187,33 @@ async def load_pipeline_job_map_for_user(
     user_id: str,
     projection: dict[str, int] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    if not _pipeline_repo:
+    repo = _state["pipeline_repo"]
+    if not repo:
         return {}
-    return await _pipeline_repo.load_many_for_user(job_ids, user_id, projection=projection)
+    return await repo.load_many_for_user(job_ids, user_id, projection=projection)
 
 
 async def list_pipeline_jobs(limit: int = 20, user_id: str | None = None, status: str | None = None) -> list:
-    if not _pipeline_repo:
+    repo = _state["pipeline_repo"]
+    if not repo:
         return []
-    return await _pipeline_repo.list_recent(limit=limit, user_id=user_id, status=status)
+    return await repo.list_recent(limit=limit, user_id=user_id, status=status)
 
 
-async def delete_pipeline_job(job_id: str, delete_sessions: bool = True) -> dict[str, Any]:
-    if not _pipeline_repo:
+async def delete_pipeline_job(job_id: str, *, delete_sessions: bool = True) -> dict[str, Any]:
+    repo = _state["pipeline_repo"]
+    if not repo:
         return {"deleted_job": 0, "deleted_sessions": 0}
-    return await _pipeline_repo.delete(job_id, delete_sessions)
+    return await repo.delete(job_id, delete_sessions=delete_sessions)
 
 
 async def delete_pipeline_job_for_user(
     job_id: str,
     user_id: str,
+    *,
     delete_sessions: bool = True,
 ) -> dict[str, Any]:
-    if not _pipeline_repo:
+    repo = _state["pipeline_repo"]
+    if not repo:
         return {"deleted_job": 0, "deleted_sessions": 0}
-    return await _pipeline_repo.delete_for_user(job_id, user_id, delete_sessions)
+    return await repo.delete_for_user(job_id, user_id, delete_sessions=delete_sessions)

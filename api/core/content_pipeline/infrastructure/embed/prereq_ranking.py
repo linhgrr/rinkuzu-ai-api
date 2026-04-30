@@ -9,6 +9,8 @@ from api.config import settings
 from api.core.content_pipeline.infrastructure.llm.schemas import Concept
 from api.core.content_pipeline.infrastructure.utils import timeit
 
+_MIN_CONCEPTS_FOR_RANKING = 2
+
 
 @timeit
 def rank_prerequisites(
@@ -37,7 +39,7 @@ def rank_prerequisites(
     concepts_with_emb = [
         c for c in concepts if c.name_embedding is not None and c.definition_embedding is not None]
 
-    if len(concepts_with_emb) < 2:
+    if len(concepts_with_emb) < _MIN_CONCEPTS_FOR_RANKING:
         logger.warning(
             "Not enough concepts with embeddings for prerequisite ranking")
         return []
@@ -91,7 +93,6 @@ def _compute_prerequisite_scores(
         definition_embeds, name_embeds)  # [i, j] = CSR(i→j)
     csr_ba = csr_ab.T  # [i, j] = CSR(j→i)
 
-    # PRS = max(CSR_AB, CSR_BA)
     prs_matrix = np.maximum(csr_ab, csr_ba)
 
     # select pairs above threshold

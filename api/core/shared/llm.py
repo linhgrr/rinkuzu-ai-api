@@ -12,8 +12,10 @@ from loguru import logger
 
 from api.config import get_settings
 
-_shared_llm: ChatOpenAI | None = None
-_structured_llms: dict[str, Any] = {}
+_llm_state: dict[str, Any] = {
+    "shared_llm": None,
+    "structured_llms": {},
+}
 
 
 def _normalize_openai_base_url(url: str) -> str:
@@ -108,36 +110,35 @@ def initialize_shared_llm(
     api_key: str | None = None,
 ) -> ChatOpenAI:
     """Initialize and cache the shared adaptive-learning ChatOpenAI client."""
-    global _shared_llm, _structured_llms
-
-    _shared_llm = get_llm(
+    shared_llm = get_llm(
         temperature=0.3,
         base_url=base_url,
         model=_resolve_shared_llm_model(model),
         api_key=api_key,
     )
-    _structured_llms = {}
+    _llm_state["shared_llm"] = shared_llm
+    _llm_state["structured_llms"] = {}
 
-    logger.info(f"[LLM] Connecting with model={_shared_llm.model_name}")
+    logger.info(f"[LLM] Connecting with model={shared_llm.model_name}")
     logger.info("[LLM] ✓ Shared runtime ready.")
-    return _shared_llm
+    return shared_llm
 
 
 def get_shared_llm() -> ChatOpenAI:
     """Return the cached shared client, lazily initializing if needed."""
-    global _shared_llm
-    if _shared_llm is None:
-        _shared_llm = initialize_shared_llm()
-    return _shared_llm
+    if _llm_state["shared_llm"] is None:
+        _llm_state["shared_llm"] = initialize_shared_llm()
+    return _llm_state["shared_llm"]
 
 
 def get_structured_llm(schema: Any, *, method: str = "json_mode") -> Any:
     """Return a cached structured-output wrapper for the shared client."""
     llm = get_shared_llm()
     cache_key = f"{getattr(schema, '__module__', '')}:{getattr(schema, '__name__', repr(schema))}:{method}"
-    if cache_key not in _structured_llms:
-        _structured_llms[cache_key] = llm.with_structured_output(schema, method=method)
-    return _structured_llms[cache_key]
+    structured_llms = _llm_state["structured_llms"]
+    if cache_key not in structured_llms:
+        structured_llms[cache_key] = llm.with_structured_output(schema, method=method)
+    return structured_llms[cache_key]
 
 
 def extract_llm_text(content: Any) -> str:

@@ -89,27 +89,24 @@ def _postprocess_relation(relation: Relation | None, concept_ids: set[str]) -> R
     return relation
 
 
-def _is_valid_relation(relation: Relation | None, concept_ids: set[str]) -> bool:
+def _is_valid_relation(relation: Relation | None, _concept_ids: set[str]) -> bool:
     """Check if a relation is valid.
 
     Args:
         relation: Relation to check
-        concept_ids: Set of valid concept IDs
+        _concept_ids: Set of valid concept IDs (reserved for future cross-batch filtering)
     Returns:
         True if valid
     """
     if relation is None:
         return False
 
-    if not relation.target_id:
-        return False
-
-    # NOTE: We intentionally do NOT check target_id in concept_ids.
+    # NOTE: We intentionally do NOT check target_id in _concept_ids.
     # Cross-batch relations reference concepts from other batches.
     # The graph builder + content_pipeline will filter invalid targets
     # after ALL batches are merged.
 
-    return True
+    return bool(relation.target_id)
 
 
 def normalize_concept_name(name: str) -> str:

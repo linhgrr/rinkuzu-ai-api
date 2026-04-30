@@ -2,12 +2,18 @@
 agent.py — D3QN action selection with topic coherence
 """
 
-import random
+import secrets
 
 import numpy as np
 import torch
 
 from .models import DuelingQNetwork
+
+# SystemRandom instance used for epsilon-greedy exploration (non-cryptographic).
+_rng = secrets.SystemRandom()
+
+# Number of Bloom's taxonomy levels (used for action-space indexing).
+_N_BLOOMS = 6
 
 
 def select_action(
@@ -24,11 +30,12 @@ def select_action(
         n_concepts: number of concepts. If None, inferred from action_mask.
     """
     if n_concepts is None:
-        n_concepts = len(action_mask) // 6
+        n_concepts = len(action_mask) // _N_BLOOMS
 
-    if random.random() < epsilon:
+    if _rng.random() < epsilon:
         valid = np.where(action_mask)[0]
-        return int(np.random.choice(valid))
+        rng_np = np.random.default_rng()
+        return int(rng_np.choice(valid))
     with torch.no_grad():
         state_t = torch.FloatTensor(state).unsqueeze(0).to(device)
         q_values = q_net(state_t, n_concepts).squeeze(0)

@@ -15,15 +15,15 @@ def serialize_concepts(concepts: list[Any]) -> tuple[dict[str, dict[str, Any]], 
         concept_map[concept_id] = index
         serialized_relations = []
         if hasattr(concept, "relations") and concept.relations:
-            for relation in concept.relations:
-                serialized_relations.append(
-                    {
-                        "type": relation.type,
-                        "target_id": relation.target_id,
-                        "confidence": relation.confidence,
-                        "evidence": relation.evidence,
-                    }
-                )
+            serialized_relations.extend(
+                {
+                    "type": relation.type,
+                    "target_id": relation.target_id,
+                    "confidence": relation.confidence,
+                    "evidence": relation.evidence,
+                }
+                for relation in concept.relations
+            )
 
         concepts_data[concept_id] = {
             "name": concept.name,

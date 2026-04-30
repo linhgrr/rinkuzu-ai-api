@@ -143,11 +143,11 @@ class ConceptChromaStore:
                 subject_id=subject_id
             )
 
-            return added_ids
-
         except Exception as e:
             logger.error(f"Error adding concepts to ChromaDB: {e}")
             raise
+        else:
+            return added_ids
 
     def search_concepts(
         self,
@@ -212,11 +212,11 @@ class ConceptChromaStore:
                 k=k
             )
 
-            return formatted_results
-
         except Exception as e:
             logger.error(f"Error searching concepts: {e}")
             raise
+        else:
+            return formatted_results
 
     def get_concept_by_id(
         self,
@@ -242,10 +242,10 @@ class ConceptChromaStore:
                     "content": results["documents"][0] if results["documents"] else ""
                 }
 
-            return None
-
         except Exception as e:
             logger.error(f"Error retrieving concept {concept_id}: {e}")
+            return None
+        else:
             return None
 
     def delete_by_subject(self, subject_id: str) -> int:
@@ -265,22 +265,17 @@ class ConceptChromaStore:
             results = collection.get(where={"subject_id": subject_id})
 
             if results and results["ids"]:
-                # Delete by IDs
                 collection.delete(ids=results["ids"])
                 deleted_count = len(results["ids"])
-
-                logger.info(
-                    f"Deleted {deleted_count} concepts for subject {subject_id}"
-                )
-
-                return deleted_count
-
-            return 0
+                logger.info(f"Deleted {deleted_count} concepts for subject {subject_id}")
+            else:
+                deleted_count = 0
 
         except Exception as e:
-            logger.error(
-                f"Error deleting concepts for subject {subject_id}: {e}")
+            logger.error(f"Error deleting concepts for subject {subject_id}: {e}")
             raise
+        else:
+            return deleted_count
 
     def get_collection_stats(self) -> dict[str, Any]:
         """
@@ -293,20 +288,18 @@ class ConceptChromaStore:
             collection = self.chroma_client.get_collection(
                 self.collection_name)
             count = collection.count()
-
-            return {
+            stats = {
                 "collection_name": self.collection_name,
                 "total_concepts": count,
                 "persist_directory": self.persist_directory,
-                "embedding_model": self.embedding_client.model_name
+                "embedding_model": self.embedding_client.model_name,
             }
 
         except Exception as e:
             logger.error(f"Error getting collection stats: {e}")
-            return {
-                "collection_name": self.collection_name,
-                "error": str(e)
-            }
+            return {"collection_name": self.collection_name, "error": str(e)}
+        else:
+            return stats
 
     def reset_collection(self):
         """Xóa và tạo lại collection (sử dụng cẩn thận!)."""

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from loguru import logger
 
 from api.config import settings
+from api.core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
+from api.core.content_pipeline.infrastructure.embed.embeddings import compute_embedding_for_concepts
 
 __all__ = [
     "EmbeddingClient",
@@ -15,26 +15,13 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
-    if name == "EmbeddingClient":
-        from .embedding_client import EmbeddingClient
-
-        return EmbeddingClient
-    if name == "compute_embedding_for_concepts":
-        from .embeddings import compute_embedding_for_concepts
-
-        return compute_embedding_for_concepts
-    raise AttributeError(name)
-
-
 def compute_embeddings_batch(
     texts: list[str],
     batch_size: int = 50,
+    *,
     truncate_long_texts: bool = True,
     max_length: int = 256,
 ) -> list[list[float]]:
-    from .embedding_client import EmbeddingClient
-
     client = EmbeddingClient(
         model_name=settings.embedding_model,
         batch_size=batch_size,

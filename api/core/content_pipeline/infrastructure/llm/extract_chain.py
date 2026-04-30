@@ -87,7 +87,7 @@ class ExtractionChain:
         chunks: list[str],
         subject_id: str,
         batch_size: int = 5,
-        max_workers: int = 8,
+        _max_workers: int = 8,
         max_previous_concepts: int = 20,
     ) -> list[ConceptExtraction]:
         """
@@ -181,15 +181,16 @@ class ExtractionChain:
             for attempt in range(max_retries):
                 try:
                     result = self.extraction_chain.invoke(invoke_args)
-
-                    if not isinstance(result, ConceptExtraction):
-                        raise ValueError(f"LLM API did not return a ConceptExtraction instance. Got: {type(result)}")
-
-                    logger.info(f"Batch {batch_idx} extraction success: {len(result.concepts)} concepts")
-                    return result
                 except Exception as e:
                     last_error = e
                     logger.warning(f"Batch {batch_idx} (Attempt {attempt+1}/{max_retries}) failed: {e}")
+                    continue
+                if not isinstance(result, ConceptExtraction):
+                    last_error = TypeError(f"LLM API did not return a ConceptExtraction instance. Got: {type(result)}")
+                    logger.warning(f"Batch {batch_idx} (Attempt {attempt+1}/{max_retries}) failed: {last_error}")
+                    continue
+                logger.info(f"Batch {batch_idx} extraction success: {len(result.concepts)} concepts")
+                return result
 
             logger.error(f"Batch {batch_idx} exhausted max_retries ({max_retries}). Last error: {last_error}")
             return ConceptExtraction(
@@ -241,8 +242,7 @@ class ExtractionChain:
                 )
                 future_to_index[future] = idx
 
-            for future in future_to_index:
-                idx = future_to_index[future]
+            for future, idx in future_to_index.items():
                 try:
                     result = future.result()
                     results[idx] = result
@@ -279,20 +279,23 @@ class ExtractionChain:
         for attempt in range(max_retries):
             try:
                 result = self.verification_chain.invoke(invoke_args)
-
-                if not isinstance(result, EvidenceVerification):
-                    raise ValueError(f"LLM API did not return EvidenceVerification instance. Got: {type(result)}")
-
-                logger.info(
-                    f"Verified {pair_label}: {concept_a} <-> {concept_b} "
-                    f"(has_relation={result.has_relation})"
-                )
-                return result
             except Exception as e:
                 last_error = e
                 logger.warning(
                     f"{pair_label} attempt {attempt+1}/{max_retries} failed: {str(e)[:120]}"
                 )
+                continue
+            if not isinstance(result, EvidenceVerification):
+                last_error = TypeError(f"LLM API did not return EvidenceVerification instance. Got: {type(result)}")
+                logger.warning(
+                    f"{pair_label} attempt {attempt+1}/{max_retries} failed: {last_error}"
+                )
+                continue
+            logger.info(
+                f"Verified {pair_label}: {concept_a} <-> {concept_b} "
+                f"(has_relation={result.has_relation})"
+            )
+            return result
 
         logger.error(
             f"{pair_label} ('{concept_a}' <-> '{concept_b}'): "

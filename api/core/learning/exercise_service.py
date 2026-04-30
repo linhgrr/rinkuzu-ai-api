@@ -18,28 +18,20 @@ import numpy as np
 from api.config import settings
 from api.exceptions import ExerciseGenerationError
 
+from .agent import decode_action, select_action
 from .answer_eval import evaluate_answer, normalize_text, serialize_answer_for_history
 from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from .exercise_types import ExerciseType
 from .history_formatter import format_exercise_history
+from .session import ExerciseRecord
 
 BLOOM_LABELS = {
     1: "Remember", 2: "Understand", 3: "Apply",
     4: "Analyze", 5: "Evaluate", 6: "Create",
 }
 
-
-def _select_action(*args, **kwargs):
-    """Lazy-load RL inference helpers so non-ML tests can import this module."""
-    from .agent import select_action
-
-    return select_action(*args, **kwargs)
-
-
-def _decode_action(*args, **kwargs):
-    from .agent import decode_action
-
-    return decode_action(*args, **kwargs)
+# Threshold below which max_steps is considered unset (likely a default placeholder)
+_MAX_STEPS_UNSET_THRESHOLD = 50
 
 
 class ExerciseService:
@@ -59,6 +51,7 @@ class ExerciseService:
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)
         self._exercise_inflight: dict[tuple[str, int, int, int, str], asyncio.Future] = {}
         self._theory_inflight: dict[tuple[str, str], asyncio.Future] = {}
+        self._scheduled_tasks: set[asyncio.Task] = set()
 
     @staticmethod
     def _build_id_to_concept_map(session) -> dict[int, str]:
@@ -137,7 +130,7 @@ class ExerciseService:
             ensure_ascii=False,
             separators=(",", ":"),
         )
-        return hashlib.sha1(serialized.encode("utf-8")).hexdigest()[:12]
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
 
     async def _run_llm_call(self, func, *args, timeout_sec: float | None = None):
         loop = asyncio.get_running_loop()
@@ -218,10 +211,10 @@ class ExerciseService:
             return None
 
         async with session._lock:
-            if session.env.max_steps <= 50:
+            if session.env.max_steps <= _MAX_STEPS_UNSET_THRESHOLD:
                 session.env.max_steps = 9999
             env = session.env
-            if env.max_steps <= 50:
+            if env.max_steps <= _MAX_STEPS_UNSET_THRESHOLD:
                 env.max_steps = 9999
             env_stats = env.get_session_stats()
             current_step = env_stats.get("step", 0)
@@ -233,11 +226,11 @@ class ExerciseService:
                 logger.info("[Exercise] 🎯 STEP 0 — Forcing warm-up: concept_idx=0, bloom=1")
             else:
                 masks = env.action_masks()
-                action_id = _select_action(
+                action_id = select_action(
                     session.q_net, session.current_obs, masks, session.device,
                     n_concepts=env.n_concepts,
                 )
-                concept_idx, bloom_level = _decode_action(action_id)
+                concept_idx, bloom_level = decode_action(action_id)
                 logger.info(f"[Exercise] 🤖 D3QN selected action_id={action_id}")
 
             id_to_concept = self._build_id_to_concept_map(session)
@@ -293,8 +286,6 @@ class ExerciseService:
 
     async def generate_exercise(self, session, background_tasks=None):
         """Generate exercise from prefetch cache or LLM."""
-        from .session import ExerciseRecord
-
         if not hasattr(session, "_pending_concept_idx"):
             return None
 
@@ -376,7 +367,9 @@ class ExerciseService:
             if background_tasks:
                 background_tasks.add_task(self._prefetch_next_exercises, session)
             else:
-                asyncio.create_task(self._prefetch_next_exercises(session))
+                prefetch_task = asyncio.create_task(self._prefetch_next_exercises(session))
+                self._scheduled_tasks.add(prefetch_task)
+                prefetch_task.add_done_callback(self._scheduled_tasks.discard)
         except Exception as e:
             logger.warning(f"[Prefetch] Failed to schedule: {e}")
 
@@ -397,7 +390,7 @@ class ExerciseService:
             short_answer_grader=evaluate_short_answer,
         )
 
-    async def submit_answer(self, session, answer: dict[str, Any], background_tasks=None) -> dict[str, Any] | None:
+    async def submit_answer(self, session, answer: dict[str, Any], _background_tasks=None) -> dict[str, Any] | None:
         """Process user's answer, update environment, return result."""
 
         async with session._lock:
@@ -484,11 +477,11 @@ class ExerciseService:
                 bloom_level = 1
             else:
                 masks = session.env.action_masks()
-                action_id = _select_action(
+                action_id = select_action(
                     session.q_net, session.current_obs, masks, session.device,
                     n_concepts=session.env.n_concepts,
                 )
-                concept_idx, bloom_level = _decode_action(action_id)
+                concept_idx, bloom_level = decode_action(action_id)
 
             id_to_concept = self._build_id_to_concept_map(session)
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
@@ -527,7 +520,7 @@ class ExerciseService:
         action_id = session._pending_action
         id_to_concept = self._build_id_to_concept_map(session)
 
-        async def _prefetch_branch(is_correct: bool, branch: str):
+        async def _prefetch_branch(*, is_correct: bool, branch: str):
             try:
                 env_snap = session.env.create_snapshot()
                 obs, _, terminated, _, _ = env_snap.step(action_id, human_correct=is_correct)
@@ -536,11 +529,11 @@ class ExerciseService:
                     return
 
                 masks = env_snap.action_masks()
-                next_action = _select_action(
+                next_action = select_action(
                     session.q_net, obs, masks, session.device,
                     n_concepts=env_snap.n_concepts,
                 )
-                next_concept_idx, next_bloom = _decode_action(next_action)
+                next_concept_idx, next_bloom = decode_action(next_action)
 
                 next_concept_id = id_to_concept.get(next_concept_idx, str(next_concept_idx))
                 next_concept_name = session.concept_names.get(next_concept_id, next_concept_id)
@@ -576,8 +569,8 @@ class ExerciseService:
                 logger.error(f"[Prefetch] ✗ {branch} failed: {e}")
 
         await asyncio.gather(
-            _prefetch_branch(True, "correct"),
-            _prefetch_branch(False, "incorrect"),
+            _prefetch_branch(is_correct=True, branch="correct"),
+            _prefetch_branch(is_correct=False, branch="incorrect"),
         )
 
     def close(self) -> None:

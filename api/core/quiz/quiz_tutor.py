@@ -28,6 +28,9 @@ from .tutor_chat import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_MIN_EXPLANATION_LENGTH = 20
+_HTTP_ERROR_STATUS_THRESHOLD = 400
+
 
 def _resolve_quiz_tutor_model() -> str:
     settings = get_settings()
@@ -76,12 +79,11 @@ def _build_messages(
             "image_url": {"url": question_image},
         })
 
-    for option_image in option_images or []:
-        if option_image:
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": option_image},
-            })
+    user_content.extend(
+        {"type": "image_url", "image_url": {"url": img}}
+        for img in (option_images or [])
+        if img
+    )
 
     return [
         {
@@ -159,21 +161,7 @@ def generate_quiz_tutor_response(
                     json=payload,
                 )
                 response.raise_for_status()
-
                 explanation = _extract_completion_text(response.json())
-                if len(explanation) < 20:
-                    raise ValueError("Chat explanation too short")
-
-                logger.info("[LLM] ✓ Quiz tutor chat generated")
-                return {
-                    "success": True,
-                    "data": {
-                        "explanation": explanation,
-                        "structured": None,
-                        "timestamp": started_at,
-                        "turnCount": (len(chat_history or []) // 2) + 1,
-                    },
-                }
             except Exception as exc:
                 logger.warning(
                     f"[LLM] ⚠ quiz tutor attempt {attempt}/{max_retries} failed "
@@ -181,6 +169,25 @@ def generate_quiz_tutor_response(
                 )
                 if attempt < max_retries:
                     sleep_before_retry(attempt, backoff_sec)
+                continue
+            if len(explanation) < _MIN_EXPLANATION_LENGTH:
+                logger.warning(
+                    f"[LLM] ⚠ quiz tutor attempt {attempt}/{max_retries} failed "
+                    f"(will_retry={attempt < max_retries}): explanation too short"
+                )
+                if attempt < max_retries:
+                    sleep_before_retry(attempt, backoff_sec)
+                continue
+            logger.info("[LLM] ✓ Quiz tutor chat generated")
+            return {
+                "success": True,
+                "data": {
+                    "explanation": explanation,
+                    "structured": None,
+                    "timestamp": started_at,
+                    "turnCount": (len(chat_history or []) // 2) + 1,
+                },
+            }
 
     raise RuntimeError("Quiz tutor service is temporarily unavailable")
 
@@ -221,7 +228,7 @@ async def create_quiz_tutor_stream(
     )
     response = await client.send(request, stream=True)
 
-    if response.status_code >= 400:
+    if response.status_code >= _HTTP_ERROR_STATUS_THRESHOLD:
         error_body = (await response.aread()).decode("utf-8", errors="replace")
         await response.aclose()
         await client.aclose()

@@ -23,6 +23,9 @@ from .registry import get_prompt_spec
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+_HIGH_BLOOM_THRESHOLD = 4
+_MIN_DEFINITION_LENGTH = 20
+
 
 class PromptBuilder:
     """Compose exercise generation prompts as structured message lists."""
@@ -71,7 +74,7 @@ class PromptBuilder:
             shots.append(primary)
 
         # Append high-bloom example when bloom >= 4
-        if self.bloom_level >= 4:
+        if self.bloom_level >= _HIGH_BLOOM_THRESHOLD:
             high_bloom = FEW_SHOT_HIGH_BLOOM.get(self.exercise_type)
             if high_bloom:
                 shots.append(high_bloom)
@@ -125,7 +128,7 @@ class PromptBuilder:
         )
 
         # --- Empty definition guard ---
-        if len(self.concept_definition.strip()) < 20:
+        if len(self.concept_definition.strip()) < _MIN_DEFINITION_LENGTH:
             sections.append(
                 "<warning>\n" + EMPTY_DEFINITION_GUARD + "</warning>"
             )

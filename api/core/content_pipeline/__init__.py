@@ -7,6 +7,14 @@ into domain/application/infrastructure/interfaces layers.
 """
 
 from .domain.jobs import PipelineJob, PipelineStatus
+from .infrastructure.runtime import (
+    CONTENT_PROCESSOR_AVAILABLE,
+    CONTENT_PROCESSOR_ERROR,
+    CONTENT_PROCESSOR_SRC,
+    calculate_file_hash,
+    get_s3_client,
+)
+from .orchestrator import process_pdf
 
 __all__ = [
     "CONTENT_PROCESSOR_AVAILABLE",
@@ -18,18 +26,3 @@ __all__ = [
     "get_s3_client",
     "process_pdf",
 ]
-
-
-def __getattr__(name: str):
-    if name in {
-        "CONTENT_PROCESSOR_AVAILABLE",
-        "CONTENT_PROCESSOR_ERROR",
-        "CONTENT_PROCESSOR_SRC",
-        "calculate_file_hash",
-        "get_s3_client",
-        "process_pdf",
-    }:
-        from . import orchestrator
-
-        return getattr(orchestrator, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

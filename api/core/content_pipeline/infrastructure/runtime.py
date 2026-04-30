@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import functools
 import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -12,6 +13,19 @@ from botocore.client import Config
 from loguru import logger
 
 from api.config import get_settings
+from api.core.content_pipeline.application.relation_engine import DefaultRelationEngine
+from api.core.learning.exercise_gen import generate_theory
+
+from .embed.embedding_client import EmbeddingClient
+from .embed.embeddings import compute_embedding_for_concepts
+from .graph.builder import KnowledgeGraphBuilder
+from .graph.cycle_removal import make_dag_with_llm
+from .graph.reduction import apply_transitive_reduction
+from .llm import get_llm
+from .llm.extract_chain import ExtractionChain
+from .llm.postprocess import postprocess_concepts
+from .merge.name_merge import merge_by_name
+from .processors.factory import FileLoaderFactory
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -20,6 +34,20 @@ if TYPE_CHECKING:
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CONTENT_PROCESSOR_SRC = str(PROJECT_ROOT)
+
+try:
+    from .embed.prereq_ranking import rank_prerequisites as _rank_prerequisites
+    _PREREQ_RANKING_AVAILABLE = True
+except ModuleNotFoundError:
+    _PREREQ_RANKING_AVAILABLE = False
+    _rank_prerequisites = None
+
+try:
+    from sentence_transformers import SentenceTransformer as _SentenceTransformer
+    _SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    _SENTENCE_TRANSFORMERS_AVAILABLE = False
+    _SentenceTransformer = None
 
 
 @dataclass(frozen=True)
@@ -42,9 +70,7 @@ class ContentProcessorBindings:
 
 
 def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str):
-    """Import theory generation lazily to avoid runtime circular imports."""
-    from api.core.learning.exercise_gen import generate_theory
-
+    """Delegate theory generation to exercise_gen module."""
     return generate_theory(concept_name, concept_definition)
 
 
@@ -64,69 +90,62 @@ def get_s3_client():
 
 def calculate_file_hash(file_path: str) -> str:
     hasher = hashlib.sha256()
-    with open(file_path, "rb") as file_obj:
+    with Path(file_path).open("rb") as file_obj:
         while chunk := file_obj.read(8192):
             hasher.update(chunk)
     return hasher.hexdigest()
 
 
-def _build_content_processor_bindings() -> ContentProcessorBindings:
-    from api.core.content_pipeline.application.relation_engine import DefaultRelationEngine
+def _get_embedding_client_cls():
+    return EmbeddingClient
 
-    from .llm import get_llm
-    from .llm.extract_chain import ExtractionChain
-    from .llm.postprocess import postprocess_concepts
-    from .processors.factory import FileLoaderFactory
 
-    def _get_embedding_client_cls():
-        from .embed.embedding_client import EmbeddingClient
+def _compute_embedding_for_concepts(concepts, embedding_model):
+    return compute_embedding_for_concepts(concepts, embedding_model)
 
-        return EmbeddingClient
 
-    def _compute_embedding_for_concepts(concepts, embedding_model):
-        from .embed.embeddings import compute_embedding_for_concepts
+def _build_relation_engine(*, extraction_chain):
+    if not _PREREQ_RANKING_AVAILABLE:
+        def rank_prerequisites_stub(*_args, **_kwargs):
+            raise ModuleNotFoundError(
+                "Optional embedding dependencies are required for prerequisite ranking"
+            )
+        rank_fn = rank_prerequisites_stub
+    else:
+        rank_fn = _rank_prerequisites
 
-        return compute_embedding_for_concepts(concepts, embedding_model)
+    return DefaultRelationEngine(
+        rank_prerequisites=rank_fn,
+        verify_relations_batch=extraction_chain.verify_relations_batch,
+    )
 
-    def _build_relation_engine(*, extraction_chain):
-        try:
-            from .embed.prereq_ranking import rank_prerequisites
-        except ModuleNotFoundError:
-            def rank_prerequisites(*_args, **_kwargs):
-                raise ModuleNotFoundError(
-                    "Optional embedding dependencies are required for prerequisite ranking"
-                ) from exc
 
-        return DefaultRelationEngine(
-            rank_prerequisites=rank_prerequisites,
-            verify_relations_batch=extraction_chain.verify_relations_batch,
+def _merge_by_name(concepts):
+    return merge_by_name(concepts)
+
+
+def _knowledge_graph_builder_factory(subject_id: str):
+    return KnowledgeGraphBuilder(subject_id=subject_id)
+
+
+def _make_dag_with_llm(graph):
+    return make_dag_with_llm(graph)
+
+
+def _apply_transitive_reduction(graph):
+    return apply_transitive_reduction(graph)
+
+
+def _build_saint_text_model():
+    # sentence_transformers is an optional heavy dependency checked at module load.
+    if not _SENTENCE_TRANSFORMERS_AVAILABLE or _SentenceTransformer is None:
+        raise ImportError(
+            "sentence-transformers is required for SAINT text model"
         )
+    return _SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
 
-    def _merge_by_name(concepts):
-        from .merge.name_merge import merge_by_name
 
-        return merge_by_name(concepts)
-
-    def _knowledge_graph_builder_factory(subject_id: str):
-        from .graph.builder import KnowledgeGraphBuilder
-
-        return KnowledgeGraphBuilder(subject_id=subject_id)
-
-    def _make_dag_with_llm(graph):
-        from .graph.cycle_removal import make_dag_with_llm
-
-        return make_dag_with_llm(graph)
-
-    def _apply_transitive_reduction(graph):
-        from .graph.reduction import apply_transitive_reduction
-
-        return apply_transitive_reduction(graph)
-
-    def _build_saint_text_model():
-        from sentence_transformers import SentenceTransformer
-
-        return SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
-
+def _build_content_processor_bindings() -> ContentProcessorBindings:
     return ContentProcessorBindings(
         file_loader_factory=FileLoaderFactory,
         extraction_chain_cls=ExtractionChain,
@@ -144,35 +163,26 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
     )
 
 
-_content_processor_bindings: ContentProcessorBindings | None = None
-_content_processor_llm_factory = None
-
-
+@functools.lru_cache(maxsize=1)
 def get_content_processor_bindings() -> ContentProcessorBindings:
     """Load and cache the imported collaborators for the content pipeline."""
-    global _content_processor_bindings
-    if _content_processor_bindings is None:
-        _content_processor_bindings = _build_content_processor_bindings()
-    return _content_processor_bindings
+    return _build_content_processor_bindings()
 
 
+@functools.lru_cache(maxsize=1)
 def get_content_processor_llm_factory():
     """Load and cache the content pipeline LLM factory."""
-    global _content_processor_llm_factory
-    if _content_processor_llm_factory is None:
-        from .llm import get_llm
-
-        _content_processor_llm_factory = get_llm
-    return _content_processor_llm_factory
+    return get_llm
 
 
 def try_import_content_processor() -> tuple[bool, str | None]:
     try:
         _build_content_processor_bindings()
-        return True, None
     except Exception as exc:
         logger.warning(f"Content pipeline modules not available: {exc}")
         return False, str(exc)
+    else:
+        return True, None
 
 
 _cp_result = try_import_content_processor()

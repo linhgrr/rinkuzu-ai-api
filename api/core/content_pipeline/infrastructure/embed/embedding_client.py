@@ -21,6 +21,7 @@ class EmbeddingClient(Embeddings):
     def __init__(
         self,
         model_name: str | None = None,
+        *,
         use_vi_tokenizer: bool | None = None,
         batch_size: int | None = None,
     ):

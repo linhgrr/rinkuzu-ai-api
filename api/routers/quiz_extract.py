@@ -186,114 +186,101 @@ async def extract_quiz(
     s3_client = get_s3_client()
     settings = get_settings()
 
+    _validate_quiz_extract_dependencies(settings, s3_client)
+
+    normalized_key = s3_key.strip().lstrip("/")
+    required_prefix = f"uploads/quiz_extract/{user_id}/"
+    if not normalized_key.startswith(required_prefix):
+        logger.warning(
+            "[quiz_extract] validation_failed request_id={} reason=forbidden_s3_key normalized_key={} required_prefix={}",
+            request_id,
+            normalized_key,
+            required_prefix,
+        )
+        raise HTTPException(status_code=403, detail="Forbidden s3_key for current user.")
+
     try:
-        _validate_quiz_extract_dependencies(settings, s3_client)
-
-        normalized_key = s3_key.strip().lstrip("/")
-        required_prefix = f"uploads/quiz_extract/{user_id}/"
-        if not normalized_key.startswith(required_prefix):
-            logger.warning(
-                "[quiz_extract] validation_failed request_id={} reason=forbidden_s3_key normalized_key={} required_prefix={}",
-                request_id,
-                normalized_key,
-                required_prefix,
-            )
-            raise HTTPException(status_code=403, detail="Forbidden s3_key for current user.")
-
-        try:
-            object_size = int(
-                s3_client.head_object(
-                    Bucket=settings.s3_bucket_name,
-                    Key=normalized_key,
-                ).get("ContentLength", 0)
-            )
-        except Exception:
-            logger.exception(
-                "[quiz_extract] s3_head_failed request_id={} key={}",
-                request_id,
-                normalized_key,
-            )
-            raise HTTPException(status_code=400, detail="Unable to inspect PDF from s3_key.")
-
-        logger.info(
-            "[quiz_extract] s3_head_ok request_id={} key={} object_size_bytes={}",
-            request_id,
-            normalized_key,
-            object_size,
+        object_size = int(
+            s3_client.head_object(
+                Bucket=settings.s3_bucket_name,
+                Key=normalized_key,
+            ).get("ContentLength", 0)
         )
-
-        if object_size <= 0:
-            raise HTTPException(status_code=400, detail="Source PDF is empty.")
-        if object_size > MAX_PDF_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail="Source PDF exceeds 50MB limit. Please split the file before upload.",
-            )
-
-        prompt = EXTRACTION_PROMPT.replace(
-            "<<<USER_PROMPT>>>",
-            user_prompt or "No additional constraints.",
-        )
-
-        pdf_url = _build_s3_object_url(
-            settings.s3_endpoint_url,
-            settings.s3_bucket_name,
-            normalized_key,
-        )
-
-        try:
-            questions = await _invoke_pdf_extract_llm(
-                pdf_url=pdf_url,
-                prompt=prompt,
-                model=settings.llm_model,
-                base_url=settings.llm_base_url,
-                api_key=settings.llm_api_key,
-            )
-        except httpx.HTTPStatusError as e:
-            body = e.response.text if hasattr(e, "response") and e.response is not None else str(e)
-            logger.error(
-                "[quiz_extract] llm_http_error request_id={} key={} error_body={}",
-                request_id,
-                normalized_key,
-                body,
-            )
-            raise HTTPException(status_code=502, detail="Quiz extraction request to LLM failed.")
-        except Exception:
-            logger.exception(
-                "[quiz_extract] llm_invoke_error request_id={} key={}",
-                request_id,
-                normalized_key,
-            )
-            raise HTTPException(status_code=502, detail="Quiz extraction failed during LLM invocation.")
-
-        if not questions:
-            raise HTTPException(status_code=502, detail="No quiz questions extracted from PDF.")
-
-        total_duration_ms = int((time.perf_counter() - started_at) * 1000)
-        logger.info(
-            "[quiz_extract] request_success request_id={} key={} questions_count={} duration_ms={}",
-            request_id,
-            normalized_key,
-            len(questions),
-            total_duration_ms,
-        )
-
-        return {
-            "success": True,
-            "data": {
-                "questions": questions,
-                "s3_key": normalized_key,
-                "failed_chunks": 0,
-                "total_chunks": 1,
-            },
-        }
-    except HTTPException:
-        raise
     except Exception:
-        total_duration_ms = int((time.perf_counter() - started_at) * 1000)
         logger.exception(
-            "[quiz_extract] request_failed request_id={} duration_ms={}",
+            "[quiz_extract] s3_head_failed request_id={} key={}",
             request_id,
-            total_duration_ms,
+            normalized_key,
         )
-        raise HTTPException(status_code=500, detail="Quiz extraction internal error")
+        raise HTTPException(status_code=400, detail="Unable to inspect PDF from s3_key.") from None
+
+    logger.info(
+        "[quiz_extract] s3_head_ok request_id={} key={} object_size_bytes={}",
+        request_id,
+        normalized_key,
+        object_size,
+    )
+
+    if object_size <= 0:
+        raise HTTPException(status_code=400, detail="Source PDF is empty.")
+    if object_size > MAX_PDF_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Source PDF exceeds 50MB limit. Please split the file before upload.",
+        )
+
+    prompt = EXTRACTION_PROMPT.replace(
+        "<<<USER_PROMPT>>>",
+        user_prompt or "No additional constraints.",
+    )
+    pdf_url = _build_s3_object_url(
+        settings.s3_endpoint_url,
+        settings.s3_bucket_name,
+        normalized_key,
+    )
+
+    try:
+        questions = await _invoke_pdf_extract_llm(
+            pdf_url=pdf_url,
+            prompt=prompt,
+            model=settings.llm_model,
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+        )
+    except httpx.HTTPStatusError as e:
+        body = e.response.text if hasattr(e, "response") and e.response is not None else str(e)
+        logger.error(
+            "[quiz_extract] llm_http_error request_id={} key={} error_body={}",
+            request_id,
+            normalized_key,
+            body,
+        )
+        raise HTTPException(status_code=502, detail="Quiz extraction request to LLM failed.") from None
+    except Exception:
+        logger.exception(
+            "[quiz_extract] llm_invoke_error request_id={} key={}",
+            request_id,
+            normalized_key,
+        )
+        raise HTTPException(status_code=502, detail="Quiz extraction failed during LLM invocation.") from None
+
+    if not questions:
+        raise HTTPException(status_code=502, detail="No quiz questions extracted from PDF.")
+
+    total_duration_ms = int((time.perf_counter() - started_at) * 1000)
+    logger.info(
+        "[quiz_extract] request_success request_id={} key={} questions_count={} duration_ms={}",
+        request_id,
+        normalized_key,
+        len(questions),
+        total_duration_ms,
+    )
+    return {
+        "success": True,
+        "data": {
+            "questions": questions,
+            "s3_key": normalized_key,
+            "failed_chunks": 0,
+            "total_chunks": 1,
+        },
+    }
