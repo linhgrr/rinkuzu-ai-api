@@ -2,14 +2,18 @@
 main.py — FastAPI app entry point for Adaptive Learning Demo.
 """
 
-from contextlib import asynccontextmanager
 import os
-from pathlib import Path
+import sys
 import time
+from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from .config import get_settings
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
@@ -26,6 +30,7 @@ from .core.learning.session import SessionManager
 from .core.shared import mongo_store
 from .core.shared.llm import initialize_shared_llm
 from .exceptions import register_exception_handlers
+from .middleware.request_context import RequestContextMiddleware
 from .routers import history as history_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
@@ -35,6 +40,23 @@ from .routers import session as session_router
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 _UPLOAD_MAX_AGE_SECS = 86400
+
+
+def _rate_key(request: Request) -> str:
+    """Rate-limit key: prefer x-user-id header, fall back to client IP."""
+    return request.headers.get("x-user-id") or get_remote_address(request)
+
+
+limiter = Limiter(key_func=_rate_key)
+
+
+def _configure_logging() -> None:
+    settings = get_settings()
+    logger.remove()
+    if settings.log_format == "json":
+        logger.add(sys.stdout, serialize=True, level=settings.log_level)
+    else:
+        logger.add(sys.stdout, level=settings.log_level)
 
 
 def _configure_llm_tracing() -> None:
@@ -123,6 +145,8 @@ def _purge_stale_uploads() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: initialize all components, yield, then shut down."""
+    _configure_logging()
+
     logger.info("=" * 60)
     logger.info("  ALSS-LEPC Full Demo — Starting up...")
     logger.info("=" * 60)
@@ -182,7 +206,11 @@ app = FastAPI(
 )
 
 register_exception_handlers(app)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Middleware — outermost first (last added = outermost)
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -199,8 +227,13 @@ app.include_router(quiz_extract_router.router)
 app.include_router(quiz_tutor_router.router)
 
 
-@app.get("/api/health")
-async def health():
+@app.get("/api/live", include_in_schema=False)
+async def liveness():
+    """Kubernetes liveness probe — always 200 while the process is running."""
+    return {"status": "ok"}
+
+
+def _build_readiness_payload() -> tuple[dict, bool]:
     cfg = get_settings()
     models_loaded = getattr(app.state, "session_manager", None) is not None
     models_ready = models_loaded if cfg.load_models else True
@@ -208,8 +241,7 @@ async def health():
     pipeline_service_ready = getattr(app.state, "content_pipeline_service", None) is not None
     content_pipeline_available = bool(getattr(app.state, "content_processor_available", False))
     ready = mongo_available and models_ready and pipeline_service_ready
-
-    return {
+    payload = {
         "status": "ok" if ready else "degraded",
         "ready": ready,
         "mongo_available": mongo_available,
@@ -218,6 +250,29 @@ async def health():
         "content_pipeline_available": content_pipeline_available,
         "content_pipeline_service_ready": pipeline_service_ready,
     }
+    return payload, ready
+
+
+@app.get("/api/ready")
+async def readiness():
+    """Kubernetes readiness probe — 503 until all dependencies are up."""
+    from fastapi.responses import JSONResponse
+
+    payload, ready = _build_readiness_payload()
+    if not ready:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
+
+
+@app.get("/api/health")
+async def health():
+    """Backwards-compat alias for /api/ready."""
+    from fastapi.responses import JSONResponse
+
+    payload, ready = _build_readiness_payload()
+    if not ready:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @app.get("/api/info")

@@ -42,3 +42,26 @@ def test_get_content_pipeline_availability_reads_app_state():
         "src": "/tmp/content-pipeline-runtime",
         "service_initialized": False,
     }
+
+
+def test_get_current_user_requires_service_token_in_non_dev(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="prod", internal_service_token=None),
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        dependencies.get_current_user(x_user_id="user-1", x_service_token=None)
+
+    assert exc_info.value.status_code == 500
+
+
+def test_get_current_user_accepts_valid_service_token(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="prod", internal_service_token="secret"),
+    )
+
+    assert dependencies.get_current_user(x_user_id="user-1", x_service_token="secret") == "user-1"

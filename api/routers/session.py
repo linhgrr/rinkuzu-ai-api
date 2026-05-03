@@ -4,10 +4,11 @@ Session router — Session lifecycle endpoints.
 
 import asyncio
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
+from api.config import get_settings
 from api.core.quiz.tutor_chat import (
     create_tutor_chat_stream,
     generate_tutor_chat_response,
@@ -19,6 +20,7 @@ from api.dependencies import (
     get_session_manager,
     get_session_service,
 )
+from api.main import limiter
 from api.exceptions import ExerciseGenerationError, SessionCompletedError, SessionNotFoundError
 from api.schemas import (
     ExerciseResponse,
@@ -266,13 +268,16 @@ def _resolve_exercise_options(exercise) -> list[str]:
 
 
 @router.post("/{session_id}/chat", response_model=TutorChatResponse)
+@limiter.limit(get_settings().rate_limit_tutor_chat)
 async def chat_about_exercise(
+    request: Request,
     session_id: str,
     req: TutorChatRequest,
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
     chunk_store=Depends(get_chunk_chroma_store),
 ):
+    del request
     session = await _resolve_user_session(manager, session_id, user_id)
     exercise = session.current_exercise or (
         session.exercise_history[-1] if session.exercise_history else None

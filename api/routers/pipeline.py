@@ -6,12 +6,13 @@ from pathlib import Path
 from typing import Annotated
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 import httpx
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel
 
 from api.config import get_settings
+from api.main import limiter
 from api.core.content_pipeline import PipelineStatus
 from api.core.shared import mongo_store
 from api.core.shared.url_fetch import UnsafeURLError, stream_download
@@ -53,7 +54,9 @@ class ProcessDocumentRequest(BaseModel):
 
 
 @router.post("/process")
+@limiter.limit(get_settings().rate_limit_pipeline)
 async def process_document(
+    http_request: Request,
     request: ProcessDocumentRequest,
     user_id: Annotated[str, Depends(get_current_user)],
     availability: Annotated[dict, Depends(get_content_pipeline_availability)],

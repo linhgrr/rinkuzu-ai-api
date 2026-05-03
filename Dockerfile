@@ -1,44 +1,50 @@
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim
+# ── Stage 1: builder ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    git \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install requirements globally as root
+WORKDIR /build
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --prefix=/install --no-warn-script-location -r requirements.txt
 
-# Pre-cache models during build (no network needed at runtime)
-ENV HF_HOME=/app/model_cache
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 1000 user
+
+COPY --from=builder /install /usr/local
+
+USER user
+
+ENV HF_HOME=/home/user/.cache/huggingface \
+    TRANSFORMERS_CACHE=/home/user/.cache/huggingface \
+    PYTHONPATH=/home/user/app
+
+WORKDIR /home/user/app
+COPY --chown=user:user . .
+
+# Pre-cache models into user-owned cache dir so they're writable at runtime
 RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')" && \
     python3 -c "import underthesea; underthesea.pos_tag('Chào thế giới')"
 
-# Create non-root user AFTER pre-caching with root
-RUN useradd -m -u 1000 user && \
-    chown -R user:user /app
+EXPOSE 8000
 
-USER user
-ENV PATH=/home/user/.local/bin:$PATH
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD curl -fsS http://localhost:8000/api/live || exit 1
 
-WORKDIR /home/user/app
-
-# Copy all project files
-COPY --chown=user . .
-
-# CRITICAL: Hardcoded absolute paths (no shell variable expansion)
-ENV PYTHONPATH=/home/user/app:/home/user/app/api
-ENV HF_HOME=/app/model_cache
-ENV TRANSFORMERS_CACHE=/app/model_cache
-
-EXPOSE 7860
-
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

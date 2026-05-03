@@ -5,21 +5,26 @@ routers/quiz_tutor.py — Quiz ask-AI endpoints backed by shared LLM runtime.
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from api.config import get_settings
 from api.core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
 from api.dependencies import get_current_user
+from api.main import limiter
 from api.schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponse
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 
 
 @router.post("/ask-ai", response_model=QuizTutorResponse)
+@limiter.limit(get_settings().rate_limit_ask_ai)
 async def ask_ai_about_quiz(
+    request: Request,
     req: QuizTutorRequest,
     user_id: Annotated[str, Depends(get_current_user)],
 ):
+    del request
     del user_id
 
     try:

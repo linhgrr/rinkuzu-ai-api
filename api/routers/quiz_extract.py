@@ -6,16 +6,16 @@ import json
 import re
 import time
 from typing import Annotated
-import uuid
 
-from fastapi import APIRouter, Depends, Form, HTTPException
 import httpx
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from loguru import logger
 
 from api.config import get_settings
 from api.core.content_pipeline.infrastructure.runtime import get_s3_client
 from api.core.shared.llm import build_chat_completions_url, extract_llm_text
 from api.dependencies import get_current_user
+from api.main import limiter
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 MAX_PDF_BYTES = 50 * 1024 * 1024
@@ -159,13 +159,15 @@ def _validate_quiz_extract_dependencies(settings, s3_client) -> None:
 
 
 @router.post("/extract")
+@limiter.limit(get_settings().rate_limit_quiz_extract)
 async def extract_quiz(
+    request: Request,
     s3_key: Annotated[str, Form()],
     user_prompt: Annotated[str | None, Form()] = None,
     user_id: str = Depends(get_current_user),
 ):
     """Extract quiz questions from a PDF already uploaded to S3."""
-    request_id = uuid.uuid4().hex[:12]
+    request_id = getattr(request.state, "request_id", None) or "unknown"
     started_at = time.perf_counter()
 
     logger.info(

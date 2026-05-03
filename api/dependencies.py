@@ -13,7 +13,11 @@ def get_current_user(
     x_service_token: str | None = Header(default=None),
 ):
     """Extract user ID from headers."""
-    required_service_token = get_settings().internal_service_token
+    settings = get_settings()
+    required_service_token = settings.internal_service_token
+    if settings.environment != "dev" and not required_service_token:
+        raise HTTPException(status_code=500, detail="Internal service token is not configured")
+
     if required_service_token and x_service_token != required_service_token:
         raise HTTPException(status_code=401, detail="Invalid service token")
 
