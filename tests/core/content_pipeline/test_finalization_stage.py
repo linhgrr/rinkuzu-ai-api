@@ -57,7 +57,7 @@ def test_upload_result_cache_writes_json_payload_when_s3_is_configured():
     assert s3_client.calls[0]["Bucket"] == "bucket-1"
     assert s3_client.calls[0]["Key"] == "cache/job-1.json"
     assert s3_client.calls[0]["ContentType"] == "application/json"
-    assert "\"xin chao\"" in s3_client.calls[0]["Body"]
+    assert '"xin chao"' in s3_client.calls[0]["Body"]
 
 
 def test_persist_terminal_failure_updates_job_and_saves_once():
@@ -113,5 +113,7 @@ def test_classify_terminal_failure_maps_cancelled_jobs_to_terminal_cancelled():
 def test_timeout_policy_defaults_are_positive():
     job_timeout_sec, stage_timeout_sec = resolve_timeout_policy()
 
-    assert job_timeout_sec and job_timeout_sec > 0
-    assert stage_timeout_sec and stage_timeout_sec > 0
+    assert job_timeout_sec is not None
+    assert job_timeout_sec > 0
+    assert stage_timeout_sec is not None
+    assert stage_timeout_sec > 0

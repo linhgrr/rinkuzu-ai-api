@@ -1,20 +1,13 @@
 """Unified content pipeline package.
 
-This package is the landing zone for merging the legacy content pipeline
-service into the main backend. It intentionally preserves the old import
-surface of `api.core.content_pipeline` while allowing internal modules to move
-into domain/application/infrastructure/interfaces layers.
+The public package import stays lightweight. Heavy runtime collaborators
+(LLM/vector stores/S3/ML) are imported lazily by `__getattr__` only when callers
+explicitly ask for them.
 """
 
+from importlib import import_module
+
 from .domain.jobs import PipelineJob, PipelineStatus
-from .infrastructure.runtime import (
-    CONTENT_PROCESSOR_AVAILABLE,
-    CONTENT_PROCESSOR_ERROR,
-    CONTENT_PROCESSOR_SRC,
-    calculate_file_hash,
-    get_s3_client,
-)
-from .orchestrator import process_pdf
 
 __all__ = [
     "CONTENT_PROCESSOR_AVAILABLE",
@@ -26,3 +19,19 @@ __all__ = [
     "get_s3_client",
     "process_pdf",
 ]
+
+
+def __getattr__(name: str):
+    if name in {
+        "CONTENT_PROCESSOR_AVAILABLE",
+        "CONTENT_PROCESSOR_ERROR",
+        "CONTENT_PROCESSOR_SRC",
+        "calculate_file_hash",
+        "get_s3_client",
+    }:
+        runtime = import_module(".infrastructure.runtime", __name__)
+        return getattr(runtime, name)
+    if name == "process_pdf":
+        orchestrator = import_module(".orchestrator", __name__)
+        return orchestrator.process_pdf
+    raise AttributeError(name)

@@ -12,6 +12,7 @@ except ImportError:
         "underthesea is not installed; falling back to regex-only text normalization",
     )
 
+
 def clean_text(text: str) -> str:
     """
     Clean and normalize text.

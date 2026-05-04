@@ -27,11 +27,7 @@ def _normalize_openai_base_url(url: str) -> str:
 
 def resolve_llm_api_key() -> str:
     settings = get_settings()
-    return (
-        settings.llm_api_key
-        or settings.gemini_api_key
-        or settings.google_api_key
-    )
+    return settings.llm_api_key or settings.gemini_api_key or settings.google_api_key
 
 
 def resolve_retry_policy() -> tuple[int, float]:
@@ -134,7 +130,9 @@ def get_shared_llm() -> ChatOpenAI:
 def get_structured_llm(schema: Any, *, method: str = "json_mode") -> Any:
     """Return a cached structured-output wrapper for the shared client."""
     llm = get_shared_llm()
-    cache_key = f"{getattr(schema, '__module__', '')}:{getattr(schema, '__name__', repr(schema))}:{method}"
+    cache_key = (
+        f"{getattr(schema, '__module__', '')}:{getattr(schema, '__name__', repr(schema))}:{method}"
+    )
     structured_llms = _llm_state["structured_llms"]
     if cache_key not in structured_llms:
         structured_llms[cache_key] = llm.with_structured_output(schema, method=method)

@@ -37,6 +37,7 @@ class PipelineRepository(MongoRepository):
 
     async def save(self, job: PipelineJob) -> bool:
         """Persist a pipeline job state to MongoDB."""
+
         async def _save() -> bool:
             doc = pipeline_job_to_document(job)
             await self._db[self.COLLECTION].update_one(
@@ -52,15 +53,15 @@ class PipelineRepository(MongoRepository):
 
     async def load(self, job_id: str) -> dict[str, Any] | None:
         """Load a pipeline job result from MongoDB."""
+
         async def _load() -> dict[str, Any] | None:
-            return await self._db[self.COLLECTION].find_one(
-                {"job_id": job_id}, {"_id": 0}
-            )
+            return await self._db[self.COLLECTION].find_one({"job_id": job_id}, {"_id": 0})
 
         return await self._run_or_default("load", None, _load)
 
     async def load_for_user(self, job_id: str, user_id: str) -> dict[str, Any] | None:
         """Load a pipeline job only if it belongs to user_id."""
+
         async def _load_for_user() -> dict[str, Any] | None:
             return await self._db[self.COLLECTION].find_one(
                 {"job_id": job_id, "user_id": user_id}, {"_id": 0}
@@ -95,28 +96,37 @@ class PipelineRepository(MongoRepository):
         status: str | None = None,
     ) -> list[dict[str, Any]]:
         """List recent pipeline jobs."""
+
         async def _list_recent() -> list[dict[str, Any]]:
             query = {}
             if user_id:
                 query["user_id"] = user_id
             if status:
                 query["status"] = status
-            cursor = self._db[self.COLLECTION].find(
-                query,
-                self.SUMMARY_PROJECTION,
-            ).sort("completed_at", -1).limit(limit)
+            cursor = (
+                self._db[self.COLLECTION]
+                .find(
+                    query,
+                    self.SUMMARY_PROJECTION,
+                )
+                .sort("completed_at", -1)
+                .limit(limit)
+            )
             return await cursor.to_list(length=limit)
 
         return await self._run_or_default("list_recent", [], _list_recent)
 
     async def delete(self, job_id: str, *, delete_sessions: bool = True) -> dict[str, Any]:
         """Delete a pipeline job and optionally its linked sessions."""
+
         async def _delete() -> dict[str, Any]:
             job_result = await self._db[self.COLLECTION].delete_one({"job_id": job_id})
             deleted_sessions = 0
 
             if delete_sessions:
-                progress_result = await self._db["al_subject_progress"].delete_many({"job_id": job_id})
+                progress_result = await self._db["al_subject_progress"].delete_many(
+                    {"job_id": job_id}
+                )
                 deleted_sessions = int(progress_result.deleted_count)
 
             return {
@@ -138,6 +148,7 @@ class PipelineRepository(MongoRepository):
         delete_sessions: bool = True,
     ) -> dict[str, Any]:
         """Delete a pipeline job only if owned by user_id."""
+
         async def _delete_for_user() -> dict[str, Any]:
             job_result = await self._db[self.COLLECTION].delete_one(
                 {"job_id": job_id, "user_id": user_id}

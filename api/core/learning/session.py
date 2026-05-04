@@ -30,7 +30,7 @@ from .models import DuelingQNetwork, load_dqn_model, load_saint_model
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
 _MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
-_MIN_STORED_MAX_STEPS = 50   # sessions stored with max_steps <= this are treated as unbounded
+_MIN_STORED_MAX_STEPS = 50  # sessions stored with max_steps <= this are treated as unbounded
 _DEFAULT_MAX_STEPS = 9999
 
 
@@ -117,7 +117,9 @@ class SessionManager:
         self._dqn_path = dqn_path
 
         # Load models once
-        self._saint_model, self._concept_map, self._saint_config = load_saint_model(saint_path, self._device)
+        self._saint_model, self._concept_map, self._saint_config = load_saint_model(
+            saint_path, self._device
+        )
         self._q_net, self._dqn_info = load_dqn_model(dqn_path, self._device)
         self._mastery_threshold = _MASTERY_THRESHOLD
 
@@ -233,10 +235,12 @@ class SessionManager:
         if len(self._sessions) > max_size:
             sorted_keys = sorted(
                 self._sessions.keys(),
-                key=lambda k: getattr(self._sessions[k], "accessed_at", getattr(self._sessions[k], "created_at", 0))
+                key=lambda k: getattr(
+                    self._sessions[k], "accessed_at", getattr(self._sessions[k], "created_at", 0)
+                ),
             )
             # Remove oldest 20%
-            for k in sorted_keys[:max_size // 5]:
+            for k in sorted_keys[: max_size // 5]:
                 self._sessions.pop(k, None)
                 lock = self._recovery_locks.get(k)
                 if lock is not None and not lock.locked():
@@ -266,7 +270,9 @@ class SessionManager:
             self.build_subject_progress_snapshot(session),
         )
 
-    async def create_session(self, max_steps: int = 9999, user_id: str | None = None) -> SessionState:
+    async def create_session(
+        self, max_steps: int = 9999, user_id: str | None = None
+    ) -> SessionState:
         """Create a new learning session."""
         session_id = str(uuid.uuid4())[:8]
 
@@ -317,7 +323,9 @@ class SessionManager:
     ):
         n = len(concept_map)
         if precomputed_embeddings is not None:
-            logger.info(f"[Session] Using precomputed embeddings ({len(precomputed_embeddings)} concepts)")
+            logger.info(
+                f"[Session] Using precomputed embeddings ({len(precomputed_embeddings)} concepts)"
+            )
             raw_emb = np.array(precomputed_embeddings, dtype=np.float32)
         else:
             ordered_texts = []
@@ -356,7 +364,9 @@ class SessionManager:
             return [], 0, 0
 
         try:
-            subject_progress = await mongo_store.load_subject_progress_for_job(job_id, user_id=user_id)
+            subject_progress = await mongo_store.load_subject_progress_for_job(
+                job_id, user_id=user_id
+            )
         except Exception as e:
             logger.warning(f"[Session] Error loading saved subject progress: {e}, starting fresh")
             return [], 0, 0
@@ -366,7 +376,11 @@ class SessionManager:
             logger.info(
                 f"[Session] Found saved subject progress with {len(prev_history)} exercises for job {job_id}"
             )
-            return prev_history, subject_progress.get("total_correct", 0), subject_progress.get("total_answered", 0)
+            return (
+                prev_history,
+                subject_progress.get("total_correct", 0),
+                subject_progress.get("total_answered", 0),
+            )
 
         logger.info(f"[Session] No saved subject progress for job {job_id}, starting fresh")
         return [], 0, 0
@@ -374,30 +388,32 @@ class SessionManager:
     @staticmethod
     def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
         for ex in prev_history:
-            session.exercise_history.append(ExerciseRecord(
-                exercise_id=ex.get("exercise_id", ""),
-                concept_idx=ex["concept_idx"],
-                concept_name=ex.get("concept_name", ""),
-                bloom_level=ex["bloom_level"],
-                question=ex.get("question", ""),
-                correct_option=ex.get("correct_option", ""),
-                explanation=ex.get("explanation", ""),
-                exercise_type=ExerciseType(ex.get("exercise_type", ExerciseType.MCQ.value)),
-                sentence=ex.get("sentence"),
-                options=ex.get("options", {}),
-                statement=ex.get("statement"),
-                hint=ex.get("hint"),
-                items=ex.get("items", []),
-                pairs=ex.get("pairs", []),
-                right_items=ex.get("right_items", []),
-                rubric=ex.get("rubric", []),
-                correct_answer=ex.get("correct_answer"),
-                explanation_correct=ex.get("explanation_correct", ""),
-                explanation_incorrect=ex.get("explanation_incorrect", ""),
-                user_answer=ex.get("user_answer"),
-                is_correct=ex.get("is_correct"),
-                timestamp=ex.get("timestamp", 0),
-            ))
+            session.exercise_history.append(
+                ExerciseRecord(
+                    exercise_id=ex.get("exercise_id", ""),
+                    concept_idx=ex["concept_idx"],
+                    concept_name=ex.get("concept_name", ""),
+                    bloom_level=ex["bloom_level"],
+                    question=ex.get("question", ""),
+                    correct_option=ex.get("correct_option", ""),
+                    explanation=ex.get("explanation", ""),
+                    exercise_type=ExerciseType(ex.get("exercise_type", ExerciseType.MCQ.value)),
+                    sentence=ex.get("sentence"),
+                    options=ex.get("options", {}),
+                    statement=ex.get("statement"),
+                    hint=ex.get("hint"),
+                    items=ex.get("items", []),
+                    pairs=ex.get("pairs", []),
+                    right_items=ex.get("right_items", []),
+                    rubric=ex.get("rubric", []),
+                    correct_answer=ex.get("correct_answer"),
+                    explanation_correct=ex.get("explanation_correct", ""),
+                    explanation_incorrect=ex.get("explanation_incorrect", ""),
+                    user_answer=ex.get("user_answer"),
+                    is_correct=ex.get("is_correct"),
+                    timestamp=ex.get("timestamp", 0),
+                )
+            )
 
     async def create_session_from_pipeline(
         self,
@@ -539,9 +555,7 @@ class SessionManager:
                 session_id=session_id,
                 history_source_doc=session_doc,
             )
-            logger.info(
-                f"[Session] Recovered session={session_id} for user={user_id} from Mongo"
-            )
+            logger.info(f"[Session] Recovered session={session_id} for user={user_id} from Mongo")
         except Exception as exc:
             logger.warning(f"[Session] Failed recovering session={session_id}: {exc}")
             return None
@@ -612,14 +626,16 @@ class SessionManager:
                 visited=visited,
                 prereq_ok=bool(prereq_ok_mask[idx]),
             )
-            nodes.append({
-                "id": cid,
-                "index": idx,
-                "name": session.concept_names.get(cid, cid),
-                "mastery": mastery,
-                "status": status,
-                "visited": visited,
-            })
+            nodes.append(
+                {
+                    "id": cid,
+                    "index": idx,
+                    "name": session.concept_names.get(cid, cid),
+                    "mastery": mastery,
+                    "status": status,
+                    "visited": visited,
+                }
+            )
 
         edges = []
         for tgt_idx, src_list in session.prereq_graph.items():
@@ -642,15 +658,18 @@ class SessionManager:
         matrix = []
         for idx in range(len(session.concept_map)):
             cid = id_to_concept.get(idx, str(idx))
-            matrix.append({
-                "concept_id": cid,
-                "concept_name": session.concept_names.get(cid, cid),
-                "bloom_levels": [float(bloom_mastery[idx, b]) for b in range(6)],
-            })
+            matrix.append(
+                {
+                    "concept_id": cid,
+                    "concept_name": session.concept_names.get(cid, cid),
+                    "bloom_levels": [float(bloom_mastery[idx, b]) for b in range(6)],
+                }
+            )
 
-        return {"matrix": matrix, "bloom_labels": [
-            "Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"
-        ]}
+        return {
+            "matrix": matrix,
+            "bloom_labels": ["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"],
+        }
 
     def get_concept_detail(self, session_id: str, concept_id: str) -> dict[str, Any] | None:
         """Get detailed info for a specific concept."""
@@ -677,11 +696,13 @@ class SessionManager:
         for tgt_idx, src_list in session.prereq_graph.items():
             if idx in src_list:
                 tgt_id = id_to_concept.get(tgt_idx, str(tgt_idx))
-                dependents.append({
-                    "id": tgt_id,
-                    "name": session.concept_names.get(tgt_id, tgt_id),
-                    "mastery": float(concept_mastery[tgt_idx]),
-                })
+                dependents.append(
+                    {
+                        "id": tgt_id,
+                        "name": session.concept_names.get(tgt_id, tgt_id),
+                        "mastery": float(concept_mastery[tgt_idx]),
+                    }
+                )
 
         return {
             "id": concept_id,

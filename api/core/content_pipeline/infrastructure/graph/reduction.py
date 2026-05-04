@@ -1,6 +1,5 @@
 """Transitive reduction for knowledge graphs."""
 
-
 from loguru import logger
 import networkx as nx
 
@@ -37,7 +36,6 @@ def apply_transitive_reduction(graph: nx.DiGraph) -> nx.DiGraph:
     )
 
     return _rebuild_graph(graph, reduced_prereq, prereq_graph)
-
 
 
 def _extract_prerequisite_subgraph(graph: nx.DiGraph) -> nx.DiGraph:

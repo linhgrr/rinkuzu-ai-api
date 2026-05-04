@@ -7,15 +7,15 @@ import re
 import time
 from typing import Annotated
 
-import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+import httpx
 from loguru import logger
 
 from api.config import get_settings
 from api.core.content_pipeline.infrastructure.runtime import get_s3_client
 from api.core.shared.llm import build_chat_completions_url, extract_llm_text
 from api.dependencies import get_current_user
-from api.main import limiter
+from api.rate_limit import limiter
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 MAX_PDF_BYTES = 50 * 1024 * 1024
@@ -257,14 +257,18 @@ async def extract_quiz(
             normalized_key,
             body,
         )
-        raise HTTPException(status_code=502, detail="Quiz extraction request to LLM failed.") from None
+        raise HTTPException(
+            status_code=502, detail="Quiz extraction request to LLM failed."
+        ) from None
     except Exception:
         logger.exception(
             "[quiz_extract] llm_invoke_error request_id={} key={}",
             request_id,
             normalized_key,
         )
-        raise HTTPException(status_code=502, detail="Quiz extraction failed during LLM invocation.") from None
+        raise HTTPException(
+            status_code=502, detail="Quiz extraction failed during LLM invocation."
+        ) from None
 
     if not questions:
         raise HTTPException(status_code=502, detail="No quiz questions extracted from PDF.")

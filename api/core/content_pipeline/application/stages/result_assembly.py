@@ -40,7 +40,11 @@ def serialize_prerequisite_edges(graph, concept_map: dict[str, int]) -> list[dic
     prereq_edges = []
     for source_id, target_id, data in graph.edges(data=True):
         relation_type = data.get("relation_type", "PREREQUISITE")
-        if relation_type == "PREREQUISITE" and source_id in concept_map and target_id in concept_map:
+        if (
+            relation_type == "PREREQUISITE"
+            and source_id in concept_map
+            and target_id in concept_map
+        ):
             prereq_edges.append({"source": source_id, "target": target_id})
     return prereq_edges
 

@@ -33,7 +33,7 @@ def test_try_restore_completed_job_from_mongo_populates_job_state():
         try_restore_completed_job_from_mongo(
             job,
             load_job=_load_completed_job,
-            populate_metrics=lambda restored_job: None,
+            populate_metrics=lambda _restored_job: None,
         )
     )
 
@@ -57,7 +57,7 @@ def test_try_restore_completed_job_from_mongo_returns_false_for_miss():
         try_restore_completed_job_from_mongo(
             job,
             load_job=_load_missing_job,
-            populate_metrics=lambda restored_job: None,
+            populate_metrics=lambda _restored_job: None,
         )
     )
 

@@ -26,7 +26,9 @@ def serialize_answer_for_history(exercise: Any, answer: dict[str, Any]) -> Any:
         blanks = [item.strip() for item in (answer.get("blanks") or []) if item and item.strip()]
         return ", ".join(blanks)
     if exercise_type == ExerciseType.ORDERING:
-        ordering = [item.strip() for item in (answer.get("ordering") or []) if item and item.strip()]
+        ordering = [
+            item.strip() for item in (answer.get("ordering") or []) if item and item.strip()
+        ]
         return " → ".join(ordering)
     if exercise_type == ExerciseType.MATCHING:
         matching = answer.get("matching") or {}
@@ -52,19 +54,43 @@ def evaluate_answer(
         return selected is not None and bool(selected) == expected, "True" if selected else "False"
 
     if exercise_type == ExerciseType.FILL_BLANK:
-        user_values = [normalize_text(item) for item in (answer.get("blanks") or []) if item and item.strip()]
-        accepted = [normalize_text(item) for item in (exercise.correct_answer or []) if isinstance(item, str)]
+        user_values = [
+            normalize_text(item) for item in (answer.get("blanks") or []) if item and item.strip()
+        ]
+        accepted = [
+            normalize_text(item)
+            for item in (exercise.correct_answer or [])
+            if isinstance(item, str)
+        ]
         is_correct = bool(user_values and accepted and user_values[0] in accepted)
         return is_correct, ", ".join(answer.get("blanks") or [])
 
     if exercise_type == ExerciseType.MULTI_CORRECT:
-        selected = sorted({item.strip().upper() for item in (answer.get("choices") or []) if item and item.strip()})
-        expected = sorted({item.strip().upper() for item in (exercise.correct_answer or []) if isinstance(item, str)})
+        selected = sorted(
+            {
+                item.strip().upper()
+                for item in (answer.get("choices") or [])
+                if item and item.strip()
+            }
+        )
+        expected = sorted(
+            {
+                item.strip().upper()
+                for item in (exercise.correct_answer or [])
+                if isinstance(item, str)
+            }
+        )
         return selected == expected, ", ".join(selected)
 
     if exercise_type == ExerciseType.ORDERING:
-        selected = [normalize_text(item) for item in (answer.get("ordering") or []) if item and item.strip()]
-        expected = [normalize_text(item) for item in (exercise.correct_answer or []) if isinstance(item, str)]
+        selected = [
+            normalize_text(item) for item in (answer.get("ordering") or []) if item and item.strip()
+        ]
+        expected = [
+            normalize_text(item)
+            for item in (exercise.correct_answer or [])
+            if isinstance(item, str)
+        ]
         return bool(selected) and selected == expected, " → ".join(answer.get("ordering") or [])
 
     if exercise_type == ExerciseType.MATCHING:

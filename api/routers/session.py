@@ -20,8 +20,8 @@ from api.dependencies import (
     get_session_manager,
     get_session_service,
 )
-from api.main import limiter
 from api.exceptions import ExerciseGenerationError, SessionCompletedError, SessionNotFoundError
+from api.rate_limit import limiter
 from api.schemas import (
     ExerciseResponse,
     NextConceptResponse,
@@ -38,8 +38,12 @@ from api.schemas import (
 router = APIRouter(prefix="/api/session", tags=["session"])
 
 BLOOM_LABELS = {
-    1: "Remember", 2: "Understand", 3: "Apply",
-    4: "Analyze", 5: "Evaluate", 6: "Create",
+    1: "Remember",
+    2: "Understand",
+    3: "Apply",
+    4: "Analyze",
+    5: "Evaluate",
+    6: "Create",
 }
 
 
@@ -67,10 +71,7 @@ async def _append_tutor_chat_turn(
 ) -> None:
     sanitized_user_question = sanitize_chat_input(user_question)
     sanitized_assistant_response = (
-        str(assistant_response)
-        .replace("<", "")
-        .replace(">", "")
-        .strip()[:4000]
+        str(assistant_response).replace("<", "").replace(">", "").strip()[:4000]
     )
 
     if not sanitized_user_question or not sanitized_assistant_response:
@@ -81,10 +82,12 @@ async def _append_tutor_chat_turn(
             session.tutor_chat_exercise_id = exercise_id
             session.tutor_chat_history = []
 
-        session.tutor_chat_history.extend([
-            {"role": "user", "content": sanitized_user_question},
-            {"role": "assistant", "content": sanitized_assistant_response},
-        ])
+        session.tutor_chat_history.extend(
+            [
+                {"role": "user", "content": sanitized_user_question},
+                {"role": "assistant", "content": sanitized_assistant_response},
+            ]
+        )
         session.tutor_chat_history = session.tutor_chat_history[-12:]
 
 
@@ -221,7 +224,6 @@ async def generate_exercise(
         items=exercise.items,
         pairs=exercise.pairs,
         right_items=exercise.right_items,
-
         step=env_stats["step"],
         max_steps=env_stats["max_steps"],
         theory=exercise.theory,
@@ -299,6 +301,7 @@ async def chat_about_exercise(
 
     try:
         if req.stream:
+
             async def persist_chat_history(full_response: str) -> None:
                 await _append_tutor_chat_turn(
                     session,

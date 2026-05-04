@@ -23,7 +23,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer("pe", pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.pe[:, :x.size(1)]
+        x = x + self.pe[:, : x.size(1)]
         return self.dropout(x)
 
 
@@ -66,14 +66,22 @@ class SaintModel(nn.Module):
         self.pos_enc = PositionalEncoding(d_model, max_len=max_seq_len + 2, dropout=dropout)
 
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=n_heads, dim_feedforward=d_ff,
-            dropout=dropout, batch_first=True, norm_first=True,
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_ff,
+            dropout=dropout,
+            batch_first=True,
+            norm_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_encoder_layers)
 
         decoder_layer = nn.TransformerDecoderLayer(
-            d_model=d_model, nhead=n_heads, dim_feedforward=d_ff,
-            dropout=dropout, batch_first=True, norm_first=True,
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_ff,
+            dropout=dropout,
+            batch_first=True,
+            norm_first=True,
         )
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=n_decoder_layers)
         self.output_proj = nn.Linear(d_model, 1)
@@ -107,7 +115,9 @@ class SaintModel(nn.Module):
         batch_size, seq_len = concept_ids.shape
         device = concept_ids.device
 
-        emb_source = external_embeddings if external_embeddings is not None else self.concept_emb_matrix
+        emb_source = (
+            external_embeddings if external_embeddings is not None else self.concept_emb_matrix
+        )
         concept_emb = emb_source[concept_ids]
         concept_out = self.concept_proj(concept_emb)
         bloom_emb = self.bloom_emb(bloom_levels)
@@ -124,7 +134,9 @@ class SaintModel(nn.Module):
             dec_emb = self.response_emb(decoder_input)
         else:
             resp_idx = self._responses_to_idx(responses)
-            shifted = torch.full((batch_size, seq_len), self.SOS_IDX, dtype=torch.long, device=device)
+            shifted = torch.full(
+                (batch_size, seq_len), self.SOS_IDX, dtype=torch.long, device=device
+            )
             shifted[:, 1:] = resp_idx[:, :-1]
             dec_emb = self.response_emb(shifted)
 
@@ -133,7 +145,8 @@ class SaintModel(nn.Module):
         causal_mask = self._make_causal_mask(seq_len, device)
 
         dec_out = self.decoder(
-            dec_emb, memory,
+            dec_emb,
+            memory,
             tgt_mask=causal_mask,
             tgt_key_padding_mask=src_key_padding_mask,
             memory_key_padding_mask=src_key_padding_mask,
@@ -156,7 +169,9 @@ class SaintModel(nn.Module):
         _batch_size, seq_len = concept_ids.shape
         device = concept_ids.device
 
-        emb_source = external_embeddings if external_embeddings is not None else self.concept_emb_matrix
+        emb_source = (
+            external_embeddings if external_embeddings is not None else self.concept_emb_matrix
+        )
         concept_emb = emb_source[concept_ids]
         concept_out = self.concept_proj(concept_emb)
         bloom_emb = self.bloom_emb(bloom_levels)
@@ -171,7 +186,8 @@ class SaintModel(nn.Module):
         dec_emb = self.pos_enc(dec_emb)
         causal_mask = self._make_causal_mask(seq_len, device)
         dec_out = self.decoder(
-            dec_emb, memory,
+            dec_emb,
+            memory,
             tgt_mask=causal_mask,
             tgt_key_padding_mask=src_key_padding_mask,
             memory_key_padding_mask=src_key_padding_mask,
@@ -198,7 +214,7 @@ class DuelingQNetwork(nn.Module):
         [global_dim : global_dim + N*concept_feat_dim]  per-concept features (bloom*6 + visited + prereq_ok)
     """
 
-    CONCEPT_FEAT_DIM = 8   # bloom_mastery(6) + visited(1) + prereq_ok(1)
+    CONCEPT_FEAT_DIM = 8  # bloom_mastery(6) + visited(1) + prereq_ok(1)
     N_BLOOMS = 6
 
     def __init__(self, global_dim=130, hidden_sizes=(256, 256)):
@@ -214,7 +230,9 @@ class DuelingQNetwork(nn.Module):
         self.backbone = nn.Sequential(*layers)
 
         self.value = nn.Sequential(nn.Linear(prev, 128), nn.ReLU(), nn.Linear(128, 1))
-        self.advantage = nn.Sequential(nn.Linear(prev, 128), nn.ReLU(), nn.Linear(128, self.N_BLOOMS))
+        self.advantage = nn.Sequential(
+            nn.Linear(prev, 128), nn.ReLU(), nn.Linear(128, self.N_BLOOMS)
+        )
 
     def forward(self, flat_obs, n_concepts):
         """
@@ -225,8 +243,8 @@ class DuelingQNetwork(nn.Module):
             Q values:    (B, n_concepts * N_BLOOMS)
         """
         batch_size = flat_obs.shape[0]
-        global_state = flat_obs[:, :self.global_dim]
-        concept_flat = flat_obs[:, self.global_dim:]
+        global_state = flat_obs[:, : self.global_dim]
+        concept_flat = flat_obs[:, self.global_dim :]
         concept_features = concept_flat.view(batch_size, n_concepts, self.CONCEPT_FEAT_DIM)
 
         g = global_state.unsqueeze(1).expand(batch_size, n_concepts, -1)

@@ -26,18 +26,14 @@ def postprocess_concepts(concepts: list[Concept]) -> list[Concept]:
 
     # Normalize concept IDs first so relation.target_id can be matched reliably.
     for concept in concepts:
-        concept.concept_id = normalize_concept_id(
-            getattr(concept, "concept_id", "") or ""
-        )
+        concept.concept_id = normalize_concept_id(getattr(concept, "concept_id", "") or "")
 
-    concept_ids: set[str] = {
-        c.concept_id for c in concepts if getattr(c, "concept_id", None)}
+    concept_ids: set[str] = {c.concept_id for c in concepts if getattr(c, "concept_id", None)}
 
     processed: list[Concept] = []
     for concept in concepts:
         concept.name = clean_text(getattr(concept, "name", "")) or ""
-        concept.definition = clean_text(
-            getattr(concept, "definition", "")) or ""
+        concept.definition = clean_text(getattr(concept, "definition", "")) or ""
 
         ex_seen = set()
         cleaned_examples: list[str] = []
@@ -71,16 +67,15 @@ def _postprocess_relation(relation: Relation | None, concept_ids: set[str]) -> R
     if relation is None:
         return None
 
-    relation.target_id = normalize_concept_id(
-        getattr(relation, "target_id", "") or ""
-    )
+    relation.target_id = normalize_concept_id(getattr(relation, "target_id", "") or "")
     if not relation.target_id:
         return None
 
     if relation.target_id not in concept_ids:
         logger.debug(
             f"Target concept ID '{relation.target_id}' not in current batch "
-            f"(may be cross-batch reference, keeping)")
+            f"(may be cross-batch reference, keeping)"
+        )
 
     # Clean evidence text if exists
     if hasattr(relation, "evidence") and relation.evidence:
@@ -125,15 +120,13 @@ def normalize_concept_name(name: str) -> str:
     normalized = name.lower().strip()
 
     normalized = unicodedata.normalize("NFD", normalized)
-    normalized = "".join(
-        ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
 
     normalized = normalized.replace("đ", "d")
 
     normalized = re.sub(r"[^\w\s]", " ", normalized)
 
     return re.sub(r"\s+", " ", normalized).strip()
-
 
 
 def normalize_concept_id(concept_id: str) -> str:

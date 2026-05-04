@@ -53,8 +53,7 @@ def _get_s3_client():
 
     if not all([endpoint_url, access_key, secret_key]):
         raise ValueError(
-            "S3 credentials not configured. "
-            "Set S3 endpoint and credentials in backend settings."
+            "S3 credentials not configured. Set S3 endpoint and credentials in backend settings."
         )
 
     return boto3.client(
@@ -162,7 +161,7 @@ def _ocr_page_via_llm(
         except Exception as e:
             last_error = e
             if attempt < max_retries:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 logger.warning(
                     f"[VisionPDFLoader] Page {page_num} attempt {attempt + 1} "
                     f"failed: {e}. Retrying in {wait}s..."
@@ -177,21 +176,14 @@ def _ocr_page_via_llm(
 
         # Extract content from OpenAI-compatible response
         content = extract_llm_text(
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
+            data.get("choices", [{}])[0].get("message", {}).get("content", "")
         )
 
         if not content:
-            logger.warning(
-                f"[VisionPDFLoader] Page {page_num}: empty response from LLM"
-            )
+            logger.warning(f"[VisionPDFLoader] Page {page_num}: empty response from LLM")
             return (page_num, "")
 
-        logger.info(
-            f"[VisionPDFLoader] Page {page_num} OCR completed "
-            f"({len(content)} chars)"
-        )
+        logger.info(f"[VisionPDFLoader] Page {page_num} OCR completed ({len(content)} chars)")
         return (page_num, content)
 
     return (page_num, f"[OCR_ERROR: {last_error}]")
@@ -212,8 +204,7 @@ def _cleanup_s3_pages(s3_client, bucket_name: str, job_id: str):
                 logger.debug(f"[VisionPDFLoader] Skipped cleanup for {obj['Key']}: {cleanup_err}")
         if deleted:
             logger.info(
-                f"[VisionPDFLoader] Cleaned up {deleted} temp files "
-                f"from S3 prefix {prefix}"
+                f"[VisionPDFLoader] Cleaned up {deleted} temp files from S3 prefix {prefix}"
             )
     except Exception as e:
         logger.warning(f"[VisionPDFLoader] Cleanup failed: {e}")
@@ -286,9 +277,7 @@ class VisionPDFLoader(BaseLoader):
         job_id = str(uuid.uuid4())[:12]
         filename = Path(file_path).name
 
-        logger.info(
-            f"[VisionPDFLoader] Starting OCR for: {filename} (job: {job_id})"
-        )
+        logger.info(f"[VisionPDFLoader] Starting OCR for: {filename} (job: {job_id})")
 
         page_buffers = _split_pdf_to_pages(file_path)
         total_pages = len(page_buffers)
@@ -299,9 +288,7 @@ class VisionPDFLoader(BaseLoader):
             # Step 1: pages already split above
 
             # Step 2: Upload all pages to S3
-            logger.info(
-                f"[VisionPDFLoader] Uploading {total_pages} pages to S3..."
-            )
+            logger.info(f"[VisionPDFLoader] Uploading {total_pages} pages to S3...")
             page_urls: list[tuple[int, str]] = []
             for i, page_bytes in enumerate(page_buffers):
                 url = _upload_page_to_s3(
@@ -315,10 +302,7 @@ class VisionPDFLoader(BaseLoader):
                 page_urls.append((i + 1, url))
 
             # Step 3: OCR all pages in parallel
-            logger.info(
-                f"[VisionPDFLoader] Starting parallel OCR "
-                f"({self.concurrency} workers)..."
-            )
+            logger.info(f"[VisionPDFLoader] Starting parallel OCR ({self.concurrency} workers)...")
             results: dict[int, str] = {}
 
             with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
@@ -342,9 +326,7 @@ class VisionPDFLoader(BaseLoader):
                         pnum, text = future.result()
                         results[pnum] = text
                     except Exception as e:
-                        logger.error(
-                            f"[VisionPDFLoader] Page {page_num} error: {e}"
-                        )
+                        logger.error(f"[VisionPDFLoader] Page {page_num} error: {e}")
                         results[page_num] = f"[OCR_ERROR: {e}]"
 
             # Step 4: Merge results in page order
@@ -395,9 +377,7 @@ class VisionPDFLoader(BaseLoader):
             # Attempt cleanup even on failure
             if self.cleanup_s3:
                 with contextlib.suppress(Exception):
-                    _cleanup_s3_pages(
-                        self.s3_client, self.bucket_name, job_id
-                    )
+                    _cleanup_s3_pages(self.s3_client, self.bucket_name, job_id)
             logger.error(
                 f"[VisionPDFLoader] Error processing {filename}: {e}",
                 exc_info=True,

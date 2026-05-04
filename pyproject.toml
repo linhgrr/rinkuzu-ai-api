@@ -7,9 +7,53 @@ name = "rinkuzu-ai-api"
 version = "1.0.0"
 description = "FastAPI backend for Rinkuzu adaptive learning and content pipeline services."
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.13"
 dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.9.2",
+    "pydantic-settings>=2.6.0",
+    "aiofiles>=24.1.0",
+    "torch>=2.0.0",
+    "numpy",
+    "networkx",
+    "scikit-learn",
+    "gymnasium",
+    "langchain>=0.3.0",
+    "langchain-core>=0.1.0",
+    "langchain-community>=0.1.0",
+    "langchain-openai>=0.1.0",
+    "langchain-chroma",
+    "sentence-transformers",
+    "transformers",
+    "chromadb>=0.5.0",
     "langsmith",
+    "trustcall>=0.0.10",
+    "agentic-doc",
+    "wikipedia==1.4.0",
+    "tqdm==4.66.5",
+    "underthesea",
+    "pyvi",
+    "pymupdf",
+    "requests",
+    "boto3",
+    "botocore",
+    "motor>=3.3.0",
+    "pymongo>=4.6.0",
+    "loguru",
+    "httpx>=0.27.0",
+    "slowapi>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.11.7",
 ]
 
 [tool.pytest.ini_options]

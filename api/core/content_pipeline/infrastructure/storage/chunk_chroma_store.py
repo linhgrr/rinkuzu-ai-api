@@ -14,9 +14,7 @@ from loguru import logger
 
 from api.core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
 
-_DEFAULT_PERSIST_DIRECTORY = str(
-    Path(__file__).parent.parent.parent.parent / "chroma_db"
-)
+_DEFAULT_PERSIST_DIRECTORY = str(Path(__file__).parent.parent.parent.parent / "chroma_db")
 
 
 class ChunkChromaStore:

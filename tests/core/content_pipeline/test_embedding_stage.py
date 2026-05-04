@@ -19,7 +19,7 @@ def test_resolve_embedding_settings_reads_unified_backend_config(monkeypatch):
         embedding_model = "model-from-settings"
         embedding_batch_size = 48
 
-    monkeypatch.setattr(embedding_stage, "get_settings", lambda: _SettingsStub())
+    monkeypatch.setattr(embedding_stage, "get_settings", _SettingsStub)
 
     model_name, batch_size = resolve_embedding_settings()
 

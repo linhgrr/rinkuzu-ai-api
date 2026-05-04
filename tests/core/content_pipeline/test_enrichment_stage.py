@@ -21,7 +21,7 @@ def test_build_ordered_embedding_texts_uses_concept_map_order():
 
 
 class _TextModelStub:
-    def encode(self, ordered_texts, show_progress_bar=False, batch_size=32):
+    def encode(self, ordered_texts, *, show_progress_bar=False, batch_size=32):
         return _EmbeddingsStub([[len(text)] for text in ordered_texts])
 
 

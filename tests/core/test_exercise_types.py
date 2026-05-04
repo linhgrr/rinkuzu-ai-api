@@ -1,23 +1,24 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from api.core.learning import exercise_service as exercise_service_module
+from api.core.learning import exercise_types as exercise_types_module
+from api.core.learning.exercise_service import ExerciseService
 from api.core.learning.exercise_types import (
     ExerciseType,
     FillBlankOutput,
     MatchingOutput,
     MatchingPair,
     OrderingOutput,
+    select_exercise_type,
     serialize_exercise_result,
     shuffle_ordering_items,
-    select_exercise_type,
 )
-from api.core.learning import exercise_service as exercise_service_module
-from api.core.learning.exercise_service import ExerciseService
 
 
 def test_select_exercise_type_covers_new_bloom_mapping():
     # Mock random.choices to return a deterministic value
-    with patch("random.choices") as mock_choices:
+    with patch.object(exercise_types_module._rng, "choices") as mock_choices:
         mock_choices.return_value = [ExerciseType.TRUE_FALSE]
         assert select_exercise_type(1, 0.1) == ExerciseType.TRUE_FALSE
 
@@ -26,25 +27,25 @@ def test_select_exercise_type_covers_new_bloom_mapping():
 
 
 def test_select_exercise_type_uses_correct_weights_for_mastery():
-    with patch("random.choices") as mock_choices:
+    with patch.object(exercise_types_module._rng, "choices") as mock_choices:
         mock_choices.return_value = [ExerciseType.MCQ]
 
         # Test low mastery (< 0.4)
         select_exercise_type(1, 0.1)
         # For bloom 1, low mastery weights are: TRUE_FALSE: 70, MCQ: 30
-        args, kwargs = mock_choices.call_args
+        _args, kwargs = mock_choices.call_args
         assert kwargs["weights"] == [70, 30]
 
         # Test mid mastery (0.4 - 0.7)
         select_exercise_type(2, 0.5)
         # For bloom 2, mid mastery weights are: TRUE_FALSE: 20, MCQ: 40, FILL_BLANK: 30, MATCHING: 10
-        args, kwargs = mock_choices.call_args
+        _args, kwargs = mock_choices.call_args
         assert kwargs["weights"] == [20, 40, 30, 10]
 
         # Test high mastery (>= 0.7)
         select_exercise_type(3, 0.8)
         # For bloom 3, high mastery weights are: MCQ: 5, FILL_BLANK: 20, MATCHING: 20, MULTI_CORRECT: 35, ORDERING: 20
-        args, kwargs = mock_choices.call_args
+        _args, kwargs = mock_choices.call_args
         assert kwargs["weights"] == [5, 20, 20, 35, 20]
 
 
@@ -73,7 +74,10 @@ def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_orderin
             explanation_correct="",
             explanation_incorrect="",
         )
-        assert service._evaluate_answer(fill_blank, {"blanks": ["Động năng"]}) == (True, "Động năng")
+        assert service._evaluate_answer(fill_blank, {"blanks": ["Động năng"]}) == (
+            True,
+            "Động năng",
+        )
 
         multi_correct = SimpleNamespace(
             exercise_type=ExerciseType.MULTI_CORRECT,
@@ -149,18 +153,20 @@ def test_serialize_exercise_result_normalizes_fill_blank_and_matching_payloads()
     assert fill_blank_payload["question"] == "Hãy điền từ thích hợp vào chỗ trống."
     assert fill_blank_payload["sentence"] == "Động năng được tính bằng công thức _____."
     assert fill_blank_payload["correct_answer"] == ["Wđ", "Wd"]
-    assert sorted(matching_payload["right_items"]) == sorted([
-        "Độ lớn và hướng của chuyển động",
-        "Độ biến thiên vận tốc theo thời gian",
-        "Tác dụng làm vật đổi trạng thái chuyển động",
-    ])
+    assert sorted(matching_payload["right_items"]) == sorted(
+        [
+            "Độ lớn và hướng của chuyển động",
+            "Độ biến thiên vận tốc theo thời gian",
+            "Tác dụng làm vật đổi trạng thái chuyển động",
+        ]
+    )
     assert matching_payload["correct_answer"]["Vận tốc"] == "Độ lớn và hướng của chuyển động"
 
 
 def test_shuffle_ordering_items_uses_guard_when_shuffle_keeps_original_order():
     original = ["Bước 1", "Bước 2", "Bước 3"]
 
-    with patch("random.shuffle", side_effect=lambda items: None):
+    with patch.object(exercise_types_module._rng, "shuffle", side_effect=lambda _items: None):
         shuffled = shuffle_ordering_items(original)
 
     assert shuffled == ["Bước 2", "Bước 3", "Bước 1"]
@@ -176,7 +182,9 @@ def test_serialize_exercise_result_normalizes_ordering_payload_from_correct_orde
         explanation_incorrect="Sai",
     )
 
-    with patch("random.shuffle", side_effect=lambda items: items.reverse()):
+    with patch.object(
+        exercise_types_module._rng, "shuffle", side_effect=lambda items: items.reverse()
+    ):
         ordering_payload = serialize_exercise_result(ordering)
 
     assert ordering_payload["correct_answer"] == ["Bước 1", "Bước 2", "Bước 3"]

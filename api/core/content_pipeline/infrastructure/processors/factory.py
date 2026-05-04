@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 try:
     from .loaders.vision_pdf_loader import VisionPDFLoader as _VisionPDFLoader
+
     _VISION_PDF_AVAILABLE = True
 except (ImportError, ValueError):
     _VisionPDFLoader = None  # type: ignore[assignment,misc]
@@ -25,6 +26,7 @@ except (ImportError, ValueError):
 
 try:
     from .loaders.pdf_loader import PDFLoader as _PDFLoader
+
     _PDF_LOADER_AVAILABLE = True
 except ImportError:
     _PDFLoader = None  # type: ignore[assignment,misc]
@@ -58,9 +60,7 @@ class FileLoaderFactory:
         loader_class = cls._loaders.get(file_type)
 
         if not loader_class:
-            raise LoaderNotFoundError(
-                f"No loader found for file type: {file_type}"
-            )
+            raise LoaderNotFoundError(f"No loader found for file type: {file_type}")
 
         return loader_class()
 

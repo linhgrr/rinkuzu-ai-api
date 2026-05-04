@@ -20,14 +20,14 @@ async def test_start_job_persists_pending_then_queued_and_schedules_background_t
     service._schedule_background_run = lambda job, **kwargs: scheduled_calls.append((job, kwargs))
 
     job = await service.start_job(
-        file_path="/tmp/algebra.pdf",
+        file_path="fixtures/algebra.pdf",
         subject_id=None,
         prs_threshold=0.75,
         min_confidence=0.6,
         apply_reduction=True,
         user_id="user-1",
         content_processor_available=True,
-        content_processor_src="/tmp/content-pipeline-runtime",
+        content_processor_src="fixtures/content-pipeline-runtime",
     )
 
     assert job.filename == "algebra.pdf"
@@ -48,14 +48,14 @@ async def test_start_job_returns_failed_job_when_content_processor_is_unavailabl
     service = PipelineService(save_job=save_job, run_pipeline=run_pipeline)
 
     job = await service.start_job(
-        file_path="/tmp/algebra.pdf",
+        file_path="fixtures/algebra.pdf",
         subject_id="math",
         prs_threshold=0.75,
         min_confidence=0.6,
         apply_reduction=True,
         user_id="user-1",
         content_processor_available=False,
-        content_processor_src="/tmp/content-pipeline-runtime",
+        content_processor_src="fixtures/content-pipeline-runtime",
     )
 
     assert job.status == PipelineStatus.FAILED

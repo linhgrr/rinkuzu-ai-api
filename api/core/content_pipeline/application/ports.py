@@ -25,22 +25,18 @@ class RelationDiscoveryResult:
 class JobRepository(Protocol):
     """Persistence contract for long-running content pipeline jobs."""
 
-    async def save(self, job: PipelineJob) -> bool:
-        ...
+    async def save(self, job: PipelineJob) -> bool: ...
 
-    async def load(self, job_id: str) -> dict[str, Any] | None:
-        ...
+    async def load(self, job_id: str) -> dict[str, Any] | None: ...
 
-    async def load_for_user(self, job_id: str, user_id: str) -> dict[str, Any] | None:
-        ...
+    async def load_for_user(self, job_id: str, user_id: str) -> dict[str, Any] | None: ...
 
     async def list_recent(
         self,
         limit: int = 20,
         user_id: str | None = None,
         status: str | None = None,
-    ) -> list[dict[str, Any]]:
-        ...
+    ) -> list[dict[str, Any]]: ...
 
 
 class RelationEngine(Protocol):
@@ -54,5 +50,4 @@ class RelationEngine(Protocol):
         prs_threshold: float,
         min_confidence: float,
         persist_job_state: PersistJobStateFn,
-    ) -> RelationDiscoveryResult:
-        ...
+    ) -> RelationDiscoveryResult: ...

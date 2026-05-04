@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     environment: str = "dev"  # dev | staging | prod — controls docs visibility
     cors_origins: list[str] = ["*"]
     internal_service_token: str | None = None
-    log_level: str = "INFO"        # DEBUG | INFO | WARNING | ERROR
-    log_format: str = "text"       # text | json
+    log_level: str = "INFO"  # DEBUG | INFO | WARNING | ERROR
+    log_format: str = "text"  # text | json
     rate_limit_quiz_extract: str = "10/minute"
     rate_limit_tutor_chat: str = "30/minute"
     rate_limit_pipeline: str = "5/minute"
@@ -69,7 +69,9 @@ class Settings(BaseSettings):
     )
     llm_prefetch_timeout_sec: float | None = Field(
         default=None,
-        validation_alias=AliasChoices("LLM_PREFETCH_TIMEOUT_SEC", "ADAPTIVE_PREFETCH_LLM_TIMEOUT_SEC"),
+        validation_alias=AliasChoices(
+            "LLM_PREFETCH_TIMEOUT_SEC", "ADAPTIVE_PREFETCH_LLM_TIMEOUT_SEC"
+        ),
     )
     llm_retry_attempts: int = Field(
         default=3,

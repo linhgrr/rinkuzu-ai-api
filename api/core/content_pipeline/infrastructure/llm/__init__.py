@@ -20,11 +20,7 @@ def _normalize_openai_base_url(url: str) -> str:
 
 def _resolve_llm_api_key() -> str | None:
     settings = get_settings()
-    return (
-        settings.llm_api_key
-        or settings.gemini_api_key
-        or settings.google_api_key
-    )
+    return settings.llm_api_key or settings.gemini_api_key or settings.google_api_key
 
 
 def _ngrok_headers() -> dict[str, str]:

@@ -111,6 +111,7 @@ def _select_canonical(concepts: list[Concept]) -> Concept:
     1. Longest definition
     2. First in list (stable fallback)
     """
+
     def _key(c: Concept) -> int:
         return -len(c.definition or "")
 
@@ -125,8 +126,7 @@ def _merge_embeddings(
 ) -> list[float] | None:
     """Average embeddings from a group of concepts, with consistency validation."""
     emb_list = [
-        np.asarray(getattr(c, attr), dtype=float)
-        for c in concepts if getattr(c, attr) is not None
+        np.asarray(getattr(c, attr), dtype=float) for c in concepts if getattr(c, attr) is not None
     ]
     if not emb_list:
         return None
@@ -179,9 +179,7 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
                 f_seen.add(key)
                 formulas.append(f.model_dump())
 
-    all_relations: list[dict] = [
-        rel.model_dump() for c in concepts for rel in (c.relations or [])
-    ]
+    all_relations: list[dict] = [rel.model_dump() for c in concepts for rel in (c.relations or [])]
 
     avg_name_embedding = _merge_embeddings(concepts, canonical, "name_embedding", "name_embedding")
     avg_definition_embedding = _merge_embeddings(

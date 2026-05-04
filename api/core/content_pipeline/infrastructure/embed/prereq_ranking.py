@@ -1,6 +1,5 @@
 """Prerequisite ranking using embeddings."""
 
-
 from loguru import logger
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -37,11 +36,11 @@ def rank_prerequisites(
     threshold = prs_threshold or settings.prs_threshold
 
     concepts_with_emb = [
-        c for c in concepts if c.name_embedding is not None and c.definition_embedding is not None]
+        c for c in concepts if c.name_embedding is not None and c.definition_embedding is not None
+    ]
 
     if len(concepts_with_emb) < _MIN_CONCEPTS_FOR_RANKING:
-        logger.warning(
-            "Not enough concepts with embeddings for prerequisite ranking")
+        logger.warning("Not enough concepts with embeddings for prerequisite ranking")
         return []
 
     prereq_pairs = _compute_prerequisite_scores(
@@ -89,8 +88,7 @@ def _compute_prerequisite_scores(
 
     # Compute CSR scores
     # CSR(A→B) = cos_sim(name_embedding(B), definition_embedding(A))
-    csr_ab = cosine_similarity(
-        definition_embeds, name_embeds)  # [i, j] = CSR(i→j)
+    csr_ab = cosine_similarity(definition_embeds, name_embeds)  # [i, j] = CSR(i→j)
     csr_ba = csr_ab.T  # [i, j] = CSR(j→i)
 
     prs_matrix = np.maximum(csr_ab, csr_ba)
@@ -111,10 +109,9 @@ def _compute_prerequisite_scores(
             concept_id_j = concept_ids[j]
 
             # Check if relation already exists (in either direction)
-            has_existing_relation = (
-                concept_id_j in existing_relations.get(concept_id_i, set()) or
-                concept_id_i in existing_relations.get(concept_id_j, set())
-            )
+            has_existing_relation = concept_id_j in existing_relations.get(
+                concept_id_i, set()
+            ) or concept_id_i in existing_relations.get(concept_id_j, set())
 
             if has_existing_relation:
                 logger.debug(

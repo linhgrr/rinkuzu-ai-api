@@ -1,6 +1,5 @@
 """Embedding client compatible with LangChain Embeddings interface."""
 
-
 from langchain_core.embeddings import Embeddings
 from loguru import logger
 from pyvi import ViTokenizer
@@ -35,8 +34,7 @@ class EmbeddingClient(Embeddings):
         """
         self.model_name = model_name or settings.embedding_model
         if not self.model_name:
-            raise ValueError(
-                "Embedding model name must be specified in settings.")
+            raise ValueError("Embedding model name must be specified in settings.")
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = SentenceTransformer(self.model_name, device=self.device)
@@ -131,5 +129,5 @@ class EmbeddingClient(Embeddings):
             convert_to_tensor=False,
             normalize_embeddings=True,
             batch_size=self.batch_size,
-            **kwargs
+            **kwargs,
         )

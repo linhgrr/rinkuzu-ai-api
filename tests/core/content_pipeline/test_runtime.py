@@ -1,6 +1,6 @@
+from pathlib import Path
 import sys
 from types import SimpleNamespace
-from pathlib import Path
 
 from api.core.content_pipeline.infrastructure import runtime
 from api.core.content_pipeline.infrastructure.runtime import calculate_file_hash
@@ -17,22 +17,22 @@ def test_calculate_file_hash_is_stable_for_same_content(tmp_path: Path):
     assert len(first_hash) == 64
 
 
-def test_get_content_processor_bindings_uses_cached_bindings(monkeypatch):
-    sentinel = object()
-    monkeypatch.setattr(runtime, "_content_processor_bindings", sentinel)
+def test_get_content_processor_bindings_uses_cached_bindings():
+    runtime.get_content_processor_bindings.cache_clear()
+    first = runtime.get_content_processor_bindings()
 
-    bindings = runtime.get_content_processor_bindings()
+    second = runtime.get_content_processor_bindings()
 
-    assert bindings is sentinel
+    assert second is first
 
 
-def test_get_content_processor_llm_factory_uses_cached_factory(monkeypatch):
-    sentinel = object()
-    monkeypatch.setattr(runtime, "_content_processor_llm_factory", sentinel)
+def test_get_content_processor_llm_factory_uses_cached_factory():
+    runtime.get_content_processor_llm_factory.cache_clear()
+    first = runtime.get_content_processor_llm_factory()
 
-    factory = runtime.get_content_processor_llm_factory()
+    second = runtime.get_content_processor_llm_factory()
 
-    assert factory is sentinel
+    assert second is first
 
 
 def test_content_processor_bindings_can_build_relation_engine():

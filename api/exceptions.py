@@ -9,6 +9,7 @@ from loguru import logger
 
 # ── Domain Exceptions ───────────────────────────────────────
 
+
 class AppError(Exception):
     """Base exception for application errors."""
 
@@ -53,6 +54,7 @@ class PipelineNotCompletedError(AppError):
 
 # ── Global Exception Handler ───────────────────────────────
 
+
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     """Map domain exceptions to JSON error responses."""
     return JSONResponse(
@@ -88,8 +90,7 @@ async def validation_exception_handler(
         exc.errors(),
     )
     safe_errors = [
-        {"loc": e.get("loc"), "msg": e.get("msg"), "type": e.get("type")}
-        for e in exc.errors()
+        {"loc": e.get("loc"), "msg": e.get("msg"), "type": e.get("type")} for e in exc.errors()
     ]
     detail = "Invalid request"
     return JSONResponse(

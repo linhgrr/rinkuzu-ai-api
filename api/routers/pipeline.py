@@ -6,13 +6,12 @@ from pathlib import Path
 from typing import Annotated
 import uuid
 
-import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+import httpx
 from loguru import logger
 from pydantic import BaseModel
 
 from api.config import get_settings
-from api.main import limiter
 from api.core.content_pipeline import PipelineStatus
 from api.core.shared import mongo_store
 from api.core.shared.url_fetch import UnsafeURLError, stream_download
@@ -24,6 +23,7 @@ from api.dependencies import (
     get_session_service,
 )
 from api.exceptions import PipelineNotCompletedError, PipelineNotFoundError, ServiceUnavailableError
+from api.rate_limit import limiter
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
@@ -34,7 +34,9 @@ _MAX_FILENAME_LENGTH = 200
 
 
 @router.get("/status")
-async def pipeline_status(availability: Annotated[dict, Depends(get_content_pipeline_availability)]):
+async def pipeline_status(
+    availability: Annotated[dict, Depends(get_content_pipeline_availability)],
+):
     """Check if content pipeline runtime modules are available."""
     available = availability["available"]
     return {
@@ -63,6 +65,7 @@ async def process_document(
     pipeline_service=Depends(get_content_pipeline_service),
 ):
     """Run the full content processing pipeline from an S3 uploaded file."""
+    _ = http_request  # SlowAPI requires the Request parameter for rate-limit context.
     if not availability["available"]:
         logger.error(
             "[PipelineRouter] Content pipeline unavailable",
@@ -118,7 +121,9 @@ async def process_document(
             content_processor_src=availability["src"] or "",
         )
     except (RuntimeError, ValueError, OSError):
-        logger.exception("[PipelineRouter] Failed to initialize pipeline job for {}", request.filename)
+        logger.exception(
+            "[PipelineRouter] Failed to initialize pipeline job for {}", request.filename
+        )
         try:
             if save_path.exists():
                 save_path.unlink()
@@ -160,7 +165,8 @@ async def get_job_status(job_id: str, user_id: Annotated[str, Depends(get_curren
         "error_code": job_doc.get("error_code"),
         "user_message": job_doc.get("user_message"),
         "retryable": bool(job_doc.get("retryable", False)),
-        "is_terminal": job_doc.get("status") in {
+        "is_terminal": job_doc.get("status")
+        in {
             PipelineStatus.COMPLETED.value,
             PipelineStatus.FAILED.value,
             PipelineStatus.CANCELLED.value,
@@ -208,7 +214,8 @@ async def create_session_from_pipeline(
 
     concept_ids = set(result["concept_map"].keys())
     invalid_edges = [
-        edge for edge in result["prereq_edges"]
+        edge
+        for edge in result["prereq_edges"]
         if edge.get("source") not in concept_ids or edge.get("target") not in concept_ids
     ]
     if invalid_edges:

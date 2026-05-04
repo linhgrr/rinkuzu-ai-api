@@ -81,8 +81,17 @@ class PromptBuilder:
 
         # Append non-STEM example when subject context suggests it
         non_stem_keywords = (
-            "văn", "sử", "địa", "gdcd", "giáo dục", "tiếng",
-            "lịch sử", "ngữ văn", "triết", "chính trị", "xã hội",
+            "văn",
+            "sử",
+            "địa",
+            "gdcd",
+            "giáo dục",
+            "tiếng",
+            "lịch sử",
+            "ngữ văn",
+            "triết",
+            "chính trị",
+            "xã hội",
         )
         context_lower = (self.subject_context + " " + self.concept_name).lower()
         if any(kw in context_lower for kw in non_stem_keywords):
@@ -110,28 +119,26 @@ class PromptBuilder:
         concept_lines.append(
             f"Bloom level: {self.bloom_level} - {BLOOM_VERBS.get(self.bloom_level, '')}"
         )
-        sections.append(
-            "<concept>\n" + "\n".join(concept_lines) + "\n</concept>"
-        )
+        sections.append("<concept>\n" + "\n".join(concept_lines) + "\n</concept>")
 
         # --- Task instruction ---
-        sections.append(
-            "<task>\n" + type_spec + "\n</task>"
-        )
+        sections.append("<task>\n" + type_spec + "\n</task>")
 
         # --- Constraints ---
         sections.append(
             "<constraints>\n"
-             "Ràng buộc negative constraints:\n" + negative_constraints + "\n"
-            + "Hướng dẫn explanation:\n" + self.spec.explanation_guidance + "\n"
+            "Ràng buộc negative constraints:\n"
+            + negative_constraints
+            + "\n"
+            + "Hướng dẫn explanation:\n"
+            + self.spec.explanation_guidance
+            + "\n"
             + "</constraints>"
         )
 
         # --- Empty definition guard ---
         if len(self.concept_definition.strip()) < _MIN_DEFINITION_LENGTH:
-            sections.append(
-                "<warning>\n" + EMPTY_DEFINITION_GUARD + "</warning>"
-            )
+            sections.append("<warning>\n" + EMPTY_DEFINITION_GUARD + "</warning>")
 
         # --- Few-shot examples ---
         few_shots = self._select_few_shots()
@@ -139,9 +146,7 @@ class PromptBuilder:
             examples_json = "\n---\n".join(
                 json.dumps(shot, ensure_ascii=False, indent=2) for shot in few_shots
             )
-            sections.append(
-                "<few_shot>\nFew-shot JSON mẫu:\n" + examples_json + "\n</few_shot>"
-            )
+            sections.append("<few_shot>\nFew-shot JSON mẫu:\n" + examples_json + "\n</few_shot>")
 
         # --- Recent exercise history & diversity enforcement ---
         if recent_exercises:
@@ -156,16 +161,15 @@ class PromptBuilder:
             )
             sections.append(
                 "<history>\n"
-                + diversity_rules + "\n"
+                + diversity_rules
+                + "\n"
                 + "Các bài gần nhất cùng concept (TRÁNH trùng lặp với các bài dưới đây):\n"
                 + format_exercise_history(recent_exercises)
                 + "\n</history>"
             )
 
         # --- Meta checklist ---
-        sections.append(
-            "<checklist>\n" + META_VALIDATION_CHECKLIST + "</checklist>"
-        )
+        sections.append("<checklist>\n" + META_VALIDATION_CHECKLIST + "</checklist>")
 
         return "\n\n".join(sections)
 

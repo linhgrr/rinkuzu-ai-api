@@ -10,6 +10,7 @@ from api.config import get_settings
 
 try:
     from agentic_doc.parse import parse
+
     AGENTIC_DOC_AVAILABLE = True
 except ImportError:
     AGENTIC_DOC_AVAILABLE = False
@@ -81,13 +82,11 @@ class PDFLoader(BaseLoader):
             results = parse(file_path)
 
         except Exception as e:
-            logger.error(
-                f"Error loading PDF with Landing AI: {e!s}", exc_info=True)
+            logger.error(f"Error loading PDF with Landing AI: {e!s}", exc_info=True)
             raise
 
         if not results:
-            raise ValueError(
-                f"Landing AI returned no results for: {file_path}")
+            raise ValueError(f"Landing AI returned no results for: {file_path}")
 
         result = results[0]
 

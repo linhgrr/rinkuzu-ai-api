@@ -74,15 +74,15 @@ def _build_messages(
 
     user_content: list[dict] = [{"type": "text", "text": prompt}]
     if question_image:
-        user_content.append({
-            "type": "image_url",
-            "image_url": {"url": question_image},
-        })
+        user_content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": question_image},
+            }
+        )
 
     user_content.extend(
-        {"type": "image_url", "image_url": {"url": img}}
-        for img in (option_images or [])
-        if img
+        {"type": "image_url", "image_url": {"url": img}} for img in (option_images or []) if img
     )
 
     return [
@@ -232,7 +232,9 @@ async def create_quiz_tutor_stream(
         error_body = (await response.aread()).decode("utf-8", errors="replace")
         await response.aclose()
         await client.aclose()
-        raise RuntimeError(error_body or f"Quiz tutor streaming failed with status {response.status_code}")
+        raise RuntimeError(
+            error_body or f"Quiz tutor streaming failed with status {response.status_code}"
+        )
 
     async def iterator() -> AsyncIterator[bytes]:
         try:

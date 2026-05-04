@@ -42,14 +42,16 @@ class ExtractionChain:
         # ---------------------------------------------------------
         # Extraction Prompt & Chain
         # ---------------------------------------------------------
-        self.extraction_prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate.from_template(EXTRACTION_PROMPT),
-            HumanMessagePromptTemplate.from_template(
-                "## DOCUMENT INFO\n\n* **subject_id**: {subject_id}\n\n"
-                "{previous_concepts_section}"
-                "## TEXT TO ANALYZE\n\n{text_content}"
-            )
-        ])
+        self.extraction_prompt = ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(EXTRACTION_PROMPT),
+                HumanMessagePromptTemplate.from_template(
+                    "## DOCUMENT INFO\n\n* **subject_id**: {subject_id}\n\n"
+                    "{previous_concepts_section}"
+                    "## TEXT TO ANALYZE\n\n{text_content}"
+                ),
+            ]
+        )
 
         try:
             self.structured_extract_llm = self.llm.with_structured_output(
@@ -63,12 +65,14 @@ class ExtractionChain:
         # ---------------------------------------------------------
         # Verification Prompt & Chain
         # ---------------------------------------------------------
-        self.verification_prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate.from_template(EVIDENCE_VERIFICATION_PROMPT),
-            HumanMessagePromptTemplate.from_template(
-                "## CONCEPTS TO ANALYZE:\n\n**Concept A:** {concept_a}\n**Concept B:** {concept_b}"
-            )
-        ])
+        self.verification_prompt = ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(EVIDENCE_VERIFICATION_PROMPT),
+                HumanMessagePromptTemplate.from_template(
+                    "## CONCEPTS TO ANALYZE:\n\n**Concept A:** {concept_a}\n**Concept B:** {concept_b}"
+                ),
+            ]
+        )
 
         try:
             self.structured_verif_llm = self.llm.with_structured_output(
@@ -95,7 +99,7 @@ class ExtractionChain:
         """
         batches = []
         for i in range(0, len(chunks), batch_size):
-            batch_chunks = chunks[i:i + batch_size]
+            batch_chunks = chunks[i : i + batch_size]
             batches.append(batch_chunks)
 
         logger.info(
@@ -107,7 +111,9 @@ class ExtractionChain:
         all_previous_concepts: list[tuple] = []  # [(concept_id, name), ...]
 
         for batch_idx, batch in enumerate(batches):
-            context_window = all_previous_concepts[-max_previous_concepts:] if max_previous_concepts > 0 else []
+            context_window = (
+                all_previous_concepts[-max_previous_concepts:] if max_previous_concepts > 0 else []
+            )
 
             try:
                 result = self._process_batch(
@@ -183,25 +189,37 @@ class ExtractionChain:
                     result = self.extraction_chain.invoke(invoke_args)
                 except Exception as e:
                     last_error = e
-                    logger.warning(f"Batch {batch_idx} (Attempt {attempt+1}/{max_retries}) failed: {e}")
+                    logger.warning(
+                        f"Batch {batch_idx} (Attempt {attempt + 1}/{max_retries}) failed: {e}"
+                    )
                     continue
                 if not isinstance(result, ConceptExtraction):
-                    last_error = TypeError(f"LLM API did not return a ConceptExtraction instance. Got: {type(result)}")
-                    logger.warning(f"Batch {batch_idx} (Attempt {attempt+1}/{max_retries}) failed: {last_error}")
+                    last_error = TypeError(
+                        f"LLM API did not return a ConceptExtraction instance. Got: {type(result)}"
+                    )
+                    logger.warning(
+                        f"Batch {batch_idx} (Attempt {attempt + 1}/{max_retries}) failed: {last_error}"
+                    )
                     continue
-                logger.info(f"Batch {batch_idx} extraction success: {len(result.concepts)} concepts")
+                logger.info(
+                    f"Batch {batch_idx} extraction success: {len(result.concepts)} concepts"
+                )
                 return result
 
-            logger.error(f"Batch {batch_idx} exhausted max_retries ({max_retries}). Last error: {last_error}")
+            logger.error(
+                f"Batch {batch_idx} exhausted max_retries ({max_retries}). Last error: {last_error}"
+            )
             return ConceptExtraction(
                 concepts=[],
                 subject_id=subject_id,
-                notes=f"Structured output failed after {max_retries} attempts. Error: {str(last_error)[:100]}"
+                notes=f"Structured output failed after {max_retries} attempts. Error: {str(last_error)[:100]}",
             )
 
         except Exception as e:
             logger.error(f"Error in batch {batch_idx}: {str(e)[:100]}")
-            return ConceptExtraction(concepts=[], subject_id=subject_id, notes=f"Error: {str(e)[:100]}")
+            return ConceptExtraction(
+                concepts=[], subject_id=subject_id, notes=f"Error: {str(e)[:100]}"
+            )
 
     @timeit
     def verify_relation(
@@ -234,12 +252,7 @@ class ExtractionChain:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_index = {}
             for idx, (concept_a, concept_b) in enumerate(concept_pairs):
-                future = executor.submit(
-                    self._verify_single_relation,
-                    concept_a,
-                    concept_b,
-                    idx
-                )
+                future = executor.submit(self._verify_single_relation, concept_a, concept_b, idx)
                 future_to_index[future] = idx
 
             for future, idx in future_to_index.items():
@@ -255,7 +268,7 @@ class ExtractionChain:
                         direction=None,
                         confidence=0.0,
                         evidences=[],
-                        reasoning=f"Error during verification: {str(e)[:100]}"
+                        reasoning=f"Error during verification: {str(e)[:100]}",
                     )
 
         return results
@@ -282,13 +295,15 @@ class ExtractionChain:
             except Exception as e:
                 last_error = e
                 logger.warning(
-                    f"{pair_label} attempt {attempt+1}/{max_retries} failed: {str(e)[:120]}"
+                    f"{pair_label} attempt {attempt + 1}/{max_retries} failed: {str(e)[:120]}"
                 )
                 continue
             if not isinstance(result, EvidenceVerification):
-                last_error = TypeError(f"LLM API did not return EvidenceVerification instance. Got: {type(result)}")
+                last_error = TypeError(
+                    f"LLM API did not return EvidenceVerification instance. Got: {type(result)}"
+                )
                 logger.warning(
-                    f"{pair_label} attempt {attempt+1}/{max_retries} failed: {last_error}"
+                    f"{pair_label} attempt {attempt + 1}/{max_retries} failed: {last_error}"
                 )
                 continue
             logger.info(
@@ -298,8 +313,7 @@ class ExtractionChain:
             return result
 
         logger.error(
-            f"{pair_label} ('{concept_a}' <-> '{concept_b}'): "
-            f"failed after {max_retries} attempts"
+            f"{pair_label} ('{concept_a}' <-> '{concept_b}'): failed after {max_retries} attempts"
         )
         return EvidenceVerification(
             has_relation=False,
@@ -307,5 +321,5 @@ class ExtractionChain:
             direction=None,
             confidence=0.0,
             evidences=[],
-            reasoning=f"Failed to generate structured output after {max_retries} attempts. Last error: {str(last_error)[:100]}"
+            reasoning=f"Failed to generate structured output after {max_retries} attempts. Last error: {str(last_error)[:100]}",
         )

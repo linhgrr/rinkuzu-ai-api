@@ -14,6 +14,7 @@ from langchain_text_splitters import (
 
 try:
     from transformers import AutoTokenizer
+
     _HAS_TRANSFORMERS = True
 except Exception:
     AutoTokenizer = None  # type: ignore[assignment,misc]
@@ -63,8 +64,7 @@ class TextChunker:
 
         if self.use_hf_tokenizer and not _HAS_TRANSFORMERS:
             logger.warning(
-                "use_hf_tokenizer=True nhưng thiếu 'transformers'. "
-                "Sẽ fallback về đếm theo ký tự."
+                "use_hf_tokenizer=True nhưng thiếu 'transformers'. Sẽ fallback về đếm theo ký tự."
             )
             self.use_hf_tokenizer = False
 
@@ -95,8 +95,7 @@ class TextChunker:
             header_docs = md_splitter.split_text(text)
             # Gắn metadata chung
             docs = [
-                Document(page_content=d.page_content,
-                         metadata={**base_meta, **d.metadata})
+                Document(page_content=d.page_content, metadata={**base_meta, **d.metadata})
                 for d in header_docs
             ]
         else:
@@ -131,7 +130,8 @@ class TextChunker:
         if self.use_hf_tokenizer and self.hf_model_name and AutoTokenizer is not None:
             try:
                 tokenizer = AutoTokenizer.from_pretrained(
-                    self.hf_model_name, trust_remote_code=True)
+                    self.hf_model_name, trust_remote_code=True
+                )
                 splitter = TextSplitter.from_huggingface_tokenizer(
                     tokenizer=tokenizer,
                     chunk_size=self.chunk_size,
@@ -161,4 +161,8 @@ class TextChunker:
         if re.search(r"^#{1,6}\s+\S+", text, flags=re.MULTILINE):
             return True  # Markdown style
         # Dạng "1. Giới thiệu", "Chương 1", "Mục 2", "Section 2" ...
-        return bool(re.search(r"(?m)^(?:\d+\.\s+|Chương|Mục|Phần|Chapter|Section)\b", text, flags=re.IGNORECASE))
+        return bool(
+            re.search(
+                r"(?m)^(?:\d+\.\s+|Chương|Mục|Phần|Chapter|Section)\b", text, flags=re.IGNORECASE
+            )
+        )

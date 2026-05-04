@@ -83,11 +83,15 @@ async def persist_terminal_failure(
     job.user_message = details.user_message
     job.retryable = details.retryable
     job.current_step = details.current_step
-    logger.error(f"[Pipeline] Job {job.job_id} ended with {details.status.value}: {details.error_message}")
+    logger.error(
+        f"[Pipeline] Job {job.job_id} ended with {details.status.value}: {details.error_message}"
+    )
     try:
         saved = await save_job(job)
         if not saved:
-            logger.error(f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}")
+            logger.error(
+                f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}"
+            )
     except Exception as persist_exc:
         logger.error(
             f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}: {persist_exc}"

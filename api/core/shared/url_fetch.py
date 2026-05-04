@@ -66,17 +66,18 @@ async def stream_download(
     validate_download_url(url, allowlist=allowlist)
 
     bytes_written = 0
-    async with httpx.AsyncClient(
-        timeout=_DOWNLOAD_TIMEOUT,
-        follow_redirects=False,
-    ) as client, client.stream("GET", url) as resp:
+    async with (
+        httpx.AsyncClient(
+            timeout=_DOWNLOAD_TIMEOUT,
+            follow_redirects=False,
+        ) as client,
+        client.stream("GET", url) as resp,
+    ):
         resp.raise_for_status()
 
         content_length = resp.headers.get("content-length")
         if content_length and int(content_length) > max_bytes:
-            raise UnsafeURLError(
-                f"Content-Length {content_length} exceeds {max_bytes}-byte limit"
-            )
+            raise UnsafeURLError(f"Content-Length {content_length} exceeds {max_bytes}-byte limit")
 
         async with aiofiles.open(dest_path, "wb") as fh:
             async for chunk in resp.aiter_bytes(chunk_size=65536):
@@ -84,9 +85,7 @@ async def stream_download(
                 if bytes_written > max_bytes:
                     await fh.close()
                     await asyncio.to_thread(dest_path.unlink, missing_ok=True)
-                    raise UnsafeURLError(
-                        f"Download exceeded {max_bytes}-byte limit"
-                    )
+                    raise UnsafeURLError(f"Download exceeded {max_bytes}-byte limit")
                 await fh.write(chunk)
 
     return bytes_written

@@ -26,8 +26,12 @@ from .history_formatter import format_exercise_history
 from .session import ExerciseRecord
 
 BLOOM_LABELS = {
-    1: "Remember", 2: "Understand", 3: "Apply",
-    4: "Analyze", 5: "Evaluate", 6: "Create",
+    1: "Remember",
+    2: "Understand",
+    3: "Apply",
+    4: "Analyze",
+    5: "Evaluate",
+    6: "Create",
 }
 
 # Threshold below which max_steps is considered unset (likely a default placeholder)
@@ -111,14 +115,9 @@ class ExerciseService:
             return []
 
         same_concept_history = [
-            ex
-            for ex in reversed(session.exercise_history)
-            if ex.concept_idx == concept_idx
+            ex for ex in reversed(session.exercise_history) if ex.concept_idx == concept_idx
         ]
-        return [
-            self._serialize_exercise_for_prompt(ex)
-            for ex in same_concept_history[:limit]
-        ]
+        return [self._serialize_exercise_for_prompt(ex) for ex in same_concept_history[:limit]]
 
     @staticmethod
     def _recent_examples_fingerprint(recent_same_concept_exercises: list[dict[str, Any]]) -> str:
@@ -152,7 +151,9 @@ class ExerciseService:
         timeout_sec: float | None = None,
     ) -> dict[str, Any] | None:
         mastery_bucket = int(max(0.0, min(1.0, mastery or 0.0)) * 10)
-        recent_same_concept_exercises = self._get_recent_same_concept_exercises(session, concept_idx)
+        recent_same_concept_exercises = self._get_recent_same_concept_exercises(
+            session, concept_idx
+        )
         history_fingerprint = self._recent_examples_fingerprint(recent_same_concept_exercises)
         key = (session.session_id, concept_idx, bloom_level, mastery_bucket, history_fingerprint)
         existing = self._exercise_inflight.get(key)
@@ -227,7 +228,10 @@ class ExerciseService:
             else:
                 masks = env.action_masks()
                 action_id = select_action(
-                    session.q_net, session.current_obs, masks, session.device,
+                    session.q_net,
+                    session.current_obs,
+                    masks,
+                    session.device,
                     n_concepts=env.n_concepts,
                 )
                 concept_idx, bloom_level = decode_action(action_id)
@@ -237,7 +241,9 @@ class ExerciseService:
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
             concept_name = session.concept_names.get(concept_id, concept_id)
 
-            logger.info(f"[Exercise] Concept: [{concept_idx}] {concept_name} | Bloom: {bloom_level} | Step: {current_step + 1}/{env_stats.get('max_steps', '?')}")
+            logger.info(
+                f"[Exercise] Concept: [{concept_idx}] {concept_name} | Bloom: {bloom_level} | Step: {current_step + 1}/{env_stats.get('max_steps', '?')}"
+            )
 
             session._pending_concept_idx = concept_idx
             session._pending_bloom_level = bloom_level
@@ -300,12 +306,16 @@ class ExerciseService:
         exercise_data = None
         for branch in ("eager", "correct", "incorrect"):
             cached = session._prefetch_cache.get(branch)
-            if (cached
-                    and cached["concept_idx"] == concept_idx
-                    and cached["bloom_level"] == bloom_level):
+            if (
+                cached
+                and cached["concept_idx"] == concept_idx
+                and cached["bloom_level"] == bloom_level
+            ):
                 exercise_data = cached["exercise_data"]
                 session._prefetch_cache.clear()
-                logger.info(f"[Exercise] ⚡ Cache HIT ({branch}) for {concept_name} (Bloom {bloom_level})")
+                logger.info(
+                    f"[Exercise] ⚡ Cache HIT ({branch}) for {concept_name} (Bloom {bloom_level})"
+                )
                 break
 
         # Cache miss → generate via LLM
@@ -313,7 +323,9 @@ class ExerciseService:
             session._prefetch_cache.clear()
             concept_def = session.concept_definitions.get(concept_id, "")
             concept_mastery = session.env.get_concept_mastery()
-            mastery = float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
+            mastery = (
+                float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
+            )
             logger.info(f"[Exercise] Generating for {concept_name} (Bloom {bloom_level})...")
             try:
                 exercise_data = await self._generate_exercise_dedup(
@@ -390,7 +402,9 @@ class ExerciseService:
             short_answer_grader=evaluate_short_answer,
         )
 
-    async def submit_answer(self, session, answer: dict[str, Any], _background_tasks=None) -> dict[str, Any] | None:
+    async def submit_answer(
+        self, session, answer: dict[str, Any], _background_tasks=None
+    ) -> dict[str, Any] | None:
         """Process user's answer, update environment, return result."""
 
         async with session._lock:
@@ -409,10 +423,14 @@ class ExerciseService:
                 is_correct, answer_summary = self._evaluate_answer(exercise, answer)
             verdict = "✓ ĐÚNG" if is_correct else "✗ SAI"
 
-            logger.info(f"[Exercise] 📝 {exercise.concept_name} | Type: {exercise.exercise_type} | Answer: {answer_summary} → {verdict}")
+            logger.info(
+                f"[Exercise] 📝 {exercise.concept_name} | Type: {exercise.exercise_type} | Answer: {answer_summary} → {verdict}"
+            )
 
             # Use pre-generated explanations
-            explanation = exercise.explanation_correct if is_correct else exercise.explanation_incorrect
+            explanation = (
+                exercise.explanation_correct if is_correct else exercise.explanation_incorrect
+            )
 
             exercise.explanation = explanation
             exercise.user_answer = self._serialize_answer_for_history(exercise, answer)
@@ -425,7 +443,9 @@ class ExerciseService:
 
             # Step environment
             action_id = getattr(session, "_pending_action", 0)
-            obs, _reward, terminated, _truncated, info = session.env.step(action_id, human_correct=is_correct)
+            obs, _reward, terminated, _truncated, info = session.env.step(
+                action_id, human_correct=is_correct
+            )
             session.current_obs = obs
             session.current_exercise = None
 
@@ -436,7 +456,9 @@ class ExerciseService:
             mastery_val = float(concept_mastery[exercise.concept_idx])
             avg_mastery = float(np.mean(concept_mastery))
 
-        logger.info(f"[Exercise] Mastery: {mastery_val:.3f} | Avg: {avg_mastery:.3f} | Step: {info['step']} | Status: {session.status}")
+        logger.info(
+            f"[Exercise] Mastery: {mastery_val:.3f} | Avg: {avg_mastery:.3f} | Step: {info['step']} | Status: {session.status}"
+        )
 
         if self._session_manager:
             try:
@@ -478,7 +500,10 @@ class ExerciseService:
             else:
                 masks = session.env.action_masks()
                 action_id = select_action(
-                    session.q_net, session.current_obs, masks, session.device,
+                    session.q_net,
+                    session.current_obs,
+                    masks,
+                    session.device,
                     n_concepts=session.env.n_concepts,
                 )
                 concept_idx, bloom_level = decode_action(action_id)
@@ -488,7 +513,9 @@ class ExerciseService:
             concept_name = session.concept_names.get(concept_id, concept_id)
             concept_def = session.concept_definitions.get(concept_id, "")
             concept_mastery = session.env.get_concept_mastery()
-            mastery = float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
+            mastery = (
+                float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
+            )
 
             logger.info(f"[Eager] Pre-generating: {concept_name} (Bloom {bloom_level})...")
 
@@ -530,7 +557,10 @@ class ExerciseService:
 
                 masks = env_snap.action_masks()
                 next_action = select_action(
-                    session.q_net, obs, masks, session.device,
+                    session.q_net,
+                    obs,
+                    masks,
+                    session.device,
                     n_concepts=env_snap.n_concepts,
                 )
                 next_concept_idx, next_bloom = decode_action(next_action)
@@ -539,7 +569,9 @@ class ExerciseService:
                 next_concept_name = session.concept_names.get(next_concept_id, next_concept_id)
                 next_concept_def = session.concept_definitions.get(next_concept_id, "")
 
-                logger.debug(f"[Prefetch] {branch}: predicted → {next_concept_name} (Bloom {next_bloom})")
+                logger.debug(
+                    f"[Prefetch] {branch}: predicted → {next_concept_name} (Bloom {next_bloom})"
+                )
                 concept_mastery = session.env.get_concept_mastery()
                 mastery = (
                     float(concept_mastery[next_concept_idx])
@@ -563,7 +595,9 @@ class ExerciseService:
                         "bloom_level": next_bloom,
                         "exercise_data": ex_data,
                     }
-                    logger.info(f"[Prefetch] ✓ {branch} cached: {next_concept_name} (Bloom {next_bloom})")
+                    logger.info(
+                        f"[Prefetch] ✓ {branch} cached: {next_concept_name} (Bloom {next_bloom})"
+                    )
 
             except Exception as e:
                 logger.error(f"[Prefetch] ✗ {branch} failed: {e}")

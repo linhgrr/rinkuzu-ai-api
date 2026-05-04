@@ -40,7 +40,9 @@ class ExerciseBaseOutput(BaseModel):
     exercise_type: ExerciseType
     question: str = Field(..., description="Question or instruction text")
     explanation_correct: str = Field(..., description="Explanation shown when learner is correct")
-    explanation_incorrect: str = Field(..., description="Explanation shown when learner is incorrect")
+    explanation_incorrect: str = Field(
+        ..., description="Explanation shown when learner is incorrect"
+    )
 
 
 class ExerciseOptions(BaseModel):
@@ -58,14 +60,20 @@ class MCQOutput(ExerciseBaseOutput):
 
 class TrueFalseOutput(ExerciseBaseOutput):
     exercise_type: Literal["true_false"] = "true_false"
-    statement: str = Field(..., description="A single statement the learner judges as true or false")
+    statement: str = Field(
+        ..., description="A single statement the learner judges as true or false"
+    )
     correct_answer: bool = Field(..., description="Whether the statement is true")
 
 
 class FillBlankOutput(ExerciseBaseOutput):
     exercise_type: Literal["fill_blank"] = "fill_blank"
-    sentence: str = Field(..., description="Sentence containing exactly one blank placeholder _____")
-    blank_answers: list[str] = Field(..., min_length=1, description="Accepted answers for the blank")
+    sentence: str = Field(
+        ..., description="Sentence containing exactly one blank placeholder _____"
+    )
+    blank_answers: list[str] = Field(
+        ..., min_length=1, description="Accepted answers for the blank"
+    )
     hint: str = Field(..., description="Short hint to guide the learner")
 
 
@@ -89,8 +97,12 @@ class MultiCorrectOutput(ExerciseBaseOutput):
 
 class OrderingOutput(ExerciseBaseOutput):
     exercise_type: Literal["ordering"] = "ordering"
-    items: list[str] = Field(..., min_length=3, description="Items shown to the learner in scrambled order")
-    correct_order: list[str] = Field(..., min_length=3, description="Same items arranged in the correct order")
+    items: list[str] = Field(
+        ..., min_length=3, description="Items shown to the learner in scrambled order"
+    )
+    correct_order: list[str] = Field(
+        ..., min_length=3, description="Same items arranged in the correct order"
+    )
 
 
 class MatchingPair(BaseModel):
@@ -241,33 +253,33 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> dict[str, Any]:
 EXERCISE_WEIGHTS: dict[int, dict[ExerciseType, tuple[int, int, int]]] = {
     1: {
         ExerciseType.TRUE_FALSE: (70, 40, 10),
-        ExerciseType.MCQ:        (30, 60, 90),
+        ExerciseType.MCQ: (30, 60, 90),
     },
     2: {
-        ExerciseType.TRUE_FALSE: (60, 20,  5),
-        ExerciseType.MCQ:        (30, 40, 25),
+        ExerciseType.TRUE_FALSE: (60, 20, 5),
+        ExerciseType.MCQ: (30, 40, 25),
         ExerciseType.FILL_BLANK: (10, 30, 40),
-        ExerciseType.MATCHING:   ( 0, 10, 30),
+        ExerciseType.MATCHING: (0, 10, 30),
     },
     3: {
-        ExerciseType.MCQ:           (50, 20,  5),
-        ExerciseType.FILL_BLANK:    (30, 40, 20),
-        ExerciseType.MATCHING:      (20, 30, 20),
-        ExerciseType.MULTI_CORRECT: ( 0, 10, 35),
-        ExerciseType.ORDERING:      ( 0,  0, 20),
+        ExerciseType.MCQ: (50, 20, 5),
+        ExerciseType.FILL_BLANK: (30, 40, 20),
+        ExerciseType.MATCHING: (20, 30, 20),
+        ExerciseType.MULTI_CORRECT: (0, 10, 35),
+        ExerciseType.ORDERING: (0, 0, 20),
     },
     4: {
-        ExerciseType.ORDERING:      (70, 40, 20),
+        ExerciseType.ORDERING: (70, 40, 20),
         ExerciseType.MULTI_CORRECT: (30, 60, 80),
     },
     5: {
         ExerciseType.MULTI_CORRECT: (80, 50, 20),
-        ExerciseType.SHORT_ANSWER:  (20, 50, 80),
+        ExerciseType.SHORT_ANSWER: (20, 50, 80),
     },
     6: {
-        ExerciseType.MCQ:           (60, 30,  0),
-        ExerciseType.SHORT_ANSWER:  (40, 70, 100),
-    }
+        ExerciseType.MCQ: (60, 30, 0),
+        ExerciseType.SHORT_ANSWER: (40, 70, 100),
+    },
 }
 
 

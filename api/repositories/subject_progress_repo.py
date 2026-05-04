@@ -62,7 +62,9 @@ class SubjectProgressRepository(MongoRepository):
             _load_by_session_for_user,
         )
 
-    async def load_many_for_user(self, job_ids: list[str], user_id: str) -> dict[str, dict[str, Any]]:
+    async def load_many_for_user(
+        self, job_ids: list[str], user_id: str
+    ) -> dict[str, dict[str, Any]]:
         if not job_ids:
             return {}
 
@@ -76,15 +78,22 @@ class SubjectProgressRepository(MongoRepository):
 
         return await self._run_or_default("load_many_for_user", {}, _load_many_for_user)
 
-    async def list_recent(self, limit: int = 50, user_id: str | None = None) -> list[dict[str, Any]]:
+    async def list_recent(
+        self, limit: int = 50, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
         async def _list_recent() -> list[dict[str, Any]]:
             query = {}
             if user_id:
                 query["user_id"] = user_id
-            cursor = self._db[self.COLLECTION].find(
-                query,
-                {"_id": 0},
-            ).sort("updated_at", -1).limit(limit)
+            cursor = (
+                self._db[self.COLLECTION]
+                .find(
+                    query,
+                    {"_id": 0},
+                )
+                .sort("updated_at", -1)
+                .limit(limit)
+            )
             return await cursor.to_list(length=limit)
 
         return await self._run_or_default("list_recent", [], _list_recent)

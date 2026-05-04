@@ -57,9 +57,7 @@ class KnowledgeGraphBuilder:
         attrs = {"is_placeholder": False, **attrs}
         nx.set_node_attributes(self.graph, {node_id: attrs})
 
-    def _normalize_evidence(
-        self, evidence: str | list[str] | None
-    ) -> list[str] | None:
+    def _normalize_evidence(self, evidence: str | list[str] | None) -> list[str] | None:
         """Đưa evidence về list[str] đã dedupe."""
         if evidence is None:
             return None
@@ -77,7 +75,8 @@ class KnowledgeGraphBuilder:
         return out or None
 
     def _merge_evidence(
-        self, old: str | list[str] | None,
+        self,
+        old: str | list[str] | None,
         new: str | list[str] | None,
     ) -> list[str] | None:
         """Gộp evidence cũ & mới, trả về list[str] đã dedupe."""

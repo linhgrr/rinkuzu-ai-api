@@ -55,8 +55,7 @@ def sanitize_concept_relations(all_concepts: list[Any]) -> tuple[int, int]:
 def build_partial_graph(graph, all_concepts: list[Any]) -> dict[str, Any]:
     """Build the partial graph payload exposed while processing is in progress."""
     concept_name_map = {
-        getattr(concept, "concept_id", ""): getattr(concept, "name", "")
-        for concept in all_concepts
+        getattr(concept, "concept_id", ""): getattr(concept, "name", "") for concept in all_concepts
     }
     return {
         "nodes": [
@@ -72,7 +71,11 @@ def remove_invalid_graph_members(graph, concept_ids: set[str]) -> None:
     edges_to_remove = []
     for source_id, target_id, data in list(graph.edges(data=True)):
         relation_type = str(data.get("relation_type", "PREREQUISITE")).upper()
-        if relation_type != "PREREQUISITE" or source_id not in concept_ids or target_id not in concept_ids:
+        if (
+            relation_type != "PREREQUISITE"
+            or source_id not in concept_ids
+            or target_id not in concept_ids
+        ):
             edges_to_remove.append((source_id, target_id))
     if edges_to_remove:
         graph.remove_edges_from(edges_to_remove)

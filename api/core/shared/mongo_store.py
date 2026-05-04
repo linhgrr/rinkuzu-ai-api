@@ -15,6 +15,7 @@ from api.repositories.subject_progress_repo import SubjectProgressRepository
 
 try:
     import motor.motor_asyncio as _motor
+
     _MOTOR_AVAILABLE = True
 except ImportError:
     _motor = None  # type: ignore[assignment]
@@ -91,6 +92,7 @@ def get_subject_progress_repo() -> SubjectProgressRepository | None:
 
 # ── Backward-compatible module-level functions ──────────────
 # Used by content_pipeline.py which imports from this module directly.
+
 
 async def save_subject_progress(job_id: str, user_id: str, doc: dict[str, Any]) -> bool:
     repo = _state["subject_progress_repo"]
@@ -193,7 +195,9 @@ async def load_pipeline_job_map_for_user(
     return await repo.load_many_for_user(job_ids, user_id, projection=projection)
 
 
-async def list_pipeline_jobs(limit: int = 20, user_id: str | None = None, status: str | None = None) -> list:
+async def list_pipeline_jobs(
+    limit: int = 20, user_id: str | None = None, status: str | None = None
+) -> list:
     repo = _state["pipeline_repo"]
     if not repo:
         return []

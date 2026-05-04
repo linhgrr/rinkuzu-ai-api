@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import functools
 import hashlib
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +15,6 @@ from loguru import logger
 
 from api.config import get_settings
 from api.core.content_pipeline.application.relation_engine import DefaultRelationEngine
-from api.core.learning.exercise_gen import generate_theory
 
 from .embed.embedding_client import EmbeddingClient
 from .embed.embeddings import compute_embedding_for_concepts
@@ -37,6 +37,7 @@ CONTENT_PROCESSOR_SRC = str(PROJECT_ROOT)
 
 try:
     from .embed.prereq_ranking import rank_prerequisites as _rank_prerequisites
+
     _PREREQ_RANKING_AVAILABLE = True
 except ModuleNotFoundError:
     _PREREQ_RANKING_AVAILABLE = False
@@ -44,6 +45,7 @@ except ModuleNotFoundError:
 
 try:
     from sentence_transformers import SentenceTransformer as _SentenceTransformer
+
     _SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     _SENTENCE_TRANSFORMERS_AVAILABLE = False
@@ -71,7 +73,8 @@ class ContentProcessorBindings:
 
 def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str):
     """Delegate theory generation to exercise_gen module."""
-    return generate_theory(concept_name, concept_definition)
+    exercise_gen = import_module("api.core.learning.exercise_gen")
+    return exercise_gen.generate_theory(concept_name, concept_definition)
 
 
 def get_s3_client():
@@ -106,10 +109,12 @@ def _compute_embedding_for_concepts(concepts, embedding_model):
 
 def _build_relation_engine(*, extraction_chain):
     if not _PREREQ_RANKING_AVAILABLE:
+
         def rank_prerequisites_stub(*_args, **_kwargs):
             raise ModuleNotFoundError(
                 "Optional embedding dependencies are required for prerequisite ranking"
             )
+
         rank_fn = rank_prerequisites_stub
     else:
         rank_fn = _rank_prerequisites
@@ -139,9 +144,7 @@ def _apply_transitive_reduction(graph):
 def _build_saint_text_model():
     # sentence_transformers is an optional heavy dependency checked at module load.
     if not _SENTENCE_TRANSFORMERS_AVAILABLE or _SentenceTransformer is None:
-        raise ImportError(
-            "sentence-transformers is required for SAINT text model"
-        )
+        raise ImportError("sentence-transformers is required for SAINT text model")
     return _SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
 
 

@@ -44,7 +44,7 @@ def deduplicate_by_embedding(
         "deduplicate_by_embedding is deprecated. Use LLM-based verification with "
         "'same_concept' direction for more accurate concept merging.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     if not concepts:
@@ -81,18 +81,20 @@ def deduplicate_by_embedding(
 
     sim = cosine_similarity(emb_mat)
 
-    id_map, merged_concepts = _build_components(concepts, with_emb_idx, without_emb_idx, sim, threshold)
+    id_map, merged_concepts = _build_components(
+        concepts, with_emb_idx, without_emb_idx, sim, threshold
+    )
 
     final = []
     for concept in merged_concepts:
         remapped = concept.copy(deep=True)
         remapped.relations = _remap_and_dedup_relations(
-            remapped.relations, id_map, self_id=remapped.concept_id)
+            remapped.relations, id_map, self_id=remapped.concept_id
+        )
         final.append(remapped)
 
     reduction = len(concepts) - len(final)
-    logger.info(
-        f"Deduplicated {len(concepts)} concepts into {len(final)} (reduction={reduction})")
+    logger.info(f"Deduplicated {len(concepts)} concepts into {len(final)} (reduction={reduction})")
     return final
 
 
@@ -208,7 +210,8 @@ def _merge_component(group: list[Concept]) -> tuple[Concept, dict[str, str]]:
     subject_ids = {c.subject_id for c in group}
     if len(subject_ids) > 1:
         logger.debug(
-            f"Mixed subject_id in merged group {concept_ids}; keeping '{canonical.subject_id}'")
+            f"Mixed subject_id in merged group {concept_ids}; keeping '{canonical.subject_id}'"
+        )
 
     examples = _collect_unique(
         (ex for c in group for ex in (c.examples or []) if ex),
@@ -230,7 +233,11 @@ def _merge_component(group: list[Concept]) -> tuple[Concept, dict[str, str]]:
         label="name_embedding",
     )
     avg_definition_embedding = _average_embeddings(
-        [np.asarray(c.definition_embedding, dtype=float) for c in group if c.definition_embedding is not None],
+        [
+            np.asarray(c.definition_embedding, dtype=float)
+            for c in group
+            if c.definition_embedding is not None
+        ],
         label="definition_embedding",
     )
 
@@ -267,7 +274,9 @@ def _average_embeddings(emb_list: list[np.ndarray], label: str) -> list[float] |
         return None
     emb_shapes = [e.shape for e in emb_list]
     if len(set(emb_shapes)) > 1:
-        logger.warning(f"Inconsistent {label} shapes in merge group: {set(emb_shapes)}, using first valid")
+        logger.warning(
+            f"Inconsistent {label} shapes in merge group: {set(emb_shapes)}, using first valid"
+        )
         return emb_list[0].tolist()
     return np.mean(emb_list, axis=0).tolist()
 

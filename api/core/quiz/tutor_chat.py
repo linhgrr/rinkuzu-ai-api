@@ -47,12 +47,7 @@ TUTOR_RESPONSE_REQUIREMENTS = (
 
 
 def sanitize_chat_input(input_text: str) -> str:
-    return (
-        input_text
-        .replace("<", "")
-        .replace(">", "")
-        .strip()[:1000]
-    )
+    return input_text.replace("<", "").replace(">", "").strip()[:1000]
 
 
 def validate_chat_input(user_question: str) -> str | None:
@@ -98,10 +93,12 @@ def normalize_chat_history(chat_history: list[dict[str, str]] | None) -> list[di
             logger.warning("[TutorChat] Dropped suspicious historical chat message")
             continue
 
-        normalized.append({
-            "role": role,
-            "content": content,
-        })
+        normalized.append(
+            {
+                "role": role,
+                "content": content,
+            }
+        )
 
     return normalized[-12:]
 
@@ -120,19 +117,21 @@ def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
         return ""
 
     try:
-        result = llm.invoke([
-            (
-                "system",
-                "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài.",
-            ),
-            (
-                "human",
+        result = llm.invoke(
+            [
                 (
-                    "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
-                    f"{chat_text}"
+                    "system",
+                    "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài.",
                 ),
-            ),
-        ])
+                (
+                    "human",
+                    (
+                        "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
+                        f"{chat_text}"
+                    ),
+                ),
+            ]
+        )
         return extract_llm_text(result.content)
     except Exception as exc:
         logger.warning(f"[TutorChat] Failed to summarize chat history: {exc}")
@@ -249,7 +248,7 @@ def _split_sse_events(buffer: str) -> tuple[list[str], str]:
     last_index = 0
 
     for match in re.finditer(r"\r?\n\r?\n", buffer):
-        events.append(buffer[last_index:match.start()])
+        events.append(buffer[last_index : match.start()])
         last_index = match.end()
 
     return events, buffer[last_index:]
@@ -257,9 +256,7 @@ def _split_sse_events(buffer: str) -> tuple[list[str], str]:
 
 def _parse_sse_event(event: str) -> tuple[str, bool]:
     data_lines = [
-        line[5:].strip()
-        for line in re.split(r"\r?\n", event)
-        if line.startswith("data:")
+        line[5:].strip() for line in re.split(r"\r?\n", event) if line.startswith("data:")
     ]
     if not data_lines:
         return "", False
@@ -282,7 +279,9 @@ def _parse_sse_event(event: str) -> tuple[str, bool]:
     if choices:
         finish_reason = choices[0].get("finish_reason")
 
-    return _extract_openai_delta_content(payload), payload.get("done") is True or finish_reason is not None
+    return _extract_openai_delta_content(payload), payload.get(
+        "done"
+    ) is True or finish_reason is not None
 
 
 async def _raise_if_error_status(response: httpx.Response) -> None:
@@ -307,7 +306,9 @@ async def _connect_stream_with_retries(
     for attempt in range(1, max_retries + 1):
         candidate_client = httpx.AsyncClient(timeout=http_timeout)
         try:
-            request = candidate_client.build_request("POST", endpoint, headers=headers, json=payload)
+            request = candidate_client.build_request(
+                "POST", endpoint, headers=headers, json=payload
+            )
             candidate_response = await candidate_client.send(request, stream=True)
             await _raise_if_error_status(candidate_response)
         except Exception as exc:
@@ -405,10 +406,14 @@ async def create_tutor_chat_stream(
             async for chunk in response.aiter_bytes():
                 yield chunk
                 buf += decoder.decode(chunk)
-                buf, full_response, saw_terminal = await _process_sse_buffer(buf, full_response, saw_terminal=saw_terminal)
+                buf, full_response, saw_terminal = await _process_sse_buffer(
+                    buf, full_response, saw_terminal=saw_terminal
+                )
 
             buf += decoder.decode(b"", final=True)
-            buf, full_response, saw_terminal = await _process_sse_buffer(buf, full_response, saw_terminal=saw_terminal)
+            buf, full_response, saw_terminal = await _process_sse_buffer(
+                buf, full_response, saw_terminal=saw_terminal
+            )
 
             if buf.strip():
                 delta, is_terminal = _parse_sse_event(buf)

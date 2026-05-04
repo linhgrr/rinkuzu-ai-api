@@ -41,9 +41,7 @@ async def try_restore_completed_job_from_mongo(
     job.concepts_after_merge = int(mongo_doc.get("concepts_after_merge", 0) or 0)
     job.relations_verified = int(mongo_doc.get("relations_verified", 0) or 0)
     job.graph_stats = (
-        mongo_doc.get("graph_stats")
-        if isinstance(mongo_doc.get("graph_stats"), dict)
-        else {}
+        mongo_doc.get("graph_stats") if isinstance(mongo_doc.get("graph_stats"), dict) else {}
     )
     populate_metrics(job)
     job.status = PipelineStatus.COMPLETED

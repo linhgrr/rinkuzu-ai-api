@@ -107,5 +107,8 @@ def test_recent_exercises_dedup_block():
         ]
     )
 
-    assert "Các bài gần nhất cùng concept (TRÁNH trùng lặp với các bài dưới đây)" in messages[1].content
-    assert "\"Q1\"" in messages[1].content
+    assert (
+        "Các bài gần nhất cùng concept (TRÁNH trùng lặp với các bài dưới đây)"
+        in messages[1].content
+    )
+    assert '"Q1"' in messages[1].content

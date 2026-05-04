@@ -5,6 +5,7 @@ from pathlib import Path
 
 mimetypes.init()
 
+
 def guess_mime_type(file_path: str) -> str | None:
     """
     Guess MIME type from file path.

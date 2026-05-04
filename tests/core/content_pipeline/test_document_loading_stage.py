@@ -13,14 +13,14 @@ def test_load_document_chunks_updates_progress_and_total_chunks():
         calls.append((status, step, progress))
 
     def load_and_chunk(file_path: str, subject_id: str):
-        assert file_path == "/tmp/lesson.pdf"
+        assert file_path == "fixtures/lesson.pdf"
         assert subject_id == "algebra"
         return ["chunk-1", "chunk-2", "chunk-3"]
 
     chunks = asyncio.run(
         load_document_chunks(
             job,
-            file_path="/tmp/lesson.pdf",
+            file_path="fixtures/lesson.pdf",
             load_and_chunk=load_and_chunk,
             persist_job_state=persist_job_state,
         )

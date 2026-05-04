@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from api.config import get_settings
 from api.core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
 from api.dependencies import get_current_user
-from api.main import limiter
+from api.rate_limit import limiter
 from api.schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponse
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])

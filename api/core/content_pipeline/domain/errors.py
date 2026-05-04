@@ -13,6 +13,4 @@ class PipelineStageTimeoutError(PipelineExecutionError):
     def __init__(self, stage_name: str, timeout_sec: float):
         self.stage_name = stage_name
         self.timeout_sec = timeout_sec
-        super().__init__(
-            f"Stage '{stage_name}' exceeded timeout after {timeout_sec:.0f} seconds"
-        )
+        super().__init__(f"Stage '{stage_name}' exceeded timeout after {timeout_sec:.0f} seconds")

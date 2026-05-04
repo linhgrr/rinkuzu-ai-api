@@ -2,18 +2,18 @@
 main.py — FastAPI app entry point for Adaptive Learning Demo.
 """
 
+from contextlib import asynccontextmanager
 import os
+from pathlib import Path
 import sys
 import time
-from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from loguru import logger
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from .config import get_settings
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
@@ -31,6 +31,7 @@ from .core.shared import mongo_store
 from .core.shared.llm import initialize_shared_llm
 from .exceptions import register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
+from .rate_limit import limiter
 from .routers import history as history_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
@@ -40,14 +41,6 @@ from .routers import session as session_router
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 _UPLOAD_MAX_AGE_SECS = 86400
-
-
-def _rate_key(request: Request) -> str:
-    """Rate-limit key: prefer x-user-id header, fall back to client IP."""
-    return request.headers.get("x-user-id") or get_remote_address(request)
-
-
-limiter = Limiter(key_func=_rate_key)
 
 
 def _configure_logging() -> None:
@@ -109,7 +102,9 @@ def _init_pipeline(app: FastAPI) -> None:
         document_chunks_col=app.state.document_chunks_col,
     )
 
-    async def run_content_pipeline(job, file_path, prs_threshold, min_confidence, apply_reduction) -> None:
+    async def run_content_pipeline(
+        job, file_path, prs_threshold, min_confidence, apply_reduction
+    ) -> None:
         await pipeline_runner.run(
             job,
             file_path=file_path,
@@ -256,8 +251,6 @@ def _build_readiness_payload() -> tuple[dict, bool]:
 @app.get("/api/ready")
 async def readiness():
     """Kubernetes readiness probe — 503 until all dependencies are up."""
-    from fastapi.responses import JSONResponse
-
     payload, ready = _build_readiness_payload()
     if not ready:
         return JSONResponse(status_code=503, content=payload)
@@ -267,8 +260,6 @@ async def readiness():
 @app.get("/api/health")
 async def health():
     """Backwards-compat alias for /api/ready."""
-    from fastapi.responses import JSONResponse
-
     payload, ready = _build_readiness_payload()
     if not ready:
         return JSONResponse(status_code=503, content=payload)

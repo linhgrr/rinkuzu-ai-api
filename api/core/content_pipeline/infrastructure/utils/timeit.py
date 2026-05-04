@@ -18,6 +18,7 @@ def timeit(func: Callable) -> Callable:
     Returns:
         Wrapped function
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs) -> Any:
         start_time = time.time()

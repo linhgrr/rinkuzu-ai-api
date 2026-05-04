@@ -20,7 +20,7 @@ class ConceptChromaStore:
         self,
         collection_name: str = "concepts",
         persist_directory: str | None = None,
-        embedding_client: EmbeddingClient | None = None
+        embedding_client: EmbeddingClient | None = None,
     ):
         """
         Khởi tạo ChromaDB store với LangChain integration.
@@ -34,8 +34,7 @@ class ConceptChromaStore:
 
         # Set default persist directory
         if persist_directory is None:
-            persist_directory = str(
-                Path(__file__).parent.parent.parent / "chroma_db")
+            persist_directory = str(Path(__file__).parent.parent.parent / "chroma_db")
 
         self.persist_directory = persist_directory
         Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
@@ -49,10 +48,7 @@ class ConceptChromaStore:
         # Initialize ChromaDB client with persistent storage
         self.chroma_client = chromadb.PersistentClient(
             path=self.persist_directory,
-            settings=ChromaSettings(
-                anonymized_telemetry=False,
-                allow_reset=True
-            )
+            settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True),
         )
 
         # Initialize LangChain Chroma vectorstore
@@ -67,14 +63,10 @@ class ConceptChromaStore:
             "ConceptChromaStore initialized with LangChain Chroma",
             collection=self.collection_name,
             persist_dir=self.persist_directory,
-            embedding_model=self.embedding_client.model_name
+            embedding_model=self.embedding_client.model_name,
         )
 
-    def add_concepts(
-        self,
-        concepts: list[Concept],
-        subject_id: str
-    ) -> list[str]:
+    def add_concepts(self, concepts: list[Concept], subject_id: str) -> list[str]:
         """
         Thêm concepts vào ChromaDB.
 
@@ -122,25 +114,19 @@ class ConceptChromaStore:
                 metadata["topic"] = concept.topic
 
             # Tạo LangChain Document
-            doc = Document(
-                page_content=page_content,
-                metadata=metadata
-            )
+            doc = Document(page_content=page_content, metadata=metadata)
 
             documents.append(doc)
             ids.append(concept.concept_id)
 
         # Thêm vào vectorstore bằng LangChain Chroma
         try:
-            added_ids = self.vectorstore.add_documents(
-                documents=documents,
-                ids=ids
-            )
+            added_ids = self.vectorstore.add_documents(documents=documents, ids=ids)
 
             logger.info(
                 f"Added {len(added_ids)} concepts to ChromaDB via LangChain",
                 collection=self.collection_name,
-                subject_id=subject_id
+                subject_id=subject_id,
             )
 
         except Exception as e:
@@ -154,7 +140,7 @@ class ConceptChromaStore:
         query: str,
         subject_id: str | None = None,
         k: int = 5,
-        filter_dict: dict[str, Any] | None = None
+        filter_dict: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """
         Tìm kiếm concepts sử dụng semantic search.
@@ -177,15 +163,10 @@ class ConceptChromaStore:
         try:
             if where_filter:
                 results = self.vectorstore.similarity_search_with_score(
-                    query=query,
-                    k=k,
-                    filter=where_filter
+                    query=query, k=k, filter=where_filter
                 )
             else:
-                results = self.vectorstore.similarity_search_with_score(
-                    query=query,
-                    k=k
-                )
+                results = self.vectorstore.similarity_search_with_score(query=query, k=k)
 
             # Format kết quả
             formatted_results = []
@@ -196,7 +177,7 @@ class ConceptChromaStore:
                     "definition": doc.metadata.get("definition"),
                     "subject_id": doc.metadata.get("subject_id"),
                     "score": float(score),
-                    "content": doc.page_content
+                    "content": doc.page_content,
                 }
 
                 # Thêm topic nếu có
@@ -209,7 +190,7 @@ class ConceptChromaStore:
                 f"Semantic search returned {len(formatted_results)} results",
                 query=query,
                 subject_id=subject_id,
-                k=k
+                k=k,
             )
 
         except Exception as e:
@@ -218,10 +199,7 @@ class ConceptChromaStore:
         else:
             return formatted_results
 
-    def get_concept_by_id(
-        self,
-        concept_id: str
-    ) -> dict[str, Any] | None:
+    def get_concept_by_id(self, concept_id: str) -> dict[str, Any] | None:
         """
         Retrieve a concept by its ID.
 
@@ -239,7 +217,7 @@ class ConceptChromaStore:
                 return {
                     "concept_id": results["ids"][0],
                     "metadata": results["metadatas"][0] if results["metadatas"] else {},
-                    "content": results["documents"][0] if results["documents"] else ""
+                    "content": results["documents"][0] if results["documents"] else "",
                 }
 
         except Exception as e:
@@ -260,8 +238,7 @@ class ConceptChromaStore:
         """
         try:
             # Get all concept IDs for this subject
-            collection = self.chroma_client.get_collection(
-                self.collection_name)
+            collection = self.chroma_client.get_collection(self.collection_name)
             results = collection.get(where={"subject_id": subject_id})
 
             if results and results["ids"]:
@@ -285,8 +262,7 @@ class ConceptChromaStore:
             Dictionary with collection statistics
         """
         try:
-            collection = self.chroma_client.get_collection(
-                self.collection_name)
+            collection = self.chroma_client.get_collection(self.collection_name)
             count = collection.count()
             stats = {
                 "collection_name": self.collection_name,

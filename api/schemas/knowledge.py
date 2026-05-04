@@ -2,7 +2,6 @@
 schemas/knowledge.py — Knowledge graph and mastery Pydantic models.
 """
 
-
 from pydantic import BaseModel
 
 
