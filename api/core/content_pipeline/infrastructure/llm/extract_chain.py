@@ -1,277 +1,639 @@
-"""Extraction chain for concept extraction from chunks."""
+"""OpenAI Files/Responses extraction chain for content-pipeline concept work."""
 
-from concurrent.futures import ThreadPoolExecutor
+from __future__ import annotations
 
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-)
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
+from pathlib import Path
+import time
+from typing import Any
+
+import fitz
 from loguru import logger
 
+from api.config import get_settings
 from api.core.content_pipeline.infrastructure.prompts import (
     EVIDENCE_VERIFICATION_PROMPT,
     EXTRACTION_PROMPT,
 )
 from api.core.content_pipeline.infrastructure.utils.timeit import timeit
 
-from . import get_llm
-from .schemas import ConceptExtraction, EvidenceVerification
+from .openai_responses import (
+    FileReferenceError,
+    OpenAIResponsesClient,
+    PayloadTooLargeError,
+    StructuredExtractionClient,
+    require_parsed_output,
+    response_usage_summary,
+)
+from .schemas import (
+    ConceptExtraction,
+    ConceptExtractionPayload,
+    EvidenceVerification,
+    materialize_concept_extraction,
+)
+
+_COMPRESSION_PROFILES: tuple[tuple[int, int], ...] = (
+    (144, 75),
+    (110, 60),
+    (96, 45),
+    (72, 35),
+)
+
+
+class ProviderUploadTooLargeError(RuntimeError):
+    """Raised when the provider rejects a PDF batch request body size."""
+
+
+def build_page_batches(page_count: int, batch_size: int) -> list[tuple[int, int]]:
+    """Return 1-indexed inclusive page windows."""
+    if page_count <= 0:
+        return []
+    normalized_batch_size = max(1, batch_size)
+    return [
+        (start_page, min(start_page + normalized_batch_size - 1, page_count))
+        for start_page in range(1, page_count + 1, normalized_batch_size)
+    ]
+
+
+def _format_pages(start_page: int, end_page: int) -> str:
+    return f"{start_page}-{end_page}"
+
+
+def _format_usage(usage: dict[str, int]) -> str:
+    if not usage:
+        return "-"
+    return (
+        f"in={usage.get('input_tokens', 0)} "
+        f"out={usage.get('output_tokens', 0)} "
+        f"total={usage.get('total_tokens', 0)}"
+    )
 
 
 class ExtractionChain:
-    """Chain for extracting concepts from text chunks using exact structured outputs."""
+    """OpenAI-backed concept extraction and relation verification."""
 
-    def __init__(self, client=None):
-        """
-        Initialize extraction chain.
-
-        Args:
-            client: Optional ChatOpenAI instance
-        """
-        if client is None:
-            self.llm = get_llm(
-                temperature=0.1,  # A bit of temperature can sometimes help reasoning
-                max_tokens=None,
-                timeout=150,
-                top_p=1,
-            )
-        else:
-            self.llm = client
-
-        # ---------------------------------------------------------
-        # Extraction Prompt & Chain
-        # ---------------------------------------------------------
-        self.extraction_prompt = ChatPromptTemplate.from_messages(
-            [
-                SystemMessagePromptTemplate.from_template(EXTRACTION_PROMPT),
-                HumanMessagePromptTemplate.from_template(
-                    "## DOCUMENT INFO\n\n* **subject_id**: {subject_id}\n\n"
-                    "{previous_concepts_section}"
-                    "## TEXT TO ANALYZE\n\n{text_content}"
-                ),
-            ]
-        )
-
-        try:
-            self.structured_extract_llm = self.llm.with_structured_output(
-                ConceptExtraction, method="json_mode"
-            )
-            self.extraction_chain = self.extraction_prompt | self.structured_extract_llm
-        except Exception as e:
-            logger.error(f"Failed to bind structured output for extraction: {e}")
-            raise
-
-        # ---------------------------------------------------------
-        # Verification Prompt & Chain
-        # ---------------------------------------------------------
-        self.verification_prompt = ChatPromptTemplate.from_messages(
-            [
-                SystemMessagePromptTemplate.from_template(EVIDENCE_VERIFICATION_PROMPT),
-                HumanMessagePromptTemplate.from_template(
-                    "## CONCEPTS TO ANALYZE:\n\n**Concept A:** {concept_a}\n**Concept B:** {concept_b}"
-                ),
-            ]
-        )
-
-        try:
-            self.structured_verif_llm = self.llm.with_structured_output(
-                EvidenceVerification, method="json_mode"
-            )
-            self.verification_chain = self.verification_prompt | self.structured_verif_llm
-        except Exception as e:
-            logger.error(f"Failed to bind structured output for verification: {e}")
-            raise
-
-        logger.info("ExtractionChain initialized successfully using Native Structured Output.")
+    def __init__(self, client: StructuredExtractionClient | None = None):
+        self.client = client or OpenAIResponsesClient()
+        self.settings = get_settings()
+        self.last_batches: list[dict[str, Any]] = []
+        self.last_failed_batches: list[dict[str, Any]] = []
+        self.last_usage: list[dict[str, int]] = []
 
     @timeit
-    def extract_from_batch(
+    def extract_from_document(
         self,
-        chunks: list[str],
+        file_path: str,
         subject_id: str,
-        batch_size: int = 5,
-        _max_workers: int = 8,
+        page_batch_size: int | None = None,
+        *,
         max_previous_concepts: int = 20,
+        job_id: str | None = None,
     ) -> list[ConceptExtraction]:
-        """
-        Extract concepts from multiple chunks with sequential batching.
-        """
-        batches = []
-        for i in range(0, len(chunks), batch_size):
-            batch_chunks = chunks[i : i + batch_size]
-            batches.append(batch_chunks)
-
-        logger.info(
-            f"Processing {len(chunks)} chunks in {len(batches)} batches "
-            f"(sequential mode, max_previous_concepts={max_previous_concepts})"
-        )
+        batch_size = page_batch_size or self.settings.content_pipeline_pdf_page_batch_size
+        max_batch_bytes = self.settings.content_pipeline_pdf_batch_max_bytes
+        self.last_batches = []
+        self.last_failed_batches = []
+        self.last_usage = []
 
         results: list[ConceptExtraction] = []
-        all_previous_concepts: list[tuple] = []  # [(concept_id, name), ...]
-
-        for batch_idx, batch in enumerate(batches):
-            context_window = (
-                all_previous_concepts[-max_previous_concepts:] if max_previous_concepts > 0 else []
+        previous_concepts: list[tuple[str, str]] = []
+        with fitz.open(file_path) as document:
+            logger.info(
+                "extract start job_id={} file={} subject={} pages={} batch_size={} max_bytes={}",
+                job_id or "-",
+                Path(file_path).name,
+                subject_id,
+                document.page_count,
+                batch_size,
+                max_batch_bytes,
             )
-
-            try:
-                result = self._process_batch(
-                    batch,
-                    subject_id,
-                    batch_idx,
-                    previous_concepts=context_window,
+            pending_batches: list[dict[str, Any]] = []
+            page_ranges = build_page_batches(document.page_count, batch_size)
+            for base_batch_index, (start_page, end_page) in enumerate(page_ranges):
+                pending_batches.extend(
+                    self._render_batched_pdfs(
+                        document=document,
+                        batch_index=base_batch_index,
+                        start_page=start_page,
+                        end_page=end_page,
+                        max_bytes=max_batch_bytes,
+                    )
                 )
-                results.append(result)
 
-                # Keep accumulating previously extracted concepts to enforce constraint correctness
-                for concept in result.concepts:
-                    entry = (concept.concept_id, concept.name)
-                    if entry not in all_previous_concepts:
-                        all_previous_concepts.append(entry)
-            except Exception as e:
-                logger.error(f"Error processing batch {batch_idx}: {str(e)[:100]}")
-                results.append(
-                    ConceptExtraction(
+            total_planned_batches = len(pending_batches)
+            completed_batches = 0
+            processed_concepts = 0
+            logger.info(
+                "extract queue ready job_id={} total={} batch_size={} file={}",
+                job_id or "-",
+                total_planned_batches,
+                batch_size,
+                Path(file_path).name,
+            )
+            while pending_batches:
+                rendered_batch = pending_batches.pop(0)
+                try:
+                    extraction = self._extract_single_batch(
+                        job_id=job_id,
+                        subject_id=subject_id,
+                        batch=rendered_batch,
+                        previous_concepts=previous_concepts[-max_previous_concepts:],
+                        source_name=Path(file_path).name,
+                    )
+                except ProviderUploadTooLargeError as exc:
+                    split_batches = self._split_rendered_batch(
+                        document=document,
+                        batch=rendered_batch,
+                        max_bytes=max_batch_bytes,
+                    )
+                    if split_batches:
+                        total_planned_batches += len(split_batches) - 1
+                        logger.warning(
+                            "extract batch split retry job_id={} done={}/{} pages={} size_bytes={} reason={}",
+                            job_id or "-",
+                            completed_batches,
+                            total_planned_batches,
+                            _format_pages(
+                                int(rendered_batch["page_start"]),
+                                int(rendered_batch["page_end"]),
+                            ),
+                            rendered_batch["size_bytes"],
+                            str(exc),
+                        )
+                        pending_batches = [*split_batches, *pending_batches]
+                        continue
+                    extraction = ConceptExtraction(
                         concepts=[],
                         subject_id=subject_id,
-                        notes=f"Error: {str(e)[:100]}",
+                        notes=f"Error: {str(exc)[:200]}",
                     )
-                )
+                self.last_batches.append(rendered_batch)
+                results.append(extraction)
 
-        return results
+                batch_concepts = len(getattr(extraction, "concepts", []) or [])
+                processed_concepts += batch_concepts
+                completed_batches += 1
 
-    def _process_batch(
-        self,
-        batch_chunks: list[str],
-        subject_id: str,
-        batch_idx: int,
-        previous_concepts: list[tuple] | None = None,
-    ) -> ConceptExtraction:
-        """
-        Process a single batch of chunks relying SOLELY on native structured output.
-        """
-        if previous_concepts is None:
-            previous_concepts = []
-
-        try:
-            combined_text = "\n".join(batch_chunks)
-
-            if previous_concepts:
-                names_formatted = "\n".join(
-                    f"  - `{cid}` : {name}" for cid, name in previous_concepts
-                )
-                previous_concepts_section = (
-                    "## CÁC KHÁI NIỆM ĐÃ TRÍCH XUẤT (từ các batch trước)\n\n"
-                    "Danh sách các khái niệm đã được trích xuất ở các batch trước đây "
-                    "(format: `concept_id` : tên khái niệm).\n"
-                    "**QUAN TRỌNG**: Khi tạo relation với các khái niệm này, phải dùng ĐÚNG `concept_id` "
-                    "(phần trước dấu `:`) làm `target_id`.\n\n"
-                    f"{names_formatted}\n\n"
-                )
-            else:
-                previous_concepts_section = ""
-
-            logger.info(f"Batch {batch_idx} LLM Input (first 500 chars): {combined_text[:500]}...")
-
-            invoke_args = {
-                "subject_id": subject_id,
-                "text_content": combined_text,
-                "previous_concepts_section": previous_concepts_section,
-            }
-
-            # Only do native API call, no regex JSON repairing required via `json_mode`
-            max_retries = 3
-            last_error = None
-
-            for attempt in range(max_retries):
-                try:
-                    result = self.extraction_chain.invoke(invoke_args)
-                except Exception as e:
-                    last_error = e
-                    logger.warning(
-                        f"Batch {batch_idx} (Attempt {attempt + 1}/{max_retries}) failed: {e}"
+                if extraction.notes and str(extraction.notes).startswith("Error:"):
+                    self.last_failed_batches.append(
+                        {
+                            "batch_index": len(results) - 1,
+                            "page_start": rendered_batch["page_start"],
+                            "page_end": rendered_batch["page_end"],
+                            "reason": extraction.notes,
+                        }
                     )
-                    continue
-                if not isinstance(result, ConceptExtraction):
-                    last_error = TypeError(
-                        f"LLM API did not return a ConceptExtraction instance. Got: {type(result)}"
-                    )
-                    logger.warning(
-                        f"Batch {batch_idx} (Attempt {attempt + 1}/{max_retries}) failed: {last_error}"
-                    )
-                    continue
+                else:
+                    for concept in extraction.concepts:
+                        concept_entry = (concept.concept_id, concept.name)
+                        if concept_entry not in previous_concepts:
+                            previous_concepts.append(concept_entry)
+
                 logger.info(
-                    f"Batch {batch_idx} extraction success: {len(result.concepts)} concepts"
+                    "extract progress job_id={} done={}/{} pages={} +concepts={} total_concepts={} failed={} remaining={}",
+                    job_id or "-",
+                    completed_batches,
+                    total_planned_batches,
+                    _format_pages(
+                        int(rendered_batch["page_start"]),
+                        int(rendered_batch["page_end"]),
+                    ),
+                    batch_concepts,
+                    processed_concepts,
+                    len(self.last_failed_batches),
+                    len(pending_batches),
                 )
-                return result
-
-            logger.error(
-                f"Batch {batch_idx} exhausted max_retries ({max_retries}). Last error: {last_error}"
-            )
-            return ConceptExtraction(
-                concepts=[],
-                subject_id=subject_id,
-                notes=f"Structured output failed after {max_retries} attempts. Error: {str(last_error)[:100]}",
-            )
-
-        except Exception as e:
-            logger.error(f"Error in batch {batch_idx}: {str(e)[:100]}")
-            return ConceptExtraction(
-                concepts=[], subject_id=subject_id, notes=f"Error: {str(e)[:100]}"
-            )
-
-    @timeit
-    def verify_relation(
-        self,
-        concept_a: str,
-        concept_b: str,
-    ) -> EvidenceVerification:
-        """
-        Verify if a relation exists between two concepts using agent with tools.
-        """
-        return self._verify_single_relation(
-            concept_a=concept_a,
-            concept_b=concept_b,
-            pair_idx=-1,
-            max_retries=3,
+        total_concepts = sum(len(extraction.concepts) for extraction in results)
+        total_usage = {
+            "input_tokens": sum(item.get("input_tokens", 0) for item in self.last_usage),
+            "output_tokens": sum(item.get("output_tokens", 0) for item in self.last_usage),
+            "total_tokens": sum(item.get("total_tokens", 0) for item in self.last_usage),
+        }
+        logger.info(
+            "extract done job_id={} done={}/{} concepts={} failed={} rendered_batches={} usage={}",
+            job_id or "-",
+            completed_batches,
+            total_planned_batches,
+            total_concepts,
+            len(self.last_failed_batches),
+            len(self.last_batches),
+            _format_usage(total_usage),
         )
+        return results
 
     @timeit
     def verify_relations_batch(
         self,
         concept_pairs: list[tuple[str, str]],
-        max_workers: int = 8,
+        max_workers: int | None = None,
     ) -> list[EvidenceVerification]:
-        """
-        Verify relations for multiple concept pairs in parallel.
-        """
-        logger.info(f"Verifying {len(concept_pairs)} concept pairs with {max_workers} workers")
-
-        results = [None] * len(concept_pairs)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_index = {}
-            for idx, (concept_a, concept_b) in enumerate(concept_pairs):
-                future = executor.submit(self._verify_single_relation, concept_a, concept_b, idx)
-                future_to_index[future] = idx
-
-            for future, idx in future_to_index.items():
+        worker_count = max(1, max_workers or self.settings.llm_max_workers)
+        results: list[EvidenceVerification | None] = [None] * len(concept_pairs)
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_index = {
+                executor.submit(self._verify_single_relation, concept_a, concept_b, pair_index): pair_index
+                for pair_index, (concept_a, concept_b) in enumerate(concept_pairs)
+            }
+            for future in as_completed(future_to_index):
+                pair_index = future_to_index[future]
                 try:
-                    result = future.result()
-                    results[idx] = result
-                except Exception as e:
-                    logger.error(f"Error verifying pair {idx}: {str(e)[:100]}")
-                    concept_a, concept_b = concept_pairs[idx]
-                    results[idx] = EvidenceVerification(
-                        has_relation=False,
-                        relation_type=None,
-                        direction=None,
-                        confidence=0.0,
-                        evidences=[],
-                        reasoning=f"Error during verification: {str(e)[:100]}",
+                    results[pair_index] = future.result()
+                except Exception as exc:
+                    logger.error("Error verifying pair {}: {}", pair_index, exc)
+                    results[pair_index] = self._verification_error(
+                        f"Error during verification: {str(exc)[:100]}"
                     )
+        return [
+            result
+            if result is not None
+            else self._verification_error("Relation verification did not produce a result.")
+            for result in results
+        ]
 
-        return results
+    def _render_batched_pdfs(
+        self,
+        *,
+        document: fitz.Document,
+        batch_index: int,
+        start_page: int,
+        end_page: int,
+        max_bytes: int,
+    ) -> list[dict[str, Any]]:
+        pdf_bytes = self._extract_pdf_bytes(document, start_page, end_page)
+        rendered_batch = self._build_rendered_batch(
+            batch_index=batch_index,
+            start_page=start_page,
+            end_page=end_page,
+            pdf_bytes=pdf_bytes,
+        )
+
+        if rendered_batch["size_bytes"] > max_bytes:
+            compressed_batch = self._compress_rendered_batch(
+                document=document,
+                batch_index=batch_index,
+                start_page=start_page,
+                end_page=end_page,
+                original_size_bytes=rendered_batch["size_bytes"],
+                max_bytes=max_bytes,
+            )
+            if compressed_batch is not None:
+                rendered_batch = compressed_batch
+
+        if rendered_batch["size_bytes"] <= max_bytes or start_page == end_page:
+            logger.debug(
+                "prepared provider batch batch={} pages={} size_bytes={} compressed={} profile={}",
+                batch_index,
+                _format_pages(start_page, end_page),
+                rendered_batch["size_bytes"],
+                rendered_batch.get("compression_applied", False),
+                rendered_batch.get("compression_profile") or "-",
+            )
+            return [{**rendered_batch}]
+
+        midpoint = (start_page + end_page) // 2
+        logger.warning(
+            "provider batch over byte limit batch={} pages={} size_bytes={} max_bytes={} split_at={} compressed={}",
+            batch_index,
+            _format_pages(start_page, end_page),
+            rendered_batch["size_bytes"],
+            max_bytes,
+            midpoint,
+            rendered_batch.get("compression_applied", False),
+        )
+        return [
+            *self._render_batched_pdfs(
+                document=document,
+                batch_index=batch_index,
+                start_page=start_page,
+                end_page=midpoint,
+                max_bytes=max_bytes,
+            ),
+            *self._render_batched_pdfs(
+                document=document,
+                batch_index=batch_index,
+                start_page=midpoint + 1,
+                end_page=end_page,
+                max_bytes=max_bytes,
+            ),
+        ]
+
+    @staticmethod
+    def _build_rendered_batch(
+        *,
+        batch_index: int,
+        start_page: int,
+        end_page: int,
+        pdf_bytes: bytes,
+        compression_applied: bool = False,
+        compression_profile: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "batch_index": batch_index,
+            "page_start": start_page,
+            "page_end": end_page,
+            "pdf_bytes": pdf_bytes,
+            "sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+            "size_bytes": len(pdf_bytes),
+            "compression_applied": compression_applied,
+            "compression_profile": compression_profile,
+        }
+
+    def _compress_rendered_batch(
+        self,
+        *,
+        document: fitz.Document,
+        batch_index: int,
+        start_page: int,
+        end_page: int,
+        original_size_bytes: int,
+        max_bytes: int,
+    ) -> dict[str, Any] | None:
+        best_batch: dict[str, Any] | None = None
+        best_size = original_size_bytes
+
+        for dpi, jpg_quality in _COMPRESSION_PROFILES:
+            compressed_bytes = self._extract_compressed_pdf_bytes(
+                document,
+                start_page,
+                end_page,
+                dpi=dpi,
+                jpg_quality=jpg_quality,
+            )
+            compressed_batch = self._build_rendered_batch(
+                batch_index=batch_index,
+                start_page=start_page,
+                end_page=end_page,
+                pdf_bytes=compressed_bytes,
+                compression_applied=True,
+                compression_profile=f"{dpi}dpi-q{jpg_quality}",
+            )
+            if compressed_batch["size_bytes"] >= best_size:
+                continue
+
+            best_batch = compressed_batch
+            best_size = compressed_batch["size_bytes"]
+            logger.debug(
+                "compressed provider batch candidate batch={} pages={} profile={} original_size_bytes={} compressed_size_bytes={} meets_target={}",
+                batch_index,
+                _format_pages(start_page, end_page),
+                f"{dpi}dpi-q{jpg_quality}",
+                original_size_bytes,
+                best_size,
+                best_size <= max_bytes,
+            )
+            if best_size <= max_bytes:
+                break
+
+        return best_batch
+
+    def _split_rendered_batch(
+        self,
+        *,
+        document: fitz.Document,
+        batch: dict[str, Any],
+        max_bytes: int,
+    ) -> list[dict[str, Any]]:
+        start_page = int(batch["page_start"])
+        end_page = int(batch["page_end"])
+        if start_page >= end_page:
+            return []
+        midpoint = (start_page + end_page) // 2
+        logger.warning(
+            "provider batch split after upstream rejection batch={} pages={} size_bytes={} split_at={}",
+            batch["batch_index"],
+            _format_pages(start_page, end_page),
+            batch["size_bytes"],
+            midpoint,
+        )
+        return [
+            *self._render_batched_pdfs(
+                document=document,
+                batch_index=int(batch["batch_index"]),
+                start_page=start_page,
+                end_page=midpoint,
+                max_bytes=max_bytes,
+            ),
+            *self._render_batched_pdfs(
+                document=document,
+                batch_index=int(batch["batch_index"]),
+                start_page=midpoint + 1,
+                end_page=end_page,
+                max_bytes=max_bytes,
+            ),
+        ]
+
+    def _extract_single_batch(
+        self,
+        *,
+        job_id: str | None,
+        subject_id: str,
+        batch: dict[str, Any],
+        previous_concepts: list[tuple[str, str]],
+        source_name: str,
+    ) -> ConceptExtraction:
+        batch_label = f"{source_name}:pages-{batch['page_start']}-{batch['page_end']}.pdf"
+        pages = _format_pages(int(batch["page_start"]), int(batch["page_end"]))
+        logger.info(
+            "extract batch send job_id={} batch={} pages={} size_bytes={} previous_concepts={}",
+            job_id or "-",
+            batch["batch_index"],
+            pages,
+            batch["size_bytes"],
+            len(previous_concepts),
+        )
+        try:
+            uploaded_file = self.client.upload_pdf_bytes(
+                filename=batch_label,
+                pdf_bytes=batch["pdf_bytes"],
+                sha256=str(batch["sha256"]),
+                now_ts=time.time(),
+                job_id=job_id,
+            )
+            batch["file_id"] = uploaded_file.file_id
+            batch["cache_hit"] = uploaded_file.cache_hit
+            batch["purpose"] = uploaded_file.purpose
+            logger.info(
+                "extract batch ready job_id={} batch={} pages={} file_id={} source={} purpose={}",
+                job_id or "-",
+                batch["batch_index"],
+                pages,
+                uploaded_file.file_id,
+                "cache" if uploaded_file.cache_hit else "upload",
+                uploaded_file.purpose,
+            )
+            try:
+                payload, usage = self._invoke_extraction_response_with_retries(
+                    job_id=job_id,
+                    subject_id=subject_id,
+                    file_id=uploaded_file.file_id,
+                    previous_concepts=previous_concepts,
+                )
+            except FileReferenceError:
+                logger.warning(
+                    "extract batch cache miss retry job_id={} batch={} pages={} file_id={} sha256={}",
+                    job_id or "-",
+                    batch["batch_index"],
+                    pages,
+                    batch.get("file_id"),
+                    str(batch["sha256"])[:12],
+                )
+                self.client.invalidate_cached_file(sha256=str(batch["sha256"]))
+                uploaded_file = self.client.upload_pdf_bytes(
+                    filename=batch_label,
+                    pdf_bytes=batch["pdf_bytes"],
+                    sha256=str(batch["sha256"]),
+                    now_ts=time.time(),
+                    job_id=job_id,
+                )
+                batch["file_id"] = uploaded_file.file_id
+                batch["cache_hit"] = False
+                batch["purpose"] = uploaded_file.purpose
+                logger.info(
+                    "extract batch ready job_id={} batch={} pages={} file_id={} source={} purpose={}",
+                    job_id or "-",
+                    batch["batch_index"],
+                    pages,
+                    uploaded_file.file_id,
+                    "reupload",
+                    uploaded_file.purpose,
+                )
+                payload, usage = self._invoke_extraction_response_with_retries(
+                    job_id=job_id,
+                    subject_id=subject_id,
+                    file_id=uploaded_file.file_id,
+                    previous_concepts=previous_concepts,
+                )
+        except PayloadTooLargeError as exc:
+            logger.warning(
+                "extract batch upload too large job_id={} batch={} pages={} size_bytes={} reason={}",
+                job_id or "-",
+                batch["batch_index"],
+                pages,
+                batch["size_bytes"],
+                str(exc),
+            )
+            raise ProviderUploadTooLargeError(str(exc)) from exc
+        except Exception as exc:
+            logger.exception(
+                "extract batch failed before structured output job_id={} batch={} pages={}",
+                job_id or "-",
+                batch["batch_index"],
+                pages,
+            )
+            return ConceptExtraction(
+                concepts=[],
+                subject_id=subject_id,
+                notes=f"Error: {str(exc)[:200]}",
+            )
+
+        try:
+            self.last_usage.append(usage)
+            materialized = materialize_concept_extraction(payload)
+            logger.info(
+                "extract batch recv job_id={} batch={} pages={} file_id={} concepts={} usage={}",
+                job_id or "-",
+                batch["batch_index"],
+                pages,
+                batch.get("file_id"),
+                len(materialized.concepts),
+                _format_usage(usage),
+            )
+        except Exception as exc:
+            logger.exception(
+                "extract batch parse failed job_id={} batch={} pages={} file_id={}",
+                job_id or "-",
+                batch["batch_index"],
+                pages,
+                batch.get("file_id"),
+            )
+            return ConceptExtraction(
+                concepts=[],
+                subject_id=subject_id,
+                notes=f"Error: invalid structured output ({str(exc)[:180]})",
+            )
+        else:
+            return materialized
+
+    def _invoke_extraction_response(
+        self,
+        *,
+        job_id: str | None,
+        subject_id: str,
+        file_id: str,
+        previous_concepts: list[tuple[str, str]],
+    ) -> tuple[ConceptExtractionPayload, dict[str, int]]:
+        previous_section = ""
+        if previous_concepts:
+            previous_items = "\n".join(
+                f"- `{concept_id}` : {concept_name}"
+                for concept_id, concept_name in previous_concepts
+            )
+            previous_section = (
+                "## CÁC KHÁI NIỆM ĐÃ TRÍCH XUẤT\n\n"
+                "Danh sách dưới đây là các khái niệm đã có từ batch trước. "
+                "Không trích xuất lại nếu cùng nghĩa. Nếu tạo relation tới chúng, "
+                "phải dùng đúng `concept_id` đã cho.\n\n"
+                f"{previous_items}\n\n"
+            )
+
+        user_message = (
+            "## THÔNG TIN TÀI LIỆU\n"
+            f"- subject_id: {subject_id}\n\n"
+            f"{previous_section}"
+            "Hãy đọc file PDF đính kèm và trả về đúng dữ liệu theo structured schema đã chỉ định. "
+            "Không thêm văn bản ngoài schema."
+        )
+        logger.info(
+            "extract batch llm request job_id={} file_id={} subject={} previous_concepts={}",
+            job_id or "-",
+            file_id,
+            subject_id,
+            len(previous_concepts),
+        )
+        response = self.client.parse_response(
+            instructions=EXTRACTION_PROMPT,
+            input_blocks=[
+                {"type": "input_text", "text": user_message},
+                {"type": "input_file", "file_id": file_id},
+            ],
+            text_format=ConceptExtractionPayload,
+            job_id=job_id,
+        )
+        return require_parsed_output(response, ConceptExtractionPayload), response_usage_summary(response)
+
+    def _invoke_extraction_response_with_retries(
+        self,
+        *,
+        job_id: str | None,
+        subject_id: str,
+        file_id: str,
+        previous_concepts: list[tuple[str, str]],
+        max_retries: int | None = None,
+    ) -> tuple[ConceptExtractionPayload, dict[str, int]]:
+        retry_count = max(1, max_retries or (self.settings.llm_max_retries + 1))
+        last_error: BaseException | None = None
+        for attempt in range(retry_count):
+            try:
+                return self._invoke_extraction_response(
+                    job_id=job_id,
+                    subject_id=subject_id,
+                    file_id=file_id,
+                    previous_concepts=previous_concepts,
+                )
+            except Exception as exc:
+                last_error = exc
+                if attempt >= retry_count - 1:
+                    raise
+                logger.warning(
+                    "extract batch retry job_id={} file_id={} attempt={}/{} reason={}",
+                    job_id or "-",
+                    file_id,
+                    attempt + 1,
+                    retry_count,
+                    str(exc)[:200],
+                )
+        raise RuntimeError(str(last_error or "Extraction response failed."))
 
     def _verify_single_relation(
         self,
@@ -280,46 +642,72 @@ class ExtractionChain:
         pair_idx: int,
         max_retries: int = 3,
     ) -> EvidenceVerification:
-        """
-        Verify a single relation utilizing strict JSON schema Native outputs.
-        """
-        pair_label = "single" if pair_idx < 0 else f"pair {pair_idx}"
-        logger.debug(f"Verifying {pair_label}: '{concept_a}' <-> '{concept_b}'")
-
-        invoke_args = {"concept_a": concept_a, "concept_b": concept_b}
-
-        last_error = None
+        user_message = (
+            "## CONCEPTS TO ANALYZE\n\n"
+            f"- Concept A: {concept_a}\n"
+            f"- Concept B: {concept_b}\n\n"
+            "Trả về đúng dữ liệu theo structured schema đã chỉ định. Không thêm văn bản ngoài schema."
+        )
+        last_error: BaseException | None = None
         for attempt in range(max_retries):
             try:
-                result = self.verification_chain.invoke(invoke_args)
-            except Exception as e:
-                last_error = e
+                response_payload = self.client.parse_response(
+                    instructions=EVIDENCE_VERIFICATION_PROMPT,
+                    input_blocks=[{"type": "input_text", "text": user_message}],
+                    text_format=EvidenceVerification,
+                )
+                return require_parsed_output(response_payload, EvidenceVerification)
+            except Exception as exc:
+                last_error = exc
                 logger.warning(
-                    f"{pair_label} attempt {attempt + 1}/{max_retries} failed: {str(e)[:120]}"
+                    "Verification attempt {}/{} failed for pair {}: {}",
+                    attempt + 1,
+                    max_retries,
+                    pair_idx,
+                    exc,
                 )
-                continue
-            if not isinstance(result, EvidenceVerification):
-                last_error = TypeError(
-                    f"LLM API did not return EvidenceVerification instance. Got: {type(result)}"
-                )
-                logger.warning(
-                    f"{pair_label} attempt {attempt + 1}/{max_retries} failed: {last_error}"
-                )
-                continue
-            logger.info(
-                f"Verified {pair_label}: {concept_a} <-> {concept_b} "
-                f"(has_relation={result.has_relation})"
-            )
-            return result
-
-        logger.error(
-            f"{pair_label} ('{concept_a}' <-> '{concept_b}'): failed after {max_retries} attempts"
+        return self._verification_error(
+            f"Failed to generate structured output after {max_retries} attempts. Last error: {str(last_error)[:100]}"
         )
+
+    @staticmethod
+    def _extract_pdf_bytes(
+        document: fitz.Document,
+        start_page: int,
+        end_page: int,
+    ) -> bytes:
+        with fitz.open() as sub_document:
+            sub_document.insert_pdf(document, from_page=start_page - 1, to_page=end_page - 1)
+            return sub_document.tobytes(garbage=4, deflate=True)
+
+    @staticmethod
+    def _extract_compressed_pdf_bytes(
+        document: fitz.Document,
+        start_page: int,
+        end_page: int,
+        *,
+        dpi: int,
+        jpg_quality: int,
+    ) -> bytes:
+        with fitz.open() as compressed_document:
+            for page_number in range(start_page - 1, end_page):
+                source_page = document[page_number]
+                pixmap = source_page.get_pixmap(dpi=dpi, alpha=False)
+                image_bytes = pixmap.tobytes("jpeg", jpg_quality=jpg_quality)
+                target_page = compressed_document.new_page(
+                    width=source_page.rect.width,
+                    height=source_page.rect.height,
+                )
+                target_page.insert_image(target_page.rect, stream=image_bytes)
+            return compressed_document.tobytes(garbage=4, deflate=True)
+
+    @staticmethod
+    def _verification_error(reasoning: str) -> EvidenceVerification:
         return EvidenceVerification(
             has_relation=False,
             relation_type=None,
             direction=None,
             confidence=0.0,
             evidences=[],
-            reasoning=f"Failed to generate structured output after {max_retries} attempts. Last error: {str(last_error)[:100]}",
+            reasoning=reasoning,
         )

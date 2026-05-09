@@ -36,3 +36,4 @@ api/core/chroma_db/
 *.egg-info/
 build/
 dist/
+.gitnexus

@@ -2,7 +2,7 @@
 
 from loguru import logger
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
 
 from api.config import settings
 from api.core.content_pipeline.infrastructure.llm.schemas import Concept
@@ -52,12 +52,15 @@ def rank_prerequisites(
     potential_edges = []
     for concept_id_1, concept_id_2, prs_score in prereq_pairs:
         logger.info(
-            f"Prerequisite candidate: {concept_id_1} -> {concept_id_2} | PRS: {prs_score:.4f}"
+            "Prerequisite candidate: {} -> {} | PRS: {:.4f}",
+            concept_id_1,
+            concept_id_2,
+            prs_score,
         )
         potential_edges.append((concept_id_1, concept_id_2))
         added_count += 1
 
-    logger.info(f"Total prerequisite candidates found: {added_count}")
+    logger.info("Total prerequisite candidates found: {}", added_count)
     return potential_edges
 
 
@@ -115,7 +118,9 @@ def _compute_prerequisite_scores(
 
             if has_existing_relation:
                 logger.debug(
-                    f"Skipped pair ({concept_id_i}, {concept_id_j}) - relation already exists"
+                    "Skipped pair ({}, {}) - relation already exists",
+                    concept_id_i,
+                    concept_id_j,
                 )
                 skipped_count += 1
                 continue
@@ -123,6 +128,6 @@ def _compute_prerequisite_scores(
             pairs.append((concept_id_i, concept_id_j, prs))
 
     if skipped_count > 0:
-        logger.info(f"Skipped {skipped_count} pairs that already have relations")
+        logger.info("Skipped {} pairs that already have relations", skipped_count)
 
     return pairs

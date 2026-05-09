@@ -21,7 +21,8 @@ from api.dependencies import (
     get_session_service,
 )
 from api.exceptions import ExerciseGenerationError, SessionCompletedError, SessionNotFoundError
-from api.rate_limit import limiter
+from api.schemas.common import StandardResponse
+from api.rate_limit import is_admin_request, limiter
 from api.schemas import (
     ExerciseResponse,
     NextConceptResponse,
@@ -123,7 +124,7 @@ async def _build_rag_context(
         return ""
 
 
-@router.post("/start", response_model=SessionCreateResponse)
+@router.post("/start", response_model=StandardResponse[SessionCreateResponse])
 async def start_session(
     req: SessionCreateRequest,
     background_tasks: BackgroundTasks,
@@ -149,15 +150,18 @@ async def start_session(
     except TypeError as exc:
         logger.warning("[SessionRouter] Failed to schedule eager prefetch: {}", exc)
 
-    return SessionCreateResponse(
-        session_id=session.session_id,
-        n_concepts=len(session.concept_map),
-        concepts=concepts,
-        status="active",
-    )
+    return {
+        "success": True,
+        "data": SessionCreateResponse(
+            session_id=session.session_id,
+            n_concepts=len(session.concept_map),
+            concepts=concepts,
+            status="active",
+        ).model_dump()
+    }
 
 
-@router.post("/{session_id}/next-concept", response_model=NextConceptResponse)
+@router.post("/{session_id}/next-concept", response_model=StandardResponse[NextConceptResponse])
 async def next_concept(
     session_id: str,
     manager=Depends(get_session_manager),
@@ -172,10 +176,10 @@ async def next_concept(
     if not concept_info:
         raise ExerciseGenerationError("Failed to determine next concept")
 
-    return NextConceptResponse(**concept_info)
+    return {"success": True, "data": NextConceptResponse(**concept_info).model_dump()}
 
 
-@router.get("/{session_id}/theory", response_model=TheoryResponse)
+@router.get("/{session_id}/theory", response_model=StandardResponse[TheoryResponse])
 async def theory(
     session_id: str,
     manager=Depends(get_session_manager),
@@ -188,10 +192,10 @@ async def theory(
     if not theory_data:
         raise ExerciseGenerationError("No pending concept to generate theory")
 
-    return TheoryResponse(**theory_data)
+    return {"success": True, "data": TheoryResponse(**theory_data).model_dump()}
 
 
-@router.post("/{session_id}/exercise", response_model=ExerciseResponse)
+@router.post("/{session_id}/exercise", response_model=StandardResponse[ExerciseResponse])
 async def generate_exercise(
     session_id: str,
     background_tasks: BackgroundTasks,
@@ -209,29 +213,32 @@ async def generate_exercise(
 
     env_stats = session.env.get_session_stats()
 
-    return ExerciseResponse(
-        exercise_id=exercise.exercise_id,
-        concept_name=exercise.concept_name,
-        concept_idx=exercise.concept_idx,
-        bloom_level=exercise.bloom_level,
-        bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
-        exercise_type=exercise.exercise_type,
-        question=exercise.question,
-        sentence=exercise.sentence,
-        options=exercise.options,
-        statement=exercise.statement,
-        hint=exercise.hint,
-        items=exercise.items,
-        pairs=exercise.pairs,
-        right_items=exercise.right_items,
-        step=env_stats["step"],
-        max_steps=env_stats["max_steps"],
-        theory=exercise.theory,
-        recommendation_reason=getattr(session, "_current_recommendation_reason", None),
-    )
+    return {
+        "success": True,
+        "data": ExerciseResponse(
+            exercise_id=exercise.exercise_id,
+            concept_name=exercise.concept_name,
+            concept_idx=exercise.concept_idx,
+            bloom_level=exercise.bloom_level,
+            bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
+            exercise_type=exercise.exercise_type,
+            question=exercise.question,
+            sentence=exercise.sentence,
+            options=exercise.options,
+            statement=exercise.statement,
+            hint=exercise.hint,
+            items=exercise.items,
+            pairs=exercise.pairs,
+            right_items=exercise.right_items,
+            step=env_stats["step"],
+            max_steps=env_stats["max_steps"],
+            theory=exercise.theory,
+            recommendation_reason=getattr(session, "_current_recommendation_reason", None),
+        ).model_dump()
+    }
 
 
-@router.post("/{session_id}/submit", response_model=SubmitAnswerResponse)
+@router.post("/{session_id}/submit", response_model=StandardResponse[SubmitAnswerResponse])
 async def submit_answer(
     session_id: str,
     req: SubmitAnswerRequest,
@@ -246,7 +253,7 @@ async def submit_answer(
     if not result:
         raise ExerciseGenerationError("No pending exercise or session not found")
 
-    return SubmitAnswerResponse(**result)
+    return {"success": True, "data": SubmitAnswerResponse(**result).model_dump()}
 
 
 def _resolve_exercise_options(exercise) -> list[str]:
@@ -255,13 +262,13 @@ def _resolve_exercise_options(exercise) -> list[str]:
     options = [exercise.options[key] for key in option_keys if exercise.options.get(key)]
     if options:
         return options
-    fallbacks = {
+    fallbacks: dict[str, list[str] | None] = {
         "true_false": ["True", "False"],
         "ordering": exercise.items,
         "matching": exercise.right_items,
     }
     if exercise.exercise_type in fallbacks:
-        return fallbacks[exercise.exercise_type]
+        return fallbacks[exercise.exercise_type] or []
     if exercise.exercise_type == "fill_blank" and exercise.hint:
         return [f"Gợi ý: {exercise.hint}"]
     if exercise.exercise_type == "short_answer":
@@ -269,8 +276,8 @@ def _resolve_exercise_options(exercise) -> list[str]:
     return ["Xem lại yêu cầu của bài tập hiện tại."]
 
 
-@router.post("/{session_id}/chat", response_model=TutorChatResponse)
-@limiter.limit(get_settings().rate_limit_tutor_chat)
+@router.post("/{session_id}/chat", response_model=StandardResponse[TutorChatResponse])
+@limiter.limit(get_settings().rate_limit_tutor_chat, exempt_when=is_admin_request)
 async def chat_about_exercise(
     request: Request,
     session_id: str,
@@ -346,23 +353,17 @@ async def chat_about_exercise(
             user_question=req.user_question,
             assistant_response=explanation,
         )
-        return TutorChatResponse(explanation=explanation)
+        return {"success": True, "data": {"explanation": explanation}}
     except ValueError as exc:
         logger.warning("[SessionRouter] Tutor chat ValueError: {}", exc)
-        return JSONResponse(
-            {"detail": "Invalid tutor chat request", "error": "invalid_request"},
-            status_code=400,
-        )
+        raise AppError("Invalid tutor chat request", status_code=400)
     except RuntimeError as exc:
         logger.warning("[SessionRouter] Tutor chat RuntimeError: {}", exc)
-        return JSONResponse(
-            {"detail": "Tutor service temporarily unavailable", "error": "tutor_unavailable"},
-            status_code=502,
-        )
+        raise AppError("Tutor service temporarily unavailable", status_code=502)
     # Unexpected errors fall through to the global unexpected_exception_handler.
 
 
-@router.get("/{session_id}/status", response_model=SessionStatusResponse)
+@router.get("/{session_id}/status", response_model=StandardResponse[SessionStatusResponse])
 async def session_status(
     session_id: str,
     manager=Depends(get_session_manager),
@@ -373,4 +374,4 @@ async def session_status(
     if not status:
         raise SessionNotFoundError(session_id)
 
-    return SessionStatusResponse(**status)
+    return {"success": True, "data": SessionStatusResponse(**status).model_dump()}

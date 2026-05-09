@@ -23,7 +23,7 @@ async def load_document_chunks(
     """Load and chunk a source document while persisting job progress."""
     await persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.05)
 
-    chunks = await run_blocking_stage(
+    chunks: list[Any] = await run_blocking_stage(
         load_and_chunk,
         file_path,
         job.subject_id,

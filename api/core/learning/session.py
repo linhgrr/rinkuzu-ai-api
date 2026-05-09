@@ -13,7 +13,7 @@ to the learning exercise service.
 import asyncio
 from dataclasses import dataclass, field
 import time
-from typing import Any
+from typing import Any, cast
 import uuid
 
 from loguru import logger
@@ -174,7 +174,9 @@ class SessionManager:
                 dropped += 1
         if dropped:
             logger.warning(
-                f"[Session] _build_prereq_graph_from_edges: dropped {dropped}/{len(prereq_edges)} edges"
+                "[Session] _build_prereq_graph_from_edges: dropped {}/{} edges",
+                dropped,
+                len(prereq_edges),
             )
         return graph
 
@@ -217,10 +219,10 @@ class SessionManager:
     def _get_text_encoder(cls) -> SentenceTransformer:
         """Lazy-load sentence-transformer (same model used in SAINT training)."""
         if cls._text_encoder is None:
-            logger.info(f"[Session] Loading text encoder: {cls._TEXT_MODEL_NAME}")
+            logger.info("[Session] Loading text encoder: {}", cls._TEXT_MODEL_NAME)
             cls._text_encoder = SentenceTransformer(cls._TEXT_MODEL_NAME)
             logger.info("[Session] ✓ Text encoder ready")
-        return cls._text_encoder
+        return cast("SentenceTransformer", cls._text_encoder)
 
     def _encode_concepts(self, concept_names_ordered: list[str]) -> np.ndarray:
         """Encode concept names into 768d embeddings."""
@@ -264,7 +266,7 @@ class SessionManager:
     async def persist_subject_progress(self, session: SessionState) -> bool:
         if not session.job_id or not session.user_id:
             return True
-        return await mongo_store.save_subject_progress(
+        return await mongo_store.get_subject_progress_repo().save_snapshot(
             session.job_id,
             session.user_id,
             self.build_subject_progress_snapshot(session),
@@ -324,7 +326,8 @@ class SessionManager:
         n = len(concept_map)
         if precomputed_embeddings is not None:
             logger.info(
-                f"[Session] Using precomputed embeddings ({len(precomputed_embeddings)} concepts)"
+                "[Session] Using precomputed embeddings ({} concepts)",
+                len(precomputed_embeddings),
             )
             raw_emb = np.array(precomputed_embeddings, dtype=np.float32)
         else:
@@ -334,9 +337,9 @@ class SessionManager:
                 name = names.get(cid, cid)
                 definition = defs.get(cid, "")
                 ordered_texts.append(f"{name}: {definition}" if definition else name)
-            logger.info(f"[Session] Encoding {n} new concepts...")
+            logger.info("[Session] Encoding {} new concepts...", n)
             raw_emb = self._encode_concepts(ordered_texts)
-            logger.info(f"[Session] ✓ Embeddings shape: {raw_emb.shape}")
+            logger.info("[Session] ✓ Embeddings shape: {}", raw_emb.shape)
 
         emb_dim = raw_emb.shape[1] if len(raw_emb.shape) > 1 else 0
         if emb_dim == 0:
@@ -356,25 +359,30 @@ class SessionManager:
             total_correct = history_source_doc.get("total_correct", 0)
             total_answered = history_source_doc.get("total_answered", 0)
             logger.info(
-                f"[Session] Rehydrating session from provided subject progress with {len(prev_history)} exercises"
+                "[Session] Rehydrating session from provided subject progress with {} exercises",
+                len(prev_history),
             )
             return prev_history, total_correct, total_answered
 
         if not job_id:
             return [], 0, 0
+        if not user_id:
+            return [], 0, 0
 
         try:
-            subject_progress = await mongo_store.load_subject_progress_for_job(
+            subject_progress = await mongo_store.get_subject_progress_repo().load_for_user(
                 job_id, user_id=user_id
             )
-        except Exception as e:
-            logger.warning(f"[Session] Error loading saved subject progress: {e}, starting fresh")
+        except Exception:
+            logger.exception("[Session] Error loading saved subject progress, starting fresh")
             return [], 0, 0
 
         if subject_progress and subject_progress.get("exercise_history"):
             prev_history = subject_progress["exercise_history"]
             logger.info(
-                f"[Session] Found saved subject progress with {len(prev_history)} exercises for job {job_id}"
+                "[Session] Found saved subject progress with {} exercises for job {}",
+                len(prev_history),
+                job_id,
             )
             return (
                 prev_history,
@@ -382,7 +390,7 @@ class SessionManager:
                 subject_progress.get("total_answered", 0),
             )
 
-        logger.info(f"[Session] No saved subject progress for job {job_id}, starting fresh")
+        logger.info("[Session] No saved subject progress for job {}, starting fresh", job_id)
         return [], 0, 0
 
     @staticmethod
@@ -514,28 +522,32 @@ class SessionManager:
             if active and getattr(active, "user_id", None) == user_id:
                 return active
 
-            session_doc = await mongo_store.load_session_doc_for_user(session_id, user_id)
+            session_doc = await mongo_store.get_subject_progress_repo().load_by_session_for_user(session_id, user_id)
             if not session_doc:
                 return None
 
         job_id = session_doc.get("job_id")
         if not job_id:
             logger.warning(
-                f"[Session] Cannot recover session={session_id}: missing job_id in persisted doc"
+                "[Session] Cannot recover session={}: missing job_id in persisted doc",
+                session_id,
             )
             return None
 
-        job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+        job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
         if not job_doc:
             logger.warning(
-                f"[Session] Cannot recover session={session_id}: pipeline job {job_id} not found"
+                "[Session] Cannot recover session={}: pipeline job {} not found",
+                session_id,
+                job_id,
             )
             return None
 
         result = job_doc.get("result") or {}
         if not all(key in result for key in ("concepts_data", "concept_map", "prereq_edges")):
             logger.warning(
-                f"[Session] Cannot recover session={session_id}: incomplete pipeline result"
+                "[Session] Cannot recover session={}: incomplete pipeline result",
+                session_id,
             )
             return None
 
@@ -555,9 +567,9 @@ class SessionManager:
                 session_id=session_id,
                 history_source_doc=session_doc,
             )
-            logger.info(f"[Session] Recovered session={session_id} for user={user_id} from Mongo")
-        except Exception as exc:
-            logger.warning(f"[Session] Failed recovering session={session_id}: {exc}")
+            logger.info("[Session] Recovered session={} for user={} from Mongo", session_id, user_id)
+        except Exception:
+            logger.exception("[Session] Failed recovering session={}", session_id)
             return None
         else:
             return recovered

@@ -28,7 +28,8 @@ def timeit(func: Callable) -> Callable:
         except Exception as e:
             elapsed = time.time() - start_time
             logger.error(
-                f"Function {func.__name__} failed",
+                "Function {} failed",
+                func.__name__,
                 elapsed_seconds=round(elapsed, 2),
                 error=str(e),
             )
@@ -36,7 +37,8 @@ def timeit(func: Callable) -> Callable:
         else:
             elapsed = time.time() - start_time
             logger.info(
-                f"Function {func.__name__} completed",
+                "Function {} completed",
+                func.__name__,
                 elapsed_seconds=round(elapsed, 2),
             )
             return result
@@ -69,12 +71,14 @@ class Timer:
 
         if exc_type is None:
             logger.info(
-                f"Timer '{self.name}' completed",
+                "Timer '{}' completed",
+                self.name,
                 elapsed_seconds=round(self.elapsed, 2),
             )
         else:
             logger.error(
-                f"Timer '{self.name}' failed",
+                "Timer '{}' failed",
+                self.name,
                 elapsed_seconds=round(self.elapsed, 2),
                 error=str(exc_val),
             )

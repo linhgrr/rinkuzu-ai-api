@@ -49,12 +49,15 @@ def evaluate_answer(
         return selected == exercise.correct_option.strip().upper(), selected
 
     if exercise_type == ExerciseType.TRUE_FALSE:
-        selected = answer.get("boolean")
-        expected = bool(exercise.correct_answer)
-        return selected is not None and bool(selected) == expected, "True" if selected else "False"
+        selected_boolean = answer.get("boolean")
+        expected_boolean = bool(exercise.correct_answer)
+        return (
+            selected_boolean is not None and bool(selected_boolean) == expected_boolean,
+            "True" if selected_boolean else "False",
+        )
 
     if exercise_type == ExerciseType.FILL_BLANK:
-        user_values = [
+        user_blanks = [
             normalize_text(item) for item in (answer.get("blanks") or []) if item and item.strip()
         ]
         accepted = [
@@ -62,49 +65,52 @@ def evaluate_answer(
             for item in (exercise.correct_answer or [])
             if isinstance(item, str)
         ]
-        is_correct = bool(user_values and accepted and user_values[0] in accepted)
+        is_correct = bool(user_blanks and accepted and user_blanks[0] in accepted)
         return is_correct, ", ".join(answer.get("blanks") or [])
 
     if exercise_type == ExerciseType.MULTI_CORRECT:
-        selected = sorted(
+        selected_choices = sorted(
             {
                 item.strip().upper()
                 for item in (answer.get("choices") or [])
                 if item and item.strip()
             }
         )
-        expected = sorted(
+        expected_choices = sorted(
             {
                 item.strip().upper()
                 for item in (exercise.correct_answer or [])
                 if isinstance(item, str)
             }
         )
-        return selected == expected, ", ".join(selected)
+        return selected_choices == expected_choices, ", ".join(selected_choices)
 
     if exercise_type == ExerciseType.ORDERING:
-        selected = [
+        selected_ordering = [
             normalize_text(item) for item in (answer.get("ordering") or []) if item and item.strip()
         ]
-        expected = [
+        expected_ordering = [
             normalize_text(item)
             for item in (exercise.correct_answer or [])
             if isinstance(item, str)
         ]
-        return bool(selected) and selected == expected, " → ".join(answer.get("ordering") or [])
+        return (
+            bool(selected_ordering) and selected_ordering == expected_ordering,
+            " → ".join(answer.get("ordering") or []),
+        )
 
     if exercise_type == ExerciseType.MATCHING:
-        selected = {
+        selected_matching = {
             normalize_text(left): normalize_text(right)
             for left, right in (answer.get("matching") or {}).items()
             if left and right
         }
-        expected = {
+        expected_matching = {
             normalize_text(left): normalize_text(right)
             for left, right in (exercise.correct_answer or {}).items()
             if isinstance(left, str) and isinstance(right, str)
         }
-        return bool(selected) and selected == expected, ", ".join(
+        return bool(selected_matching) and selected_matching == expected_matching, ", ".join(
             f"{left} -> {right}" for left, right in (answer.get("matching") or {}).items()
         )
 

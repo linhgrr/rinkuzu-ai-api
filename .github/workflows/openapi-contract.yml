@@ -1,0 +1,31 @@
+name: OpenAPI Contract
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Export OpenAPI schema
+        run: python scripts/export_openapi.py --output openapi.json
+
+      - name: Lint OpenAPI schema
+        run: npx @redocly/cli lint openapi.json --extends minimal

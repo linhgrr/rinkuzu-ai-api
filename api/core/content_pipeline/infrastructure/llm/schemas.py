@@ -1,11 +1,17 @@
-# Pydantic schemas for concept extraction / knowledge graph (Final)
+# Pydantic schemas for concept extraction / knowledge graph.
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class Relation(BaseModel):
+class StrictSchemaModel(BaseModel):
+    """Base model for OpenAI structured outputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class Relation(StrictSchemaModel):
     """Directed relation from this concept to a target concept."""
 
     type: Literal["PREREQUISITE"] = Field(
@@ -23,7 +29,7 @@ class Relation(BaseModel):
     )
 
 
-class Formula(BaseModel):
+class Formula(StrictSchemaModel):
     """Structured formula attached to a concept."""
 
     latex: str = Field(..., description="LaTeX expression of the formula.")
@@ -35,7 +41,7 @@ class Formula(BaseModel):
     )
 
 
-class Concept(BaseModel):
+class Concept(StrictSchemaModel):
     """Atomic educational concept within a subject-level knowledge graph."""
 
     concept_id: str = Field(..., min_length=1, description="Unique identifier for the concept.")
@@ -49,7 +55,7 @@ class Concept(BaseModel):
     examples: list[str] = Field(
         default_factory=list, description="Illustrative examples for the concept."
     )
-    formulas: list[Formula] | None = Field(None, description="List of related formulas (if any).")
+    formulas: list[Formula] = Field(default_factory=list, description="List of related formulas (if any).")
     relations: list[Relation] = Field(
         default_factory=list, description="Relations to other concepts (prioritize PREREQUISITE)."
     )
@@ -62,7 +68,7 @@ class Concept(BaseModel):
     )
 
 
-class ConceptExtraction(BaseModel):
+class ConceptExtraction(StrictSchemaModel):
     """Model output for a batch of extracted concepts."""
 
     concepts: list[Concept] = Field(..., description="List of extracted concepts.")
@@ -74,7 +80,63 @@ class ConceptExtraction(BaseModel):
     )
 
 
-class EvidenceVerification(BaseModel):
+class ExtractionConceptPayload(StrictSchemaModel):
+    """LLM tool-call payload for a single extracted concept."""
+
+    concept_id: str = Field(..., min_length=1, description="Unique identifier for the concept.")
+    subject_id: str = Field(
+        ..., min_length=1, description="ID of the subject/course that the concept belongs to."
+    )
+    name: str = Field(..., min_length=1, description="Primary Vietnamese name of ONE concept.")
+    definition: str = Field(..., min_length=1, description="Concise Vietnamese definition.")
+    examples: list[str] = Field(
+        default_factory=list, description="Illustrative Vietnamese examples for the concept."
+    )
+    formulas: list[Formula] = Field(default_factory=list, description="List of related formulas (if any).")
+    relations: list[Relation] = Field(
+        default_factory=list,
+        description="Relations to other concepts. Use target_id for the destination concept id.",
+    )
+
+
+class ConceptExtractionPayload(StrictSchemaModel):
+    """LLM tool-call payload for one PDF batch."""
+
+    concepts: list[ExtractionConceptPayload] = Field(
+        ..., description="List of extracted concepts."
+    )
+    subject_id: str | None = Field(
+        None, description="Subject applied to the entire batch (if any)."
+    )
+    notes: str | None = Field(
+        None, description="Warnings, observations, or extraction notes for this batch."
+    )
+
+
+def materialize_concept_extraction(payload: ConceptExtractionPayload) -> ConceptExtraction:
+    """Convert lightweight LLM payload into the domain model used by the pipeline."""
+
+    return ConceptExtraction(
+        concepts=[
+            Concept(
+                concept_id=concept.concept_id,
+                subject_id=concept.subject_id,
+                name=concept.name,
+                definition=concept.definition,
+                examples=list(concept.examples),
+                formulas=concept.formulas,
+                relations=list(concept.relations),
+                name_embedding=None,
+                definition_embedding=None,
+            )
+            for concept in payload.concepts
+        ],
+        subject_id=payload.subject_id,
+        notes=payload.notes,
+    )
+
+
+class EvidenceVerification(StrictSchemaModel):
     """Result of verifying a relation between two concepts."""
 
     has_relation: bool = Field(
@@ -99,7 +161,7 @@ class EvidenceVerification(BaseModel):
     )
 
 
-class EdgeDecision(BaseModel):
+class EdgeDecision(StrictSchemaModel):
     """Decision for a single edge in a cycle."""
 
     source_id: str = Field(..., description="Source concept ID of the edge")
@@ -115,7 +177,7 @@ class EdgeDecision(BaseModel):
     )
 
 
-class CycleRemovalDecision(BaseModel):
+class CycleRemovalDecision(StrictSchemaModel):
     """LLM decision for removing edges from a cycle."""
 
     cycle_nodes: list[str] = Field(..., description="List of concept IDs forming the cycle")

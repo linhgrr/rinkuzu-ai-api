@@ -2,7 +2,7 @@
 repositories/pipeline_repo.py — MongoDB persistence for pipeline jobs.
 """
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from loguru import logger
 
@@ -22,6 +22,10 @@ class PipelineRepository(MongoRepository):
         "filename": 1,
         "subject_id": 1,
         "status": 1,
+        "page_batch_size": 1,
+        "batch_count": 1,
+        "failed_batch_count": 1,
+        "partial_success": 1,
         "concepts_extracted": 1,
         "concepts_after_merge": 1,
         "relations_verified": 1,
@@ -55,7 +59,10 @@ class PipelineRepository(MongoRepository):
         """Load a pipeline job result from MongoDB."""
 
         async def _load() -> dict[str, Any] | None:
-            return await self._db[self.COLLECTION].find_one({"job_id": job_id}, {"_id": 0})
+            return cast(
+                "dict[str, Any] | None",
+                await self._db[self.COLLECTION].find_one({"job_id": job_id}, {"_id": 0}),
+            )
 
         return await self._run_or_default("load", None, _load)
 
@@ -63,8 +70,11 @@ class PipelineRepository(MongoRepository):
         """Load a pipeline job only if it belongs to user_id."""
 
         async def _load_for_user() -> dict[str, Any] | None:
-            return await self._db[self.COLLECTION].find_one(
-                {"job_id": job_id, "user_id": user_id}, {"_id": 0}
+            return cast(
+                "dict[str, Any] | None",
+                await self._db[self.COLLECTION].find_one(
+                    {"job_id": job_id, "user_id": user_id}, {"_id": 0}
+                ),
             )
 
         return await self._run_or_default("load_for_user", None, _load_for_user)
@@ -112,7 +122,7 @@ class PipelineRepository(MongoRepository):
                 .sort("completed_at", -1)
                 .limit(limit)
             )
-            return await cursor.to_list(length=limit)
+            return cast("list[dict[str, Any]]", await cursor.to_list(length=limit))
 
         return await self._run_or_default("list_recent", [], _list_recent)
 

@@ -24,7 +24,7 @@ class UnsafeURLError(ValueError):
 
 def _resolve_ips(host: str) -> list[str]:
     try:
-        return [info[4][0] for info in socket.getaddrinfo(host, None)]
+        return [str(info[4][0]) for info in socket.getaddrinfo(host, None)]
     except socket.gaierror as exc:
         raise UnsafeURLError(f"DNS resolution failed for '{host}'") from exc
 

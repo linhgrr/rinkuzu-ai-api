@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from api.dependencies import get_current_user, get_session_manager
 from api.exceptions import SessionNotFoundError
+from api.schemas.common import StandardResponse
 from api.schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
 
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
@@ -18,7 +19,7 @@ async def _resolve_user_session(manager, session_id: str, user_id: str):
     return session
 
 
-@router.get("/{session_id}/graph", response_model=KnowledgeGraphResponse)
+@router.get("/{session_id}/graph", response_model=StandardResponse[KnowledgeGraphResponse])
 async def get_knowledge_graph(
     session_id: str,
     manager=Depends(get_session_manager),
@@ -28,10 +29,10 @@ async def get_knowledge_graph(
     data = manager.get_knowledge_graph(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
-    return KnowledgeGraphResponse(**data)
+    return {"success": True, "data": KnowledgeGraphResponse(**data).model_dump()}
 
 
-@router.get("/{session_id}/mastery-matrix", response_model=MasteryMatrixResponse)
+@router.get("/{session_id}/mastery-matrix", response_model=StandardResponse[MasteryMatrixResponse])
 async def get_mastery_matrix(
     session_id: str,
     manager=Depends(get_session_manager),
@@ -41,10 +42,10 @@ async def get_mastery_matrix(
     data = manager.get_mastery_matrix(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
-    return MasteryMatrixResponse(**data)
+    return {"success": True, "data": MasteryMatrixResponse(**data).model_dump()}
 
 
-@router.get("/{session_id}/concept/{concept_id}", response_model=ConceptDetailResponse)
+@router.get("/{session_id}/concept/{concept_id}", response_model=StandardResponse[ConceptDetailResponse])
 async def get_concept_detail(
     session_id: str,
     concept_id: str,
@@ -55,4 +56,4 @@ async def get_concept_detail(
     data = manager.get_concept_detail(session_id, concept_id)
     if not data:
         raise SessionNotFoundError(session_id)
-    return ConceptDetailResponse(**data)
+    return {"success": True, "data": ConceptDetailResponse(**data).model_dump()}

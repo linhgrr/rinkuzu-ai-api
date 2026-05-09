@@ -109,7 +109,7 @@ class PipelineRunner:
         except OSError as exc:
             logger.warning("[PipelineRunner] Failed to delete upload {}: {}", file_path, exc)
 
-    async def run(
+    async def run(  # noqa: PLR0915
         self,
         job: PipelineJob,
         *,
@@ -117,6 +117,7 @@ class PipelineRunner:
         prs_threshold: float,
         min_confidence: float,
         apply_reduction: bool,
+        page_batch_size: int,
     ) -> None:
         settings = get_settings()
         job_timeout_sec, _ = resolve_timeout_policy()
@@ -132,7 +133,7 @@ class PipelineRunner:
                     return
 
                 s3_client = get_s3_client()
-                bucket_name = settings.s3_bucket_name
+                bucket_name = settings.object_storage_bucket
                 cache_key = await try_restore_completed_job_from_s3(
                     job,
                     file_path=file_path,
@@ -151,6 +152,7 @@ class PipelineRunner:
                     load_and_chunk=bindings.file_loader_factory.load_and_chunk,
                     persist_job_state=self._persist_job_state,
                 )
+                job.page_batch_size = page_batch_size
 
                 # Persist document chunks for RAG (MongoDB + ChromaDB)
                 await persist_document_chunks(
@@ -161,24 +163,35 @@ class PipelineRunner:
                     persist_job_state=self._persist_job_state,
                 )
 
-                llm_client = bindings.llm_factory(temperature=0.1)
-                extraction_chain = bindings.extraction_chain_cls(client=llm_client)
+                extraction_chain = bindings.extraction_chain_cls()
                 relation_engine = bindings.relation_engine_factory(
                     extraction_chain=extraction_chain,
                 )
                 all_concepts = await extract_concepts_from_chunks(
                     job,
-                    chunks=chunks,
+                    file_path=file_path,
                     extraction_chain=extraction_chain,
                     postprocess_concepts=bindings.postprocess_concepts,
                     persist_job_state=self._persist_job_state,
                 )
+                failure_ratio = (
+                    job.failed_batch_count / job.batch_count if job.batch_count > 0 else 0.0
+                )
+                if job.batch_count > 0 and (
+                    failure_ratio > settings.content_pipeline_batch_failure_ratio_threshold
+                ):
+                    raise RuntimeError(
+                        "Too many PDF concept-extraction batches failed "
+                        f"({job.failed_batch_count}/{job.batch_count})."
+                    )
+                if not all_concepts:
+                    raise RuntimeError("No concepts were extracted from the document.")
 
                 model_name, batch_size = resolve_embedding_settings()
                 await compute_concept_embeddings(
                     job,
                     concepts=all_concepts,
-                    embedding_client_factory=bindings.embedding_client_cls,
+                    embedding_client_factory=bindings.embedding_client_factory,
                     compute_embedding_for_concepts=bindings.compute_embedding_for_concepts,
                     persist_job_state=self._persist_job_state,
                     model_name=model_name,
@@ -193,7 +206,7 @@ class PipelineRunner:
                 )
 
                 relation_result = await relation_engine.discover_relations(
-                    job,
+                    job=job,
                     concepts=all_concepts,
                     prs_threshold=prs_threshold,
                     min_confidence=min_confidence,
@@ -256,6 +269,17 @@ class PipelineRunner:
                     concept_embeddings=concept_embeddings_list,
                     stats=stats,
                 )
+                job.result["page_batch_size"] = job.page_batch_size
+                job.result["batch_count"] = job.batch_count
+                job.result["failed_batches"] = list(
+                    getattr(extraction_chain, "last_failed_batches", [])
+                )
+                job.result["warnings"] = [
+                    item["reason"]
+                    for item in getattr(extraction_chain, "last_failed_batches", [])
+                    if item.get("reason")
+                ]
+                job.result["partial_success"] = job.partial_success
                 populate_job_metrics_from_result(job)
 
                 await complete_pipeline_job(

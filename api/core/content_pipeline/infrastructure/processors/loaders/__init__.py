@@ -1,6 +1,6 @@
 """Document loaders."""
 
 from .base import BaseLoader
-from .pdf_loader import PDFLoader
+from .local_pdf_text_loader import LocalPdfTextLoader
 
-__all__ = ["BaseLoader", "PDFLoader"]
+__all__ = ["BaseLoader", "LocalPdfTextLoader"]

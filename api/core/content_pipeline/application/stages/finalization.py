@@ -37,9 +37,12 @@ async def complete_pipeline_job(
     persist_job_state: PersistJobStateFn,
 ) -> None:
     """Mark a pipeline job completed and persist the terminal state."""
-    job.completed_at = time.time()
+    now = time.time()
+    job.completed_at = now
+    job.updated_at = now
+    job.heartbeat_at = now
     await persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", 1.0)
-    logger.info(f"[Pipeline] Job {job.job_id} completed: {job.concepts_after_merge} concepts")
+    logger.info("[Pipeline] Job {} completed: {} concepts", job.job_id, job.concepts_after_merge)
 
 
 async def upload_result_cache(
@@ -63,9 +66,9 @@ async def upload_result_cache(
             ContentType="application/json",
             stage_name="s3_cache_upload",
         )
-        logger.info(f"[Pipeline] Uploaded result to S3 cache {cache_key}")
+        logger.info("[Pipeline] Uploaded result to S3 cache {}", cache_key)
     except Exception as exc:
-        logger.warning(f"[Pipeline] Failed to save S3 cache: {exc}")
+        logger.exception("[Pipeline] Failed to save S3 cache")
 
 
 async def persist_terminal_failure(
@@ -76,7 +79,10 @@ async def persist_terminal_failure(
 ) -> None:
     """Persist a terminal job state without raising secondary errors."""
     details = classify_terminal_failure(job, error)
-    job.completed_at = time.time()
+    now = time.time()
+    job.completed_at = now
+    job.updated_at = now
+    job.heartbeat_at = now
     job.status = details.status
     job.error_code = details.error_code
     job.error_message = details.error_message
@@ -84,17 +90,20 @@ async def persist_terminal_failure(
     job.retryable = details.retryable
     job.current_step = details.current_step
     logger.error(
-        f"[Pipeline] Job {job.job_id} ended with {details.status.value}: {details.error_message}"
+        "[Pipeline] Job {} ended with {}: {}",
+        job.job_id,
+        details.status.value,
+        details.error_message,
     )
     try:
         saved = await save_job(job)
         if not saved:
             logger.error(
-                f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}"
+                "[Pipeline] Failed to persist terminal failure state for job {}", job.job_id
             )
-    except Exception as persist_exc:
-        logger.error(
-            f"[Pipeline] Failed to persist terminal failure state for job {job.job_id}: {persist_exc}"
+    except Exception:
+        logger.exception(
+            "[Pipeline] Failed to persist terminal failure state for job {}", job.job_id
         )
 
 

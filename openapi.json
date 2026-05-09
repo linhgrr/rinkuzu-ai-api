@@ -1,0 +1,4076 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ALSS-LEPC Adaptive Learning API",
+    "description": "Adaptive Learning System with SAINT KT + D3QN RL",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/session/start": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Start Session",
+        "operationId": "start_session_api_session_start_post",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/next-concept": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Next Concept",
+        "operationId": "next_concept_api_session__session_id__next_concept_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextConceptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/theory": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Theory",
+        "operationId": "theory_api_session__session_id__theory_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TheoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/exercise": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Generate Exercise",
+        "operationId": "generate_exercise_api_session__session_id__exercise_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/submit": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Submit Answer",
+        "operationId": "submit_answer_api_session__session_id__submit_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitAnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitAnswerResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/chat": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Chat About Exercise",
+        "operationId": "chat_about_exercise_api_session__session_id__chat_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TutorChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TutorChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/status": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Session Status",
+        "operationId": "session_status_api_session__session_id__status_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/graph": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Graph",
+        "operationId": "get_knowledge_graph_api_session__session_id__graph_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeGraphResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/mastery-matrix": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Mastery Matrix",
+        "operationId": "get_mastery_matrix_api_session__session_id__mastery_matrix_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasteryMatrixResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/concept/{concept_id}": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Concept Detail",
+        "operationId": "get_concept_detail_api_session__session_id__concept__concept_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Concept Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline/status": {
+      "get": {
+        "tags": [
+          "pipeline"
+        ],
+        "summary": "Pipeline Status",
+        "description": "Check if content pipeline runtime modules are available.",
+        "operationId": "pipeline_status_api_pipeline_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/pipeline/process": {
+      "post": {
+        "tags": [
+          "pipeline"
+        ],
+        "summary": "Process Document",
+        "description": "Run the full content processing pipeline from an S3 uploaded file.",
+        "operationId": "process_document_api_pipeline_process_post",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessDocumentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineProcessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "pipeline"
+        ],
+        "summary": "Get Job Status",
+        "description": "Get pipeline job status and progress.",
+        "operationId": "get_job_status_api_pipeline_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineJobStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline/jobs/{job_id}/create-session": {
+      "post": {
+        "tags": [
+          "pipeline"
+        ],
+        "summary": "Create Session From Pipeline",
+        "description": "Create a learning session from a completed pipeline job.",
+        "operationId": "create_session_from_pipeline_api_pipeline_jobs__job_id__create_session_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "max_steps",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 9999,
+              "title": "Max Steps"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineSessionCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/subjects": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "List Subjects",
+        "description": "List all completed pipeline jobs (= subjects) enriched with mastery stats.",
+        "operationId": "list_subjects_api_history_subjects_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectHistoryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/subjects/progress": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "List Subject Progress",
+        "description": "List recent subject-level progress records.",
+        "operationId": "list_subject_progress_api_history_subjects_progress_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectProgressListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/subjects/{job_id}": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Get Subject History",
+        "description": "Get subject-level learning history for one pipeline job.",
+        "operationId": "get_subject_history_api_history_subjects__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectHistoryDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Delete Subject",
+        "description": "Delete a subject (pipeline job) and optionally its sessions.",
+        "operationId": "delete_subject_api_history_subjects__job_id__delete",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "delete_sessions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Delete Sessions"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteSubjectResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/pipeline-jobs": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "List Pipeline Jobs",
+        "description": "List recent pipeline jobs.",
+        "operationId": "list_pipeline_jobs_api_history_pipeline_jobs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineJobHistoryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/pipeline-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Get Pipeline Job",
+        "description": "Get full pipeline job result.",
+        "operationId": "get_pipeline_job_api_history_pipeline_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/drafts": {
+      "post": {
+        "tags": [
+          "quiz-drafts"
+        ],
+        "summary": "Create Quiz Draft",
+        "operationId": "create_quiz_draft_api_quiz_drafts_post",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizDraftCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "quiz-drafts"
+        ],
+        "summary": "List Quiz Drafts",
+        "operationId": "list_quiz_drafts_api_quiz_drafts_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/drafts/{draft_id}": {
+      "get": {
+        "tags": [
+          "quiz-drafts"
+        ],
+        "summary": "Get Quiz Draft",
+        "operationId": "get_quiz_draft_api_quiz_drafts__draft_id__get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "quiz-drafts"
+        ],
+        "summary": "Patch Quiz Draft",
+        "operationId": "patch_quiz_draft_api_quiz_drafts__draft_id__patch",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizDraftPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "quiz-drafts"
+        ],
+        "summary": "Delete Quiz Draft",
+        "operationId": "delete_quiz_draft_api_quiz_drafts__draft_id__delete",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/drafts/{draft_id}/submit": {
+      "post": {
+        "tags": [
+          "quiz-drafts"
+        ],
+        "summary": "Submit Quiz Draft",
+        "operationId": "submit_quiz_draft_api_quiz_drafts__draft_id__submit_post",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizDraftSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/ask-ai": {
+      "post": {
+        "tags": [
+          "quiz"
+        ],
+        "summary": "Ask Ai About Quiz",
+        "operationId": "ask_ai_about_quiz_api_quiz_ask_ai_post",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizTutorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizTutorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ready": {
+      "get": {
+        "summary": "Readiness",
+        "description": "Kubernetes readiness probe — 503 until all dependencies are up.",
+        "operationId": "readiness_api_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Backwards-compat alias for /api/ready.",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/info": {
+      "get": {
+        "summary": "Info",
+        "operationId": "info_api_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ConceptDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "definition": {
+            "type": "string",
+            "title": "Definition"
+          },
+          "mastery": {
+            "type": "number",
+            "title": "Mastery"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bloom_mastery": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Bloom Mastery"
+          },
+          "prerequisites": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptPrereq"
+            },
+            "type": "array",
+            "title": "Prerequisites"
+          },
+          "dependents": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptPrereq"
+            },
+            "type": "array",
+            "title": "Dependents"
+          },
+          "visited": {
+            "type": "boolean",
+            "title": "Visited"
+          },
+          "visit_count": {
+            "type": "integer",
+            "title": "Visit Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "definition",
+          "mastery",
+          "status",
+          "bloom_mastery",
+          "prerequisites",
+          "dependents",
+          "visited",
+          "visit_count"
+        ],
+        "title": "ConceptDetailResponse"
+      },
+      "ConceptPrereq": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "mastery": {
+            "type": "number",
+            "title": "Mastery"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "mastery"
+        ],
+        "title": "ConceptPrereq"
+      },
+      "DeleteSubjectResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "deleted_job": {
+            "type": "integer",
+            "title": "Deleted Job"
+          },
+          "deleted_sessions": {
+            "type": "integer",
+            "title": "Deleted Sessions"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "deleted_job",
+          "deleted_sessions",
+          "status"
+        ],
+        "title": "DeleteSubjectResponse"
+      },
+      "ExerciseResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "type": "string",
+            "title": "Bloom Label"
+          },
+          "exercise_type": {
+            "$ref": "#/components/schemas/ExerciseType",
+            "default": "mcq"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "sentence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentence"
+          },
+          "options": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Options"
+          },
+          "statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "pairs": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Pairs"
+          },
+          "right_items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Right Items"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theory"
+          },
+          "recommendation_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "question",
+          "step",
+          "max_steps"
+        ],
+        "title": "ExerciseResponse"
+      },
+      "ExerciseType": {
+        "type": "string",
+        "enum": [
+          "mcq",
+          "true_false",
+          "fill_blank",
+          "multi_correct",
+          "ordering",
+          "matching",
+          "short_answer"
+        ],
+        "title": "ExerciseType"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "KnowledgeEdgeResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "KnowledgeEdgeResponse"
+      },
+      "KnowledgeGraphResponse": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeNodeResponse"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeEdgeResponse"
+            },
+            "type": "array",
+            "title": "Edges"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "title": "KnowledgeGraphResponse"
+      },
+      "KnowledgeNodeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "mastery": {
+            "type": "number",
+            "title": "Mastery"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "visited": {
+            "type": "boolean",
+            "title": "Visited"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "index",
+          "name",
+          "mastery",
+          "status",
+          "visited"
+        ],
+        "title": "KnowledgeNodeResponse"
+      },
+      "MasteryMatrixResponse": {
+        "properties": {
+          "matrix": {
+            "items": {
+              "$ref": "#/components/schemas/MasteryRow"
+            },
+            "type": "array",
+            "title": "Matrix"
+          },
+          "bloom_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bloom Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matrix",
+          "bloom_labels"
+        ],
+        "title": "MasteryMatrixResponse"
+      },
+      "MasteryRow": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "title": "Concept Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "bloom_levels": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Bloom Levels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "concept_name",
+          "bloom_levels"
+        ],
+        "title": "MasteryRow"
+      },
+      "NextConceptResponse": {
+        "properties": {
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "type": "string",
+            "title": "Bloom Label"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "step",
+          "max_steps"
+        ],
+        "title": "NextConceptResponse"
+      },
+      "PipelineFailedBatchResponse": {
+        "properties": {
+          "batch_index": {
+            "type": "integer",
+            "title": "Batch Index"
+          },
+          "page_start": {
+            "type": "integer",
+            "title": "Page Start"
+          },
+          "page_end": {
+            "type": "integer",
+            "title": "Page End"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_index",
+          "page_start",
+          "page_end",
+          "reason"
+        ],
+        "title": "PipelineFailedBatchResponse"
+      },
+      "PipelineJobHistoryListResponse": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/SubjectHistoryResponse"
+            },
+            "type": "array",
+            "title": "Jobs"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jobs",
+          "count"
+        ],
+        "title": "PipelineJobHistoryListResponse"
+      },
+      "PipelineJobResultResponse": {
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/KnowledgeGraphResponse"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Stats"
+          },
+          "n_concepts": {
+            "type": "integer",
+            "title": "N Concepts",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "PipelineJobResultResponse"
+      },
+      "PipelineJobStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": ""
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "queued",
+              "loading",
+              "chunking",
+              "extracting",
+              "embedding",
+              "merging",
+              "ranking",
+              "verifying",
+              "building_graph",
+              "optimizing",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "current_step": {
+            "type": "string",
+            "title": "Current Step",
+            "default": ""
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "default": 0.0
+          },
+          "total_chunks": {
+            "type": "integer",
+            "title": "Total Chunks",
+            "default": 0
+          },
+          "page_batch_size": {
+            "type": "integer",
+            "title": "Page Batch Size",
+            "default": 10
+          },
+          "batch_count": {
+            "type": "integer",
+            "title": "Batch Count",
+            "default": 0
+          },
+          "failed_batch_count": {
+            "type": "integer",
+            "title": "Failed Batch Count",
+            "default": 0
+          },
+          "partial_success": {
+            "type": "boolean",
+            "title": "Partial Success",
+            "default": false
+          },
+          "concepts_extracted": {
+            "type": "integer",
+            "title": "Concepts Extracted",
+            "default": 0
+          },
+          "concepts_after_merge": {
+            "type": "integer",
+            "title": "Concepts After Merge",
+            "default": 0
+          },
+          "relations_verified": {
+            "type": "integer",
+            "title": "Relations Verified",
+            "default": 0
+          },
+          "graph_stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Graph Stats"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "user_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Message"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable",
+            "default": false
+          },
+          "failed_batches": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineFailedBatchResponse"
+            },
+            "type": "array",
+            "title": "Failed Batches"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "is_terminal": {
+            "type": "boolean",
+            "title": "Is Terminal",
+            "default": false
+          },
+          "is_delayed": {
+            "type": "boolean",
+            "title": "Is Delayed",
+            "default": false
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At",
+            "default": 0.0
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At",
+            "default": 0.0
+          },
+          "heartbeat_at": {
+            "type": "number",
+            "title": "Heartbeat At",
+            "default": 0.0
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "title": "Retry After Seconds",
+            "default": 2
+          },
+          "partial_graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelinePartialGraphResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineJobResultResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "PipelineJobStatusResponse"
+      },
+      "PipelinePartialGraphEdgeResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "PipelinePartialGraphEdgeResponse"
+      },
+      "PipelinePartialGraphNodeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PipelinePartialGraphNodeResponse"
+      },
+      "PipelinePartialGraphResponse": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/PipelinePartialGraphNodeResponse"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/PipelinePartialGraphEdgeResponse"
+            },
+            "type": "array",
+            "title": "Edges"
+          }
+        },
+        "type": "object",
+        "title": "PipelinePartialGraphResponse"
+      },
+      "PipelineProcessResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "queued",
+              "loading",
+              "chunking",
+              "extracting",
+              "embedding",
+              "merging",
+              "ranking",
+              "verifying",
+              "building_graph",
+              "optimizing",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "status_url": {
+            "type": "string",
+            "title": "Status Url"
+          },
+          "page_batch_size": {
+            "type": "integer",
+            "title": "Page Batch Size",
+            "default": 10
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "title": "Retry After Seconds",
+            "default": 2
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "filename",
+          "file_size",
+          "subject_id",
+          "status",
+          "status_url",
+          "message"
+        ],
+        "title": "PipelineProcessResponse"
+      },
+      "PipelineSessionCreateResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "n_concepts": {
+            "type": "integer",
+            "title": "N Concepts"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "active",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "n_concepts",
+          "source",
+          "job_id",
+          "status"
+        ],
+        "title": "PipelineSessionCreateResponse"
+      },
+      "ProcessDocumentRequest": {
+        "properties": {
+          "file_url": {
+            "type": "string",
+            "title": "File Url"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "prs_threshold": {
+            "type": "number",
+            "title": "Prs Threshold",
+            "default": 0.75
+          },
+          "min_confidence": {
+            "type": "number",
+            "title": "Min Confidence",
+            "default": 0.6
+          },
+          "apply_reduction": {
+            "type": "boolean",
+            "title": "Apply Reduction",
+            "default": true
+          },
+          "page_batch_size": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Page Batch Size",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_url",
+          "filename"
+        ],
+        "title": "ProcessDocumentRequest"
+      },
+      "QuizDraftCreateRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "s3_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "S3 Key"
+          },
+          "file_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "File Name"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "s3_key",
+          "file_name"
+        ],
+        "title": "QuizDraftCreateRequest"
+      },
+      "QuizDraftPatchRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "questions": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "title": "QuizDraftPatchRequest"
+      },
+      "QuizDraftSubmitRequest": {
+        "properties": {
+          "quiz_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Quiz Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quiz_id"
+        ],
+        "title": "QuizDraftSubmitRequest"
+      },
+      "QuizTutorChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "QuizTutorChatMessage"
+      },
+      "QuizTutorRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 2,
+            "title": "Options"
+          },
+          "userQuestion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Userquestion"
+          },
+          "questionImage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questionimage"
+          },
+          "optionImages": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Optionimages"
+          },
+          "chatHistory": {
+            "items": {
+              "$ref": "#/components/schemas/QuizTutorChatMessage"
+            },
+            "type": "array",
+            "title": "Chathistory"
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "options"
+        ],
+        "title": "QuizTutorRequest"
+      },
+      "QuizTutorResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/QuizTutorResponseData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "QuizTutorResponse"
+      },
+      "QuizTutorResponseData": {
+        "properties": {
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "structured": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "turnCount": {
+            "type": "integer",
+            "title": "Turncount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "explanation",
+          "timestamp",
+          "turnCount"
+        ],
+        "title": "QuizTutorResponseData"
+      },
+      "RecommendationPrerequisite": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "mastery": {
+            "type": "number",
+            "title": "Mastery"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "mastery"
+        ],
+        "title": "RecommendationPrerequisite"
+      },
+      "RecommendationReason": {
+        "properties": {
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "type": "string",
+            "title": "Bloom Label"
+          },
+          "satisfied_prereqs": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationPrerequisite"
+            },
+            "type": "array",
+            "title": "Satisfied Prereqs"
+          },
+          "current_mastery": {
+            "type": "number",
+            "title": "Current Mastery"
+          },
+          "next_milestone": {
+            "type": "number",
+            "title": "Next Milestone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_name",
+          "bloom_level",
+          "bloom_label",
+          "current_mastery",
+          "next_milestone"
+        ],
+        "title": "RecommendationReason"
+      },
+      "SessionCreateRequest": {
+        "properties": {
+          "max_steps": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 5.0,
+            "title": "Max Steps",
+            "default": 9999
+          },
+          "use_default_data": {
+            "type": "boolean",
+            "title": "Use Default Data",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "SessionCreateRequest"
+      },
+      "SessionCreateResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "n_concepts": {
+            "type": "integer",
+            "title": "N Concepts"
+          },
+          "concepts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Concepts"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "n_concepts",
+          "concepts"
+        ],
+        "title": "SessionCreateResponse"
+      },
+      "SessionStatusResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "concepts_visited": {
+            "type": "integer",
+            "title": "Concepts Visited"
+          },
+          "total_concepts": {
+            "type": "integer",
+            "title": "Total Concepts"
+          },
+          "avg_mastery": {
+            "type": "number",
+            "title": "Avg Mastery"
+          },
+          "coverage": {
+            "type": "number",
+            "title": "Coverage"
+          },
+          "total_correct": {
+            "type": "integer",
+            "title": "Total Correct"
+          },
+          "total_answered": {
+            "type": "integer",
+            "title": "Total Answered"
+          },
+          "accuracy": {
+            "type": "number",
+            "title": "Accuracy"
+          },
+          "exercises": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Exercises"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "step",
+          "max_steps",
+          "concepts_visited",
+          "total_concepts",
+          "avg_mastery",
+          "coverage",
+          "total_correct",
+          "total_answered",
+          "accuracy",
+          "exercises"
+        ],
+        "title": "SessionStatusResponse"
+      },
+      "SubjectHistoryDetailResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": ""
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_correct": {
+            "type": "integer",
+            "title": "Total Correct",
+            "default": 0
+          },
+          "total_answered": {
+            "type": "integer",
+            "title": "Total Answered",
+            "default": 0
+          },
+          "accuracy": {
+            "type": "number",
+            "title": "Accuracy",
+            "default": 0.0
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step",
+            "default": 0
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps",
+            "default": 0
+          },
+          "avg_mastery": {
+            "type": "number",
+            "title": "Avg Mastery",
+            "default": 0.0
+          },
+          "concept_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Concept Names",
+            "default": {}
+          },
+          "concept_mastery": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Concept Mastery",
+            "default": []
+          },
+          "bloom_mastery": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Bloom Mastery",
+            "default": []
+          },
+          "exercise_history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Exercise History",
+            "default": []
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At",
+            "default": 0
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At",
+            "default": 0
+          },
+          "last_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "SubjectHistoryDetailResponse"
+      },
+      "SubjectHistoryListResponse": {
+        "properties": {
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/SubjectHistoryResponse"
+            },
+            "type": "array",
+            "title": "Subjects"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subjects",
+          "count"
+        ],
+        "title": "SubjectHistoryListResponse"
+      },
+      "SubjectHistoryResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "concepts_extracted": {
+            "type": "integer",
+            "title": "Concepts Extracted",
+            "default": 0
+          },
+          "concepts_after_merge": {
+            "type": "integer",
+            "title": "Concepts After Merge",
+            "default": 0
+          },
+          "relations_verified": {
+            "type": "integer",
+            "title": "Relations Verified",
+            "default": 0
+          },
+          "completed_at": {
+            "type": "number",
+            "title": "Completed At"
+          },
+          "mastered_concept": {
+            "type": "integer",
+            "title": "Mastered Concept",
+            "default": 0
+          },
+          "all_concept": {
+            "type": "integer",
+            "title": "All Concept",
+            "default": 0
+          },
+          "progress_percent": {
+            "type": "integer",
+            "title": "Progress Percent",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "filename",
+          "subject_id",
+          "status",
+          "completed_at"
+        ],
+        "title": "SubjectHistoryResponse"
+      },
+      "SubjectProgressListResponse": {
+        "properties": {
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/SubjectProgressSummaryResponse"
+            },
+            "type": "array",
+            "title": "Subjects"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subjects",
+          "count"
+        ],
+        "title": "SubjectProgressListResponse"
+      },
+      "SubjectProgressSummaryResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": ""
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_correct": {
+            "type": "integer",
+            "title": "Total Correct",
+            "default": 0
+          },
+          "total_answered": {
+            "type": "integer",
+            "title": "Total Answered",
+            "default": 0
+          },
+          "accuracy": {
+            "type": "number",
+            "title": "Accuracy",
+            "default": 0.0
+          },
+          "avg_mastery": {
+            "type": "number",
+            "title": "Avg Mastery",
+            "default": 0.0
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step",
+            "default": 0
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps",
+            "default": 0
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At",
+            "default": 0
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At",
+            "default": 0
+          },
+          "last_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "SubjectProgressSummaryResponse"
+      },
+      "SubmitAnswerPayload": {
+        "properties": {
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice"
+          },
+          "choices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "boolean": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boolean"
+          },
+          "blanks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blanks"
+          },
+          "ordering": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ordering"
+          },
+          "matching": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Matching"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "title": "SubmitAnswerPayload"
+      },
+      "SubmitAnswerRequest": {
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/SubmitAnswerPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "title": "SubmitAnswerRequest"
+      },
+      "SubmitAnswerResponse": {
+        "properties": {
+          "is_correct": {
+            "type": "boolean",
+            "title": "Is Correct"
+          },
+          "correct_option": {
+            "type": "string",
+            "title": "Correct Option"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "mastery_after": {
+            "type": "number",
+            "title": "Mastery After"
+          },
+          "avg_mastery": {
+            "type": "number",
+            "title": "Avg Mastery"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "session_completed": {
+            "type": "boolean",
+            "title": "Session Completed"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_correct",
+          "correct_option",
+          "explanation",
+          "concept_name",
+          "bloom_level",
+          "mastery_after",
+          "avg_mastery",
+          "step",
+          "session_completed",
+          "stats"
+        ],
+        "title": "SubmitAnswerResponse"
+      },
+      "TheoryResponse": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Examples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "examples"
+        ],
+        "title": "TheoryResponse"
+      },
+      "TutorChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "TutorChatMessage"
+      },
+      "TutorChatRequest": {
+        "properties": {
+          "userQuestion": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Userquestion"
+          },
+          "chatHistory": {
+            "items": {
+              "$ref": "#/components/schemas/TutorChatMessage"
+            },
+            "type": "array",
+            "title": "Chathistory"
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "userQuestion"
+        ],
+        "title": "TutorChatRequest"
+      },
+      "TutorChatResponse": {
+        "properties": {
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "explanation"
+        ],
+        "title": "TutorChatResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "XUserIdHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-user-id",
+        "description": "Authenticated user id forwarded by the frontend proxy."
+      },
+      "XServiceTokenHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-service-token",
+        "description": "Shared internal token used by the frontend proxy when calling the backend API."
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same-origin deployment behind the current API host."
+    }
+  ],
+  "security": [
+    {
+      "XUserIdHeader": [],
+      "XServiceTokenHeader": []
+    }
+  ]
+}

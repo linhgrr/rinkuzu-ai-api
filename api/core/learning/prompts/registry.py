@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from api.core.learning.exercise_types import (
+    ExerciseBaseOutput,
     ExerciseType,
     FillBlankOutput,
     MatchingOutput,
@@ -20,16 +21,14 @@ from .constants import EXPLANATION_GUIDANCE, NEGATIVE_CONSTRAINTS
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from pydantic import BaseModel
-
 
 @dataclass(frozen=True)
 class ExercisePromptSpec:
-    schema: type[BaseModel]
+    schema: type[ExerciseBaseOutput]
     instruction: str
     negative_constraints: str
     explanation_guidance: str
-    serializer: Callable[[BaseModel], dict[str, Any]]
+    serializer: Callable[[ExerciseBaseOutput], dict[str, Any]]
 
 
 PROMPT_REGISTRY: dict[ExerciseType, ExercisePromptSpec] = {

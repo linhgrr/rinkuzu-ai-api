@@ -23,7 +23,7 @@ async def merge_duplicate_concepts(
     """Merge duplicate concepts and persist stage progress."""
     await persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.50)
 
-    merged_concepts = await run_blocking_stage(
+    merged_concepts: list[Any] = await run_blocking_stage(
         merge_by_name,
         concepts,
         stage_name="concept_merge",

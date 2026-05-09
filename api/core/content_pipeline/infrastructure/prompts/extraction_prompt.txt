@@ -47,7 +47,7 @@ Examples:
 ## Consistency (Concept name unification)
 * Each **concept** must have a **unique canonical name** (in Vietnamese).
 * If multiple names appear in the text → choose the **most standard/main** one (often from the first definition or section title).
-* Other variants go into the **keywords** field for reference.
+* Do **not** create extra fields outside the tool schema. Keep only the fields defined in the function parameters.
 ## concept_id format (snake_case)
 **IMPORTANT**: `concept_id` must be generated from the concept's Vietnamese name according to the following rules:
 * Convert to **lowercase without accents**
@@ -66,7 +66,7 @@ Examples:
 | **PREREQUISITE** | A is a **prerequisite** to learn B | "Trước khi học X, cần hiểu Y"; "X dựa trên Y" |
 Each relation must include:
 * `type`: `"PREREQUISITE"`
-* `target`: target concept name
+* `target_id`: target concept id
 * `evidence`: explicit supporting sentence or paragraph from the text (in Vietnamese)
 ### HOW TO DETERMINE A PREREQUISITE RELATION
 A concept A is a **PREREQUISITE** of B when:

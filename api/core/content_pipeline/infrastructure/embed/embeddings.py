@@ -30,17 +30,19 @@ def compute_embedding_for_concepts(concepts: list[Concept], client: EmbeddingCli
     for concept in concepts:
         if not concept.name:
             logger.warning(
-                f"Concept with ID {concept.concept_id} has no name. Skipping embedding computation."
+                "Concept with ID {} has no name. Skipping embedding computation.",
+                concept.concept_id,
             )
             continue
         if not concept.definition:
             logger.warning(
-                f"Concept with ID {concept.concept_id} has no definition. Skipping embedding computation."
+                "Concept with ID {} has no definition. Skipping embedding computation.",
+                concept.concept_id,
             )
             continue
 
         try:
-            logger.info(f"Computing embeddings for concept ID {concept.concept_id}.")
+            logger.info("Computing embeddings for concept ID {}.", concept.concept_id)
 
             # Compute name embedding (for CSR prerequisite ranking)
             name_embedding = client.embed_query(concept.name)
@@ -51,4 +53,4 @@ def compute_embedding_for_concepts(concepts: list[Concept], client: EmbeddingCli
             concept.definition_embedding = definition_embedding
 
         except Exception as e:
-            logger.warning(f"Failed to compute embeddings for concept ID {concept.concept_id}: {e}")
+            logger.exception("Failed to compute embeddings for concept ID {}", concept.concept_id)

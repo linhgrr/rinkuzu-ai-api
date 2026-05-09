@@ -2,7 +2,7 @@
 repositories/subject_progress_repo.py — MongoDB persistence for subject-level learning history.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from .base import MongoRepository
 
@@ -38,9 +38,12 @@ class SubjectProgressRepository(MongoRepository):
 
     async def load_for_user(self, job_id: str, user_id: str) -> dict[str, Any] | None:
         async def _load_for_user() -> dict[str, Any] | None:
-            return await self._db[self.COLLECTION].find_one(
-                {"job_id": job_id, "user_id": user_id},
-                {"_id": 0},
+            return cast(
+                "dict[str, Any] | None",
+                await self._db[self.COLLECTION].find_one(
+                    {"job_id": job_id, "user_id": user_id},
+                    {"_id": 0},
+                ),
             )
 
         return await self._run_or_default("load_for_user", None, _load_for_user)
@@ -51,9 +54,12 @@ class SubjectProgressRepository(MongoRepository):
         user_id: str,
     ) -> dict[str, Any] | None:
         async def _load_by_session_for_user() -> dict[str, Any] | None:
-            return await self._db[self.COLLECTION].find_one(
-                {"last_session_id": session_id, "user_id": user_id},
-                {"_id": 0},
+            return cast(
+                "dict[str, Any] | None",
+                await self._db[self.COLLECTION].find_one(
+                    {"last_session_id": session_id, "user_id": user_id},
+                    {"_id": 0},
+                ),
             )
 
         return await self._run_or_default(
@@ -94,7 +100,7 @@ class SubjectProgressRepository(MongoRepository):
                 .sort("updated_at", -1)
                 .limit(limit)
             )
-            return await cursor.to_list(length=limit)
+            return cast("list[dict[str, Any]]", await cursor.to_list(length=limit))
 
         return await self._run_or_default("list_recent", [], _list_recent)
 

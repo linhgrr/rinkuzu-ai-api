@@ -2,47 +2,41 @@
 
 from typing import Any
 
-from langchain.agents import create_agent
 from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
 from loguru import logger
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 
-from api.core.content_pipeline.infrastructure.llm import get_llm
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision
 from api.core.content_pipeline.infrastructure.prompts import CYCLE_REMOVAL_PROMPT
+from api.core.shared.llm import get_llm
 
 
 class CycleRemover:
     """LLM-based cycle remover for knowledge graphs."""
 
-    def __init__(self, llm=None):
+    def __init__(self, llm: Any | None = None):
         """
         Initialize cycle remover with LLM.
 
         Args:
-            llm: ChatOpenAI instance
+            llm: LangChain chat model instance
         """
-        if llm is None:
-            self.llm = get_llm(temperature=0.1, max_tokens=None, timeout=150)
-        else:
-            self.llm = llm
-
+        self.llm = llm or get_llm(temperature=0.1, max_tokens=None, timeout=150)
         self.cycle_removal_prompt = ChatPromptTemplate.from_messages(
             [
                 SystemMessagePromptTemplate.from_template(CYCLE_REMOVAL_PROMPT),
                 HumanMessagePromptTemplate.from_template("## CYCLE INFORMATION\n\n{cycle_info}"),
             ]
         )
-
-        self.cycle_removal_agent = create_agent(
-            self.llm, tools=[], response_format=CycleRemovalDecision
+        self.cycle_removal_chain = self.cycle_removal_prompt | self.llm.with_structured_output(
+            CycleRemovalDecision,
+            method="json_schema",
+            strict=True,
         )
-
-        self.cycle_removal_chain = self.cycle_removal_prompt | self.cycle_removal_agent
 
         logger.info("CycleRemover initialized with LLM-based decision making")
 
@@ -82,13 +76,13 @@ class CycleRemover:
             try:
                 cycles = list(nx.simple_cycles(dag_graph))
             except Exception as e:
-                logger.error(f"Error finding cycles: {e}")
+                logger.exception("Error finding cycles")
                 break
 
             if not cycles:
                 break
 
-            logger.info(f"Iteration {iteration}: Found {len(cycles)} cycle(s)")
+            logger.info("Iteration {}: Found {} cycle(s)", iteration, len(cycles))
 
             cycle = cycles[0]
 
@@ -105,14 +99,14 @@ class CycleRemover:
             total_edges_removed += edges_removed
             cycles_removed += 1
 
-            logger.info(f"Removed {edges_removed} edge(s) from cycle")
+            logger.info("Removed {} edge(s) from cycle", edges_removed)
 
         is_dag = nx.is_directed_acyclic_graph(dag_graph)
 
         if not is_dag:
             logger.warning(
-                f"Graph still has cycles after {iteration} iterations. "
-                f"Consider manual intervention."
+                "Graph still has cycles after {} iterations. Consider manual intervention.",
+                iteration,
             )
 
         stats = {
@@ -124,8 +118,10 @@ class CycleRemover:
         }
 
         logger.info(
-            f"Cycle removal complete: {cycles_removed} cycles, "
-            f"{total_edges_removed} edges removed in {iteration} iterations"
+            "Cycle removal complete: {} cycles, {} edges removed in {} iterations",
+            cycles_removed,
+            total_edges_removed,
+            iteration,
         )
 
         return dag_graph, stats
@@ -146,15 +142,13 @@ class CycleRemover:
         """
         try:
             cycle_info = self._format_cycle_info(graph, cycle, cycle_edges)
-            logger.debug(f"Asking LLM to analyze cycle: {' → '.join(cycle)}")
+            logger.debug("Asking LLM to analyze cycle: {}", ' → '.join(cycle))
 
-            logger.info(f"Cycle removal LLM Input: {cycle_info}")
+            logger.info("Cycle removal LLM Input: {}", cycle_info)
 
-            response = self.cycle_removal_chain.invoke({"cycle_info": cycle_info})
+            decision = self.cycle_removal_chain.invoke({"cycle_info": cycle_info})
 
-            logger.info(f"Cycle removal LLM Output: {response}")
-
-            decision: CycleRemovalDecision = response["structured_response"]
+            logger.info("Cycle removal LLM Output: {}", decision.model_dump())
 
             edges_removed = 0
             for edge_decision in decision.edges_to_remove:
@@ -164,10 +158,12 @@ class CycleRemover:
 
                     if graph.has_edge(source, target):
                         logger.info(
-                            f"Removing edge: {source} → {target} "
-                            f"(confidence: {edge_decision.confidence:.2f})"
+                            "Removing edge: {} → {} (confidence: {:.2f})",
+                            source,
+                            target,
+                            edge_decision.confidence,
                         )
-                        logger.debug(f"Reasoning: {edge_decision.reasoning}")
+                        logger.debug("Reasoning: {}", edge_decision.reasoning)
 
                         graph.remove_edge(source, target)
                         edges_removed += 1
@@ -180,12 +176,10 @@ class CycleRemover:
                     edges_removed = 1
 
         except Exception as e:
-            logger.error(f"Error in LLM cycle removal: {e}")
+            logger.exception("Error in LLM cycle removal")
             if cycle_edges:
                 first_edge = cycle_edges[0]
-                logger.warning(
-                    f"Fallback: removing {first_edge['source']} → {first_edge['target']}"
-                )
+                logger.warning("Fallback: removing {} → {}", first_edge["source"], first_edge["target"])
                 graph.remove_edge(first_edge["source"], first_edge["target"])
                 return 1
             return 0
@@ -250,7 +244,7 @@ class CycleRemover:
         return "\n".join(lines)
 
 
-def make_dag_with_llm(graph: nx.DiGraph, llm=None) -> tuple[nx.DiGraph, dict[str, Any]]:
+def make_dag_with_llm(graph: nx.DiGraph, llm: Any | None = None) -> tuple[nx.DiGraph, dict[str, Any]]:
     """
     Convert graph to DAG by removing cycles using LLM decisions.
 
@@ -258,7 +252,7 @@ def make_dag_with_llm(graph: nx.DiGraph, llm=None) -> tuple[nx.DiGraph, dict[str
 
     Args:
         graph: Knowledge graph (may contain cycles)
-        llm: Optional LLM instance
+        llm: Optional LangChain chat model instance
 
     Returns:
         Tuple of (dag_graph, stats)

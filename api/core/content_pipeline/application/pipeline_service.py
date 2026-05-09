@@ -1,8 +1,6 @@
 """Lifecycle orchestration for content pipeline jobs.
 
-This service intentionally keeps the current external behavior while moving
-request-independent job scheduling and persistence out of the legacy
-`orchestrator.py` module.
+This service owns request-independent job scheduling and persistence.
 """
 
 from __future__ import annotations
@@ -10,12 +8,26 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+import time
+from typing import Protocol
 import uuid
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
-RunPipelineFn = Callable[[PipelineJob, str, float, float, bool], Awaitable[None]]
+
+
+class RunPipelineFn(Protocol):
+    def __call__(
+        self,
+        job: PipelineJob,
+        file_path: str,
+        prs_threshold: float,
+        min_confidence: float,
+        *,
+        apply_reduction: bool,
+        page_batch_size: int,
+    ) -> Awaitable[None]: ...
 
 
 class PipelineService:
@@ -33,9 +45,14 @@ class PipelineService:
         step: str,
         progress: float,
     ) -> None:
+        now = time.time()
         job.status = status
         job.current_step = step
         job.progress = progress
+        job.updated_at = now
+        job.heartbeat_at = now
+        if status.is_terminal:
+            job.completed_at = job.completed_at or now
         saved = await self._save_job(job)
         if not saved:
             raise RuntimeError(
@@ -53,8 +70,14 @@ class PipelineService:
         user_id: str | None,
         content_processor_available: bool,
         content_processor_src: str,
+        page_batch_size: int,
     ) -> PipelineJob:
-        job = self._build_job(file_path=file_path, subject_id=subject_id, user_id=user_id)
+        job = self._build_job(
+            file_path=file_path,
+            subject_id=subject_id,
+            user_id=user_id,
+            page_batch_size=page_batch_size,
+        )
 
         if not content_processor_available:
             job.error_code = "pipeline_unavailable"
@@ -82,29 +105,10 @@ class PipelineService:
             prs_threshold=prs_threshold,
             min_confidence=min_confidence,
             apply_reduction=apply_reduction,
+            page_batch_size=page_batch_size,
         )
 
         return job
-
-    async def run_job_and_cleanup(
-        self,
-        job: PipelineJob,
-        file_path: str,
-        prs_threshold: float,
-        min_confidence: float,
-        *,
-        apply_reduction: bool,
-    ) -> None:
-        try:
-            await self._run_pipeline(
-                job,
-                file_path,
-                prs_threshold,
-                min_confidence,
-                apply_reduction,
-            )
-        finally:
-            self._cleanup_file(file_path)
 
     @staticmethod
     def _build_job(
@@ -112,6 +116,7 @@ class PipelineService:
         file_path: str,
         subject_id: str | None,
         user_id: str | None,
+        page_batch_size: int,
     ) -> PipelineJob:
         file_name = Path(file_path).name
         normalized_subject_id = subject_id or Path(file_path).stem
@@ -120,16 +125,8 @@ class PipelineService:
             filename=file_name,
             subject_id=normalized_subject_id,
             user_id=user_id,
+            page_batch_size=page_batch_size,
         )
-
-    @staticmethod
-    def _cleanup_file(file_path: str) -> None:
-        try:
-            path = Path(file_path)
-            if path.exists():
-                path.unlink()
-        except OSError:
-            pass
 
     def _schedule_background_run(
         self,
@@ -139,14 +136,16 @@ class PipelineService:
         prs_threshold: float,
         min_confidence: float,
         apply_reduction: bool,
+        page_batch_size: int,
     ) -> None:
         task = asyncio.create_task(
-            self.run_job_and_cleanup(
+            self._run_pipeline(
                 job,
                 file_path,
                 prs_threshold,
                 min_confidence,
-                apply_reduction,
+                apply_reduction=apply_reduction,
+                page_batch_size=page_batch_size,
             )
         )
         self._scheduled_tasks.add(task)

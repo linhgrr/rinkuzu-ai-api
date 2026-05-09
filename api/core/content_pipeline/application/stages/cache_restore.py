@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 import json
 import time
+from typing import Any
 
 from loguru import logger
 
@@ -12,7 +13,7 @@ from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 from .execution import run_blocking_stage
 
-LoadMongoJobFn = Callable[[str], Awaitable[dict | None]]
+LoadMongoJobFn = Callable[[str], Awaitable[dict[str, Any] | None]]
 SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
 PopulateMetricsFn = Callable[[PipelineJob], None]
 HashFileFn = Callable[[str], str]
@@ -25,7 +26,7 @@ async def try_restore_completed_job_from_mongo(
     populate_metrics: PopulateMetricsFn,
 ) -> bool:
     """Restore a completed job from MongoDB when available."""
-    mongo_doc = await load_job(job.job_id)
+    mongo_doc: dict[str, Any] | None = await load_job(job.job_id)
     if not (
         mongo_doc
         and mongo_doc.get("status") == PipelineStatus.COMPLETED.value
@@ -40,15 +41,14 @@ async def try_restore_completed_job_from_mongo(
     job.concepts_extracted = int(mongo_doc.get("concepts_extracted", 0) or 0)
     job.concepts_after_merge = int(mongo_doc.get("concepts_after_merge", 0) or 0)
     job.relations_verified = int(mongo_doc.get("relations_verified", 0) or 0)
-    job.graph_stats = (
-        mongo_doc.get("graph_stats") if isinstance(mongo_doc.get("graph_stats"), dict) else {}
-    )
+    graph_stats = mongo_doc.get("graph_stats")
+    job.graph_stats = graph_stats if isinstance(graph_stats, dict) else {}
     populate_metrics(job)
     job.status = PipelineStatus.COMPLETED
     job.current_step = "Loaded from MongoDB"
     job.progress = 1.0
     job.completed_at = mongo_doc.get("completed_at", time.time())
-    logger.info(f"[Pipeline] Job {job.job_id} restored from MongoDB")
+    logger.info("[Pipeline] Job {} restored from MongoDB", job.job_id)
     return True
 
 
@@ -72,7 +72,7 @@ async def try_restore_completed_job_from_s3(
     job.progress = 0.02
     saved = False
     try:
-        response = await run_blocking_stage(
+        response: dict[str, Any] = await run_blocking_stage(
             s3_client.get_object,
             Bucket=bucket_name,
             Key=cache_key,
@@ -85,10 +85,10 @@ async def try_restore_completed_job_from_s3(
         job.current_step = "Loaded from S3 cache"
         job.progress = 1.0
         job.completed_at = time.time()
-        logger.info(f"[Pipeline] Job {job.job_id} loaded from S3 cache {cache_key}")
+        logger.info("[Pipeline] Job {} loaded from S3 cache {}", job.job_id, cache_key)
         saved = await save_job(job)
     except Exception:
-        logger.debug(f"[Pipeline] Cache miss: {cache_key}")
+        logger.debug("[Pipeline] Cache miss: {}", cache_key)
         return cache_key
     if not saved:
         raise RuntimeError("Failed to persist S3-cached pipeline result to MongoDB")

@@ -91,7 +91,8 @@ class ChunkChromaStore:
 
         self.vectorstore.add_texts(texts=texts, ids=ids, metadatas=metadatas)
         logger.info(
-            f"Added {len(chunks)} chunks to ChromaDB",
+            "Added {} chunks to ChromaDB",
+            len(chunks),
             job_id=job_id,
             subject_id=subject_id,
         )
@@ -130,12 +131,13 @@ class ChunkChromaStore:
             )
             docs = [doc for doc, _score in results]
             logger.debug(
-                f"RAG retrieval returned {len(docs)} chunks for query",
+                "RAG retrieval returned {} chunks for query",
+                len(docs),
                 job_id=job_id,
                 k=k,
             )
         except Exception as exc:
-            logger.warning(f"RAG retrieval failed: {exc}")
+            logger.exception("RAG retrieval failed")
             return []
         else:
             return docs

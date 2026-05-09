@@ -10,7 +10,10 @@ from api.config import get_settings
 from api.core.shared import mongo_store
 from api.dependencies import get_current_user
 from api.exceptions import PipelineNotFoundError
+from api.schemas.common import StandardResponse
 from api.schemas import (
+    DeleteSubjectResponse,
+    PipelineJobHistoryListResponse,
     SubjectHistoryDetailResponse,
     SubjectHistoryListResponse,
     SubjectProgressListResponse,
@@ -108,23 +111,23 @@ def _build_subject_progress_summary(
     }
 
 
-@router.get("/subjects", response_model=SubjectHistoryListResponse)
+@router.get("/subjects", response_model=StandardResponse[SubjectHistoryListResponse])
 async def list_subjects(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     user_id: str = Depends(get_current_user),
 ):
     """List all completed pipeline jobs (= subjects) enriched with mastery stats."""
-    subjects = await mongo_store.list_pipeline_jobs(
+    subjects = await mongo_store.get_pipeline_repo().list_recent(
         limit=limit,
         user_id=user_id,
         status="completed",
     )
 
     if not subjects:
-        return {"subjects": [], "count": 0}
+        return {"success": True, "data": {"subjects": [], "count": 0}}
 
     job_ids = [s["job_id"] for s in subjects]
-    progress_map = await mongo_store.load_subject_progress_map(job_ids, user_id)
+    progress_map = await mongo_store.get_subject_progress_repo().load_many_for_user(job_ids, user_id)
 
     for subj in subjects:
         jid = subj["job_id"]
@@ -142,18 +145,18 @@ async def list_subjects(
         subj["mastered_concept"] = mastered_c
         subj["progress_percent"] = _to_progress_percent(mastered_c, all_c)
 
-    return {"subjects": subjects, "count": len(subjects)}
+    return {"success": True, "data": {"subjects": subjects, "count": len(subjects)}}
 
 
-@router.get("/subjects/progress", response_model=SubjectProgressListResponse)
+@router.get("/subjects/progress", response_model=StandardResponse[SubjectProgressListResponse])
 async def list_subject_progress(
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     user_id: str = Depends(get_current_user),
 ):
     """List recent subject-level progress records."""
-    progress_docs = await mongo_store.list_subject_progress(limit=limit, user_id=user_id)
-    job_ids = [doc.get("job_id") for doc in progress_docs if doc.get("job_id")]
-    job_map = await mongo_store.load_pipeline_job_map_for_user(
+    progress_docs = await mongo_store.get_subject_progress_repo().list_recent(limit=limit, user_id=user_id)
+    job_ids = [job_id for doc in progress_docs if isinstance((job_id := doc.get("job_id")), str)]
+    job_map = await mongo_store.get_pipeline_repo().load_many_for_user(
         job_ids,
         user_id,
         projection={"_id": 0, "job_id": 1, "filename": 1, "subject_id": 1},
@@ -164,43 +167,43 @@ async def list_subject_progress(
         if not job_id:
             continue
         items.append(_build_subject_progress_summary(progress_doc, job_map.get(job_id)))
-    return {"subjects": items, "count": len(items)}
+    return {"success": True, "data": {"subjects": items, "count": len(items)}}
 
 
-@router.get("/subjects/{job_id}", response_model=SubjectHistoryDetailResponse)
+@router.get("/subjects/{job_id}", response_model=StandardResponse[SubjectHistoryDetailResponse])
 async def get_subject_history(
     job_id: str,
     user_id: Annotated[str, Depends(get_current_user)],
 ):
     """Get subject-level learning history for one pipeline job."""
-    job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+    job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
-    progress_doc = await mongo_store.load_subject_progress_for_user(job_id, user_id)
-    return _build_subject_progress_detail(job_doc, progress_doc)
+    progress_doc = await mongo_store.get_subject_progress_repo().load_for_user(job_id, user_id)
+    return {"success": True, "data": _build_subject_progress_detail(job_doc, progress_doc)}
 
 
-@router.get("/pipeline-jobs")
+@router.get("/pipeline-jobs", response_model=StandardResponse[PipelineJobHistoryListResponse])
 async def list_pipeline_jobs(
     limit: Annotated[int, Query(ge=1, le=500)] = 20,
     user_id: str = Depends(get_current_user),
 ):
     """List recent pipeline jobs."""
-    jobs = await mongo_store.list_pipeline_jobs(limit=limit, user_id=user_id)
-    return {"jobs": jobs, "count": len(jobs)}
+    jobs = await mongo_store.get_pipeline_repo().list_recent(limit=limit, user_id=user_id)
+    return {"success": True, "data": {"jobs": jobs, "count": len(jobs)}}
 
 
-@router.get("/pipeline-jobs/{job_id}")
+@router.get("/pipeline-jobs/{job_id}", response_model=StandardResponse[dict])
 async def get_pipeline_job(job_id: str, user_id: Annotated[str, Depends(get_current_user)]):
     """Get full pipeline job result."""
-    doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+    doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
     if not doc:
         raise PipelineNotFoundError(job_id)
-    return doc
+    return {"success": True, "data": doc}
 
 
-@router.delete("/subjects/{job_id}")
+@router.delete("/subjects/{job_id}", response_model=StandardResponse[DeleteSubjectResponse])
 async def delete_subject(
     job_id: str,
     user_id: str = Depends(get_current_user),
@@ -208,7 +211,7 @@ async def delete_subject(
     delete_sessions: bool = True,
 ):
     """Delete a subject (pipeline job) and optionally its sessions."""
-    result = await mongo_store.delete_pipeline_job_for_user(
+    result = await mongo_store.get_pipeline_repo().delete_for_user(
         job_id=job_id,
         user_id=user_id,
         delete_sessions=delete_sessions,
@@ -217,8 +220,11 @@ async def delete_subject(
         raise PipelineNotFoundError(job_id)
 
     return {
-        "job_id": job_id,
-        "deleted_job": result.get("deleted_job", 0),
-        "deleted_sessions": result.get("deleted_sessions", 0),
-        "status": "deleted",
+        "success": True,
+        "data": {
+            "job_id": job_id,
+            "deleted_job": result.get("deleted_job", 0),
+            "deleted_sessions": result.get("deleted_sessions", 0),
+            "status": "deleted",
+        }
     }

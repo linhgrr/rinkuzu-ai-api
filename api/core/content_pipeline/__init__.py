@@ -17,7 +17,6 @@ __all__ = [
     "PipelineStatus",
     "calculate_file_hash",
     "get_s3_client",
-    "process_pdf",
 ]
 
 
@@ -31,7 +30,4 @@ def __getattr__(name: str):
     }:
         runtime = import_module(".infrastructure.runtime", __name__)
         return getattr(runtime, name)
-    if name == "process_pdf":
-        orchestrator = import_module(".orchestrator", __name__)
-        return orchestrator.process_pdf
     raise AttributeError(name)

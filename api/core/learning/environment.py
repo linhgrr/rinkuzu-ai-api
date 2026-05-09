@@ -4,7 +4,7 @@ Simplified version of env_rl.py that works with in-memory data instead of file p
 """
 
 import copy
-from typing import ClassVar, Optional
+from typing import Optional
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -38,7 +38,7 @@ class AdaptiveLearningEnv(gym.Env):
     Action: flat index 0..(N*6-1) -> concept = action // 6, bloom = (action % 6) + 1
     """
 
-    metadata: ClassVar[dict] = {"render_modes": []}
+    metadata = {"render_modes": []}  # noqa: RUF012
     N_BLOOMS = _N_BLOOMS
     CONCEPT_FEAT_DIM = _CONCEPT_FEAT_DIM  # bloom_mastery(6) + visited(1) + prereq_ok(1)
 

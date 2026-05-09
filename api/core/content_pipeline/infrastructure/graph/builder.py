@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from api.core.content_pipeline.infrastructure.llm.schemas import Concept
@@ -144,7 +144,11 @@ class KnowledgeGraphBuilder:
 
         if old_type not in (RelationType.UNKNOWN, rel_type) and old_data:
             logger.warning(
-                f"Overwriting relation_type {old_type} -> {rel_type} for edge {source_id}->{target_id}"
+                "Overwriting relation_type {} -> {} for edge {}->{}",
+                old_type,
+                rel_type,
+                source_id,
+                target_id,
             )
 
         merged_evidence = self._merge_evidence(old_evd, evidence)

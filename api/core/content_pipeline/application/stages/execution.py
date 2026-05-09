@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from functools import partial
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from api.config import get_settings
 from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 T = TypeVar("T")
 
@@ -22,7 +25,7 @@ def resolve_timeout_policy() -> tuple[float | None, float | None]:
 
 
 async def run_blocking_stage(
-    func,
+    func: Callable[..., T],
     *args: Any,
     stage_name: str,
     timeout_sec: float | None = None,

@@ -124,13 +124,14 @@ class ConceptChromaStore:
             added_ids = self.vectorstore.add_documents(documents=documents, ids=ids)
 
             logger.info(
-                f"Added {len(added_ids)} concepts to ChromaDB via LangChain",
+                "Added {} concepts to ChromaDB via LangChain",
+                len(added_ids),
                 collection=self.collection_name,
                 subject_id=subject_id,
             )
 
         except Exception as e:
-            logger.error(f"Error adding concepts to ChromaDB: {e}")
+            logger.exception("Error adding concepts to ChromaDB")
             raise
         else:
             return added_ids
@@ -187,14 +188,15 @@ class ConceptChromaStore:
                 formatted_results.append(result)
 
             logger.debug(
-                f"Semantic search returned {len(formatted_results)} results",
+                "Semantic search returned {} results",
+                len(formatted_results),
                 query=query,
                 subject_id=subject_id,
                 k=k,
             )
 
         except Exception as e:
-            logger.error(f"Error searching concepts: {e}")
+            logger.exception("Error searching concepts")
             raise
         else:
             return formatted_results
@@ -221,7 +223,7 @@ class ConceptChromaStore:
                 }
 
         except Exception as e:
-            logger.error(f"Error retrieving concept {concept_id}: {e}")
+            logger.exception("Error retrieving concept {}", concept_id)
             return None
         else:
             return None
@@ -244,12 +246,12 @@ class ConceptChromaStore:
             if results and results["ids"]:
                 collection.delete(ids=results["ids"])
                 deleted_count = len(results["ids"])
-                logger.info(f"Deleted {deleted_count} concepts for subject {subject_id}")
+                logger.info("Deleted {} concepts for subject {}", deleted_count, subject_id)
             else:
                 deleted_count = 0
 
         except Exception as e:
-            logger.error(f"Error deleting concepts for subject {subject_id}: {e}")
+            logger.exception("Error deleting concepts for subject {}", subject_id)
             raise
         else:
             return deleted_count
@@ -272,7 +274,7 @@ class ConceptChromaStore:
             }
 
         except Exception as e:
-            logger.error(f"Error getting collection stats: {e}")
+            logger.exception("Error getting collection stats")
             return {"collection_name": self.collection_name, "error": str(e)}
         else:
             return stats
@@ -281,7 +283,7 @@ class ConceptChromaStore:
         """Xóa và tạo lại collection (sử dụng cẩn thận!)."""
         try:
             self.chroma_client.delete_collection(self.collection_name)
-            logger.warning(f"Deleted collection: {self.collection_name}")
+            logger.warning("Deleted collection: {}", self.collection_name)
 
             # Recreate vectorstore với LangChain Chroma
             self.vectorstore = Chroma(
@@ -290,10 +292,10 @@ class ConceptChromaStore:
                 embedding_function=self.embedding_client,
             )
 
-            logger.info(f"Recreated collection: {self.collection_name}")
+            logger.info("Recreated collection: {}", self.collection_name)
 
         except Exception as e:
-            logger.error(f"Error resetting collection: {e}")
+            logger.exception("Error resetting collection")
             raise
 
     def as_retriever(self, **kwargs):

@@ -3,13 +3,14 @@ routers/pipeline.py — Content pipeline endpoints.
 """
 
 from pathlib import Path
+import time
 from typing import Annotated
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 import httpx
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.config import get_settings
 from api.core.content_pipeline import PipelineStatus
@@ -23,7 +24,14 @@ from api.dependencies import (
     get_session_service,
 )
 from api.exceptions import PipelineNotCompletedError, PipelineNotFoundError, ServiceUnavailableError
-from api.rate_limit import limiter
+from api.rate_limit import is_admin_request, limiter
+from api.schemas import (
+    PipelineJobStatusResponse,
+    PipelineProcessResponse,
+    PipelineSessionCreateResponse,
+)
+
+from api.schemas.common import StandardResponse
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
@@ -33,16 +41,19 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 _MAX_FILENAME_LENGTH = 200
 
 
-@router.get("/status")
+@router.get("/status", response_model=StandardResponse[dict])
 async def pipeline_status(
     availability: Annotated[dict, Depends(get_content_pipeline_availability)],
 ):
     """Check if content pipeline runtime modules are available."""
     available = availability["available"]
     return {
-        "available": available,
-        "service_initialized": availability["service_initialized"],
-        "message": "Content pipeline ready" if available else "Content pipeline unavailable",
+        "success": True,
+        "data": {
+            "available": available,
+            "service_initialized": availability["service_initialized"],
+            "message": "Content pipeline ready" if available else "Content pipeline unavailable",
+        }
     }
 
 
@@ -53,19 +64,20 @@ class ProcessDocumentRequest(BaseModel):
     prs_threshold: float = 0.75
     min_confidence: float = 0.6
     apply_reduction: bool = True
+    page_batch_size: int = Field(default=10, ge=1, le=50)
 
 
-@router.post("/process")
-@limiter.limit(get_settings().rate_limit_pipeline)
+@router.post("/process", response_model=StandardResponse[PipelineProcessResponse], status_code=202)
+@limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def process_document(
-    http_request: Request,
-    request: ProcessDocumentRequest,
+    request: Request,
+    req: ProcessDocumentRequest,
     user_id: Annotated[str, Depends(get_current_user)],
     availability: Annotated[dict, Depends(get_content_pipeline_availability)],
     pipeline_service=Depends(get_content_pipeline_service),
 ):
     """Run the full content processing pipeline from an S3 uploaded file."""
-    _ = http_request  # SlowAPI requires the Request parameter for rate-limit context.
+    _ = request  # SlowAPI requires the Request parameter for rate-limit context.
     if not availability["available"]:
         logger.error(
             "[PipelineRouter] Content pipeline unavailable",
@@ -82,7 +94,7 @@ async def process_document(
         raise ServiceUnavailableError("MongoDB persistence")
 
     # Sanitize filename — strip directory components, enforce .pdf, reject NUL / path seps
-    raw_name = Path(request.filename or "").name
+    raw_name = Path(req.filename or "").name
     if not raw_name or not raw_name.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
     if len(raw_name) > _MAX_FILENAME_LENGTH or any(c in raw_name for c in ("\x00", "/", "\\")):
@@ -97,7 +109,7 @@ async def process_document(
     settings = get_settings()
     try:
         await stream_download(
-            request.file_url,
+            req.file_url,
             save_path,
             max_bytes=settings.download_max_bytes,
             allowlist=settings.download_host_allowlist or None,
@@ -106,23 +118,24 @@ async def process_document(
         logger.warning("[PipelineRouter] Rejected unsafe URL: {}", exc)
         raise HTTPException(status_code=400, detail="URL not allowed.") from None
     except (httpx.HTTPError, OSError):
-        logger.exception("[PipelineRouter] Failed to download file from {}", request.file_url)
+        logger.exception("[PipelineRouter] Failed to download file from {}", req.file_url)
         raise HTTPException(status_code=502, detail="Failed to download file.") from None
 
     try:
         job = await pipeline_service.start_job(
             file_path=str(save_path),
-            subject_id=request.subject_id,
-            prs_threshold=request.prs_threshold,
-            min_confidence=request.min_confidence,
-            apply_reduction=request.apply_reduction,
+            subject_id=req.subject_id,
+            prs_threshold=req.prs_threshold,
+            min_confidence=req.min_confidence,
+            apply_reduction=req.apply_reduction,
             user_id=user_id,
             content_processor_available=availability["available"],
             content_processor_src=availability["src"] or "",
+            page_batch_size=req.page_batch_size,
         )
     except (RuntimeError, ValueError, OSError):
         logger.exception(
-            "[PipelineRouter] Failed to initialize pipeline job for {}", request.filename
+            "[PipelineRouter] Failed to initialize pipeline job for {}", req.filename
         )
         try:
             if save_path.exists():
@@ -132,31 +145,64 @@ async def process_document(
         raise HTTPException(status_code=500, detail="Failed to initialize pipeline job.") from None
 
     return {
-        "job_id": job.job_id,
-        "filename": request.filename,
-        "file_size": save_path.stat().st_size,
-        "subject_id": job.subject_id,
-        "status": job.status.value,
-        "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
+        "success": True,
+        "data": {
+            "job_id": job.job_id,
+            "filename": req.filename,
+            "file_size": save_path.stat().st_size,
+            "subject_id": job.subject_id,
+            "status": job.status.value,
+            "status_url": f"/api/pipeline/jobs/{job.job_id}",
+            "page_batch_size": job.page_batch_size,
+            "retry_after_seconds": get_settings().content_pipeline_default_retry_after_sec,
+            "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
+        }
     }
 
 
-@router.get("/jobs/{job_id}")
+@router.get("/jobs/{job_id}", response_model=StandardResponse[PipelineJobStatusResponse])
 async def get_job_status(job_id: str, user_id: Annotated[str, Depends(get_current_user)]):
     """Get pipeline job status and progress."""
-    job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+    job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
+    settings = get_settings()
+    now = time.time()
+    status_value = job_doc.get("status", PipelineStatus.PENDING.value)
+    created_at = float(job_doc.get("created_at") or 0.0)
+    updated_at = float(job_doc.get("updated_at") or created_at or now)
+    heartbeat_at = float(job_doc.get("heartbeat_at") or updated_at)
+    is_terminal = status_value in {
+        PipelineStatus.COMPLETED.value,
+        PipelineStatus.FAILED.value,
+        PipelineStatus.CANCELLED.value,
+    }
+    is_delayed = (
+        not is_terminal
+        and heartbeat_at > 0
+        and (now - heartbeat_at) >= settings.content_pipeline_job_delayed_after_sec
+    )
+    retry_after_seconds = (
+        settings.content_pipeline_delayed_retry_after_sec
+        if is_delayed
+        else settings.content_pipeline_default_retry_after_sec
+    )
     result = job_doc.get("result") or {}
+    failed_batches = result.get("failed_batches")
+    warnings = result.get("warnings")
     response = {
         "job_id": job_doc.get("job_id", job_id),
         "filename": job_doc.get("filename", ""),
         "subject_id": job_doc.get("subject_id", ""),
-        "status": job_doc.get("status", "unknown"),
+        "status": status_value,
         "current_step": job_doc.get("current_step", "Loaded from MongoDB"),
-        "progress": job_doc.get("progress", 1.0 if job_doc.get("status") == "completed" else 0.0),
+        "progress": job_doc.get("progress", 1.0 if status_value == "completed" else 0.0),
         "total_chunks": job_doc.get("total_chunks", 0),
+        "page_batch_size": job_doc.get("page_batch_size", 10),
+        "batch_count": job_doc.get("batch_count", 0),
+        "failed_batch_count": job_doc.get("failed_batch_count", 0),
+        "partial_success": bool(job_doc.get("partial_success", False)),
         "concepts_extracted": job_doc.get("concepts_extracted", 0),
         "concepts_after_merge": job_doc.get("concepts_after_merge", 0),
         "relations_verified": job_doc.get("relations_verified", 0),
@@ -165,24 +211,29 @@ async def get_job_status(job_id: str, user_id: Annotated[str, Depends(get_curren
         "error_code": job_doc.get("error_code"),
         "user_message": job_doc.get("user_message"),
         "retryable": bool(job_doc.get("retryable", False)),
-        "is_terminal": job_doc.get("status")
-        in {
-            PipelineStatus.COMPLETED.value,
-            PipelineStatus.FAILED.value,
-            PipelineStatus.CANCELLED.value,
-        },
+        "failed_batches": failed_batches if isinstance(failed_batches, list) else [],
+        "warnings": warnings if isinstance(warnings, list) else [],
+        "is_terminal": is_terminal,
+        "is_delayed": is_delayed,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "heartbeat_at": heartbeat_at,
+        "retry_after_seconds": retry_after_seconds,
         "partial_graph": job_doc.get("partial_graph"),
     }
-    if job_doc.get("status") == PipelineStatus.COMPLETED.value and result:
+    if status_value == PipelineStatus.COMPLETED.value and result:
         response["result"] = {
             "graph": result.get("graph", {"nodes": [], "edges": []}),
             "stats": result.get("stats", {}),
             "n_concepts": len(result.get("concept_map", {})),
         }
-    return response
+    return {
+        "success": True,
+        "data": response
+    }
 
 
-@router.post("/jobs/{job_id}/create-session")
+@router.post("/jobs/{job_id}/create-session", response_model=StandardResponse[PipelineSessionCreateResponse])
 async def create_session_from_pipeline(
     job_id: str,
     background_tasks: BackgroundTasks,
@@ -192,7 +243,7 @@ async def create_session_from_pipeline(
     user_id: str = Depends(get_current_user),
 ):
     """Create a learning session from a completed pipeline job."""
-    job_doc = await mongo_store.load_pipeline_job_for_user(job_id, user_id)
+    job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
@@ -246,9 +297,12 @@ async def create_session_from_pipeline(
         logger.warning("[PipelineRouter] Failed to schedule eager prefetch: {}", exc)
 
     return {
-        "session_id": session.session_id,
-        "n_concepts": len(result["concept_map"]),
-        "source": "new_session",
-        "job_id": job_id,
-        "status": "active",
+        "success": True,
+        "data": {
+            "session_id": session.session_id,
+            "n_concepts": len(result["concept_map"]),
+            "source": "new_session",
+            "job_id": job_id,
+            "status": "active",
+        }
     }

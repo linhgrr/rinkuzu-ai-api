@@ -13,7 +13,15 @@ async def test_start_job_persists_pending_then_queued_and_schedules_background_t
         saved_statuses.append(job.status.value)
         return True
 
-    async def run_pipeline(job, file_path, prs_threshold, min_confidence, apply_reduction):
+    async def run_pipeline(
+        job,
+        file_path,
+        prs_threshold,
+        min_confidence,
+        *,
+        apply_reduction,
+        page_batch_size,
+    ):
         raise AssertionError("background task should not run during this test")
 
     service = PipelineService(save_job=save_job, run_pipeline=run_pipeline)
@@ -28,6 +36,7 @@ async def test_start_job_persists_pending_then_queued_and_schedules_background_t
         user_id="user-1",
         content_processor_available=True,
         content_processor_src="fixtures/content-pipeline-runtime",
+        page_batch_size=10,
     )
 
     assert job.filename == "algebra.pdf"
@@ -42,7 +51,15 @@ async def test_start_job_returns_failed_job_when_content_processor_is_unavailabl
     async def save_job(job):
         raise AssertionError("save_job should not be called when dependencies are unavailable")
 
-    async def run_pipeline(job, file_path, prs_threshold, min_confidence, apply_reduction):
+    async def run_pipeline(
+        job,
+        file_path,
+        prs_threshold,
+        min_confidence,
+        *,
+        apply_reduction,
+        page_batch_size,
+    ):
         raise AssertionError("run_pipeline should not be called in this test")
 
     service = PipelineService(save_job=save_job, run_pipeline=run_pipeline)
@@ -56,6 +73,7 @@ async def test_start_job_returns_failed_job_when_content_processor_is_unavailabl
         user_id="user-1",
         content_processor_available=False,
         content_processor_src="fixtures/content-pipeline-runtime",
+        page_batch_size=10,
     )
 
     assert job.status == PipelineStatus.FAILED

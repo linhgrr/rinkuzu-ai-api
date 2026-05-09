@@ -9,7 +9,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
-from typing import Any
+from typing import Any, TypeVar, cast
 import uuid
 
 from loguru import logger
@@ -36,6 +36,7 @@ BLOOM_LABELS = {
 
 # Threshold below which max_steps is considered unset (likely a default placeholder)
 _MAX_STEPS_UNSET_THRESHOLD = 50
+T = TypeVar("T")
 
 
 class ExerciseService:
@@ -53,8 +54,10 @@ class ExerciseService:
         )
         self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)
-        self._exercise_inflight: dict[tuple[str, int, int, int, str], asyncio.Future] = {}
-        self._theory_inflight: dict[tuple[str, str], asyncio.Future] = {}
+        self._exercise_inflight: dict[
+            tuple[str, int, int, int, str], asyncio.Task[dict[str, Any] | None]
+        ] = {}
+        self._theory_inflight: dict[tuple[str, str], asyncio.Task[dict[str, Any] | None]] = {}
         self._scheduled_tasks: set[asyncio.Task] = set()
 
     @staticmethod
@@ -64,7 +67,7 @@ class ExerciseService:
     @staticmethod
     def _serialize_exercise_for_prompt(exercise) -> dict[str, Any]:
         history_json = format_exercise_history([exercise])
-        return json.loads(history_json)[0]
+        return cast("dict[str, Any]", json.loads(history_json)[0])
 
     @staticmethod
     def _round_mastery(value: float) -> float:
@@ -131,14 +134,17 @@ class ExerciseService:
         )
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
 
-    async def _run_llm_call(self, func, *args, timeout_sec: float | None = None):
+    async def _run_llm_call(
+        self, func, *args, timeout_sec: float | None = None
+    ) -> T:
         loop = asyncio.get_running_loop()
         timeout = self._request_llm_timeout_sec if timeout_sec is None else timeout_sec
         async with self._llm_semaphore:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 loop.run_in_executor(self._llm_executor, func, *args),
                 timeout=timeout,
             )
+            return cast("T", result)
 
     async def _generate_exercise_dedup(
         self,
@@ -235,14 +241,19 @@ class ExerciseService:
                     n_concepts=env.n_concepts,
                 )
                 concept_idx, bloom_level = decode_action(action_id)
-                logger.info(f"[Exercise] 🤖 D3QN selected action_id={action_id}")
+                logger.info("[Exercise] 🤖 D3QN selected action_id={}", action_id)
 
             id_to_concept = self._build_id_to_concept_map(session)
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
             concept_name = session.concept_names.get(concept_id, concept_id)
 
             logger.info(
-                f"[Exercise] Concept: [{concept_idx}] {concept_name} | Bloom: {bloom_level} | Step: {current_step + 1}/{env_stats.get('max_steps', '?')}"
+                "[Exercise] Concept: [{}] {} | Bloom: {} | Step: {}/{}",
+                concept_idx,
+                concept_name,
+                bloom_level,
+                current_step + 1,
+                env_stats.get("max_steps", "?"),
             )
 
             session._pending_concept_idx = concept_idx
@@ -270,12 +281,12 @@ class ExerciseService:
 
         # Check pre-generated theory cache
         if session.concept_theories.get(concept_id):
-            return session.concept_theories[concept_id]
+            return cast("dict[str, Any]", session.concept_theories[concept_id])
 
         concept_name = session.concept_names.get(concept_id, concept_id)
         concept_def = session.concept_definitions.get(concept_id, "")
 
-        logger.info(f"[Exercise] Generating theory for {concept_name}...")
+        logger.info("[Exercise] Generating theory for {}...", concept_name)
         theory_data = await self._generate_theory_dedup(
             session=session,
             concept_id=concept_id,
@@ -284,7 +295,7 @@ class ExerciseService:
         )
 
         if not theory_data:
-            logger.warning(f"[Exercise] Theory generation returned empty for {concept_name}")
+            logger.warning("[Exercise] Theory generation returned empty for {}", concept_name)
             return None
 
         session.concept_theories[concept_id] = theory_data
@@ -314,7 +325,10 @@ class ExerciseService:
                 exercise_data = cached["exercise_data"]
                 session._prefetch_cache.clear()
                 logger.info(
-                    f"[Exercise] ⚡ Cache HIT ({branch}) for {concept_name} (Bloom {bloom_level})"
+                    "[Exercise] ⚡ Cache HIT ({}) for {} (Bloom {})",
+                    branch,
+                    concept_name,
+                    bloom_level,
                 )
                 break
 
@@ -326,7 +340,7 @@ class ExerciseService:
             mastery = (
                 float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
             )
-            logger.info(f"[Exercise] Generating for {concept_name} (Bloom {bloom_level})...")
+            logger.info("[Exercise] Generating for {} (Bloom {})...", concept_name, bloom_level)
             try:
                 exercise_data = await self._generate_exercise_dedup(
                     session=session,
@@ -336,8 +350,8 @@ class ExerciseService:
                     concept_def=concept_def,
                     mastery=mastery,
                 )
-            except Exception as e:
-                logger.error(f"[Exercise] ✗ Generation failed: {e}")
+            except Exception:
+                logger.exception("[Exercise] ✗ Generation failed")
                 return None
 
             if not exercise_data:
@@ -382,8 +396,8 @@ class ExerciseService:
                 prefetch_task = asyncio.create_task(self._prefetch_next_exercises(session))
                 self._scheduled_tasks.add(prefetch_task)
                 prefetch_task.add_done_callback(self._scheduled_tasks.discard)
-        except Exception as e:
-            logger.warning(f"[Prefetch] Failed to schedule: {e}")
+        except Exception:
+            logger.exception("[Prefetch] Failed to schedule")
 
         return exercise
 
@@ -413,18 +427,25 @@ class ExerciseService:
 
             exercise = session.current_exercise
             if exercise.exercise_type == ExerciseType.SHORT_ANSWER:
-                is_correct, answer_summary = await self._run_llm_call(
-                    self._evaluate_answer,
-                    exercise,
-                    answer,
-                    timeout_sec=self._request_llm_timeout_sec,
+                is_correct, answer_summary = cast(
+                    "tuple[bool, str]",
+                    await self._run_llm_call(
+                        self._evaluate_answer,
+                        exercise,
+                        answer,
+                        timeout_sec=self._request_llm_timeout_sec,
+                    ),
                 )
             else:
                 is_correct, answer_summary = self._evaluate_answer(exercise, answer)
             verdict = "✓ ĐÚNG" if is_correct else "✗ SAI"
 
             logger.info(
-                f"[Exercise] 📝 {exercise.concept_name} | Type: {exercise.exercise_type} | Answer: {answer_summary} → {verdict}"
+                "[Exercise] 📝 {} | Type: {} | Answer: {} → {}",
+                exercise.concept_name,
+                exercise.exercise_type,
+                answer_summary,
+                verdict,
             )
 
             # Use pre-generated explanations
@@ -457,15 +478,19 @@ class ExerciseService:
             avg_mastery = float(np.mean(concept_mastery))
 
         logger.info(
-            f"[Exercise] Mastery: {mastery_val:.3f} | Avg: {avg_mastery:.3f} | Step: {info['step']} | Status: {session.status}"
+            "[Exercise] Mastery: {:.3f} | Avg: {:.3f} | Step: {} | Status: {}",
+            mastery_val,
+            avg_mastery,
+            info["step"],
+            session.status,
         )
 
         if self._session_manager:
+            subject_saved = False
             try:
                 subject_saved = await self._session_manager.persist_subject_progress(session)
-            except Exception as e:
-                subject_saved = False
-                logger.warning(f"[Exercise] Subject progress save error: {e}")
+            except Exception:
+                logger.exception("[Exercise] Subject progress save error")
 
             if not subject_saved:
                 self._session_manager.remove_session(session.session_id)
@@ -517,7 +542,7 @@ class ExerciseService:
                 float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else None
             )
 
-            logger.info(f"[Eager] Pre-generating: {concept_name} (Bloom {bloom_level})...")
+            logger.info("[Eager] Pre-generating: {} (Bloom {})...", concept_name, bloom_level)
 
             exercise_data = await self._generate_exercise_dedup(
                 session=session,
@@ -535,9 +560,9 @@ class ExerciseService:
                     "bloom_level": bloom_level,
                     "exercise_data": exercise_data,
                 }
-                logger.info(f"[Eager] ✓ Cached: {concept_name} (Bloom {bloom_level})")
-        except Exception as e:
-            logger.error(f"[Eager] ✗ Failed: {e}")
+                logger.info("[Eager] ✓ Cached: {} (Bloom {})", concept_name, bloom_level)
+        except Exception:
+            logger.exception("[Eager] ✗ Failed")
 
     async def _prefetch_next_exercises(self, session) -> None:
         """Background: simulate correct/incorrect paths and pre-generate exercises."""
@@ -552,7 +577,7 @@ class ExerciseService:
                 env_snap = session.env.create_snapshot()
                 obs, _, terminated, _, _ = env_snap.step(action_id, human_correct=is_correct)
                 if terminated:
-                    logger.debug(f"[Prefetch] {branch}: session would terminate — skipping")
+                    logger.debug("[Prefetch] {}: session would terminate — skipping", branch)
                     return
 
                 masks = env_snap.action_masks()
@@ -570,7 +595,10 @@ class ExerciseService:
                 next_concept_def = session.concept_definitions.get(next_concept_id, "")
 
                 logger.debug(
-                    f"[Prefetch] {branch}: predicted → {next_concept_name} (Bloom {next_bloom})"
+                    "[Prefetch] {}: predicted → {} (Bloom {})",
+                    branch,
+                    next_concept_name,
+                    next_bloom,
                 )
                 concept_mastery = session.env.get_concept_mastery()
                 mastery = (
@@ -596,11 +624,14 @@ class ExerciseService:
                         "exercise_data": ex_data,
                     }
                     logger.info(
-                        f"[Prefetch] ✓ {branch} cached: {next_concept_name} (Bloom {next_bloom})"
+                        "[Prefetch] ✓ {} cached: {} (Bloom {})",
+                        branch,
+                        next_concept_name,
+                        next_bloom,
                     )
 
-            except Exception as e:
-                logger.error(f"[Prefetch] ✗ {branch} failed: {e}")
+            except Exception:
+                logger.exception("[Prefetch] ✗ {} failed", branch)
 
         await asyncio.gather(
             _prefetch_branch(is_correct=True, branch="correct"),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
 
@@ -37,7 +37,7 @@ async def generate_saint_concept_embeddings(
     concept_map: dict[str, int],
     text_model_factory: Callable[[], Any],
     persist_job_state: PersistJobStateFn,
-) -> list[list[float]] | None:
+    ) -> list[list[float]] | None:
     """Generate concept embeddings for downstream adaptive-learning models."""
     await persist_job_state(
         job,
@@ -48,17 +48,17 @@ async def generate_saint_concept_embeddings(
     try:
         text_model = text_model_factory()
         ordered_texts = build_ordered_embedding_texts(concepts_data, concept_map)
-        embeddings = await run_blocking_stage(
+        embeddings: Any = await run_blocking_stage(
             text_model.encode,
             ordered_texts,
             show_progress_bar=False,
             batch_size=32,
             stage_name="saint_embedding_generation",
         )
-        logger.info(f"[Pipeline] ✓ Generated embeddings for {len(ordered_texts)} concepts")
-        return embeddings.tolist()
+        logger.info("[Pipeline] ✓ Generated embeddings for {} concepts", len(ordered_texts))
+        return cast("list[list[float]]", embeddings.tolist())
     except Exception as exc:
-        logger.warning(f"[Pipeline] ⚠ Could not generate embeddings: {exc}")
+        logger.exception("[Pipeline] ⚠ Could not generate embeddings")
         return None
 
 
@@ -82,7 +82,7 @@ async def generate_concept_theories(
 
         async def generate_one(concept_id: str, name: str, definition: str):
             async with semaphore:
-                theory = await run_blocking_stage(
+                theory: Any = await run_blocking_stage(
                     generate_theory,
                     name,
                     definition,
@@ -97,10 +97,10 @@ async def generate_concept_theories(
         ]
 
         if tasks:
-            logger.info(f"[Pipeline] Generating theory for {len(tasks)} concepts...")
+            logger.info("[Pipeline] Generating theory for {} concepts...", len(tasks))
             results = await asyncio.gather(*tasks)
             for concept_id, theory in results:
                 concepts_data[concept_id]["theory"] = theory
             logger.info("[Pipeline] ✓ Theory generation complete")
     except Exception as exc:
-        logger.warning(f"[Pipeline] ⚠ Failed to pre-generate theory: {exc}")
+        logger.exception("[Pipeline] ⚠ Failed to pre-generate theory")

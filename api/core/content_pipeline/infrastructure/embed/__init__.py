@@ -36,7 +36,7 @@ def compute_embeddings_batch(
             words = text.split()
             if len(words) > max_length:
                 truncated = " ".join(words[:max_length])
-                logger.debug(f"Truncated text from {len(words)} to {max_length} words")
+                logger.debug("Truncated text from {} to {} words", len(words), max_length)
                 processed_texts.append(truncated)
             else:
                 processed_texts.append(text)

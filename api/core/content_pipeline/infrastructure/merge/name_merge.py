@@ -1,6 +1,7 @@
 """Exact name-based concept merging."""
 
 from collections import defaultdict
+from typing import cast
 
 from loguru import logger
 import numpy as np
@@ -45,7 +46,10 @@ def merge_by_name(concepts: list[Concept]) -> list[Concept]:
 
     reduction = len(concepts) - len(final)
     logger.info(
-        f"Merged {len(concepts)} concepts into {len(final)} by name (reduction={reduction})"
+        "Merged {} concepts into {} by name (reduction={})",
+        len(concepts),
+        len(final),
+        reduction,
     )
 
     return final
@@ -133,10 +137,17 @@ def _merge_embeddings(
     emb_shapes = [e.shape for e in emb_list]
     if len(set(emb_shapes)) > 1:
         logger.warning(
-            f"Inconsistent {label} shapes in merge group: {set(emb_shapes)}, using canonical"
+            "Inconsistent {} shapes in merge group: {}, using canonical",
+            label,
+            set(emb_shapes),
         )
-        return getattr(canonical, attr) or emb_list[0].tolist()
-    return np.mean(emb_list, axis=0).tolist()
+        canonical_embedding = getattr(canonical, attr)
+        return (
+            cast("list[float]", canonical_embedding)
+            if canonical_embedding is not None
+            else cast("list[float]", emb_list[0].tolist())
+        )
+    return cast("list[float]", np.mean(emb_list, axis=0).tolist())
 
 
 def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
@@ -158,7 +169,9 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
     if len(subject_ids) > 1:
         concept_ids = [c.concept_id for c in concepts]
         logger.debug(
-            f"Mixed subject_id in merged group {concept_ids}; keeping '{canonical.subject_id}'"
+            "Mixed subject_id in merged group {}; keeping '{}'",
+            concept_ids,
+            canonical.subject_id,
         )
 
     ex_seen: set[str] = set()

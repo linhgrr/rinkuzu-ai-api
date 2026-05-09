@@ -2,6 +2,15 @@
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["api"]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.package-data]
+api = ["py.typed"]
+
 [project]
 name = "rinkuzu-ai-api"
 version = "1.0.0"
@@ -31,7 +40,6 @@ dependencies = [
     "chromadb>=0.5.0",
     "langsmith",
     "trustcall>=0.0.10",
-    "agentic-doc",
     "wikipedia==1.4.0",
     "tqdm==4.66.5",
     "underthesea",
@@ -44,6 +52,7 @@ dependencies = [
     "pymongo>=4.6.0",
     "loguru",
     "httpx>=0.27.0",
+    "openai>=2.24.0",
     "slowapi>=0.1.9",
 ]
 
@@ -162,7 +171,6 @@ module = [
     "chromadb.*",
     "underthesea.*",
     "pyvi.*",
-    "agentic_doc.*",
     "sentence_transformers.*",
     "gymnasium.*",
     "stable_baselines3.*",

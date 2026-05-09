@@ -53,7 +53,7 @@ def postprocess_concepts(concepts: list[Concept]) -> list[Concept]:
 
         processed.append(concept)
 
-    logger.info(f"Post-processed {len(processed)} concepts")
+    logger.info("Post-processed {} concepts", len(processed))
     return processed
 
 
@@ -73,8 +73,8 @@ def _postprocess_relation(relation: Relation | None, concept_ids: set[str]) -> R
 
     if relation.target_id not in concept_ids:
         logger.debug(
-            f"Target concept ID '{relation.target_id}' not in current batch "
-            f"(may be cross-batch reference, keeping)"
+            "Target concept ID '{}' not in current batch (may be cross-batch reference, keeping)",
+            relation.target_id,
         )
 
     # Clean evidence text if exists

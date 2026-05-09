@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import functools
 import hashlib
@@ -16,40 +17,39 @@ from loguru import logger
 from api.config import get_settings
 from api.core.content_pipeline.application.relation_engine import DefaultRelationEngine
 
-from .embed.embedding_client import EmbeddingClient
-from .embed.embeddings import compute_embedding_for_concepts
 from .graph.builder import KnowledgeGraphBuilder
 from .graph.cycle_removal import make_dag_with_llm
 from .graph.reduction import apply_transitive_reduction
-from .llm import get_llm
 from .llm.extract_chain import ExtractionChain
 from .llm.postprocess import postprocess_concepts
 from .merge.name_merge import merge_by_name
 from .processors.factory import FileLoaderFactory
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from api.core.content_pipeline.application.ports import RelationEngine
+
+PrereqRankingFn = Callable[[list[Any], float], list[tuple[str, str]]]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CONTENT_PROCESSOR_SRC = str(PROJECT_ROOT)
+_rank_prerequisites: PrereqRankingFn | None = None
+_SentenceTransformerFactory: Callable[[str], Any] | None = None
 
 try:
-    from .embed.prereq_ranking import rank_prerequisites as _rank_prerequisites
+    from .embed.prereq_ranking import rank_prerequisites as _imported_rank_prerequisites
 
+    _rank_prerequisites = _imported_rank_prerequisites
     _PREREQ_RANKING_AVAILABLE = True
 except ModuleNotFoundError:
     _PREREQ_RANKING_AVAILABLE = False
-    _rank_prerequisites = None
 
 try:
-    from sentence_transformers import SentenceTransformer as _SentenceTransformer
+    from sentence_transformers import SentenceTransformer as _ImportedSentenceTransformer
 
+    _SentenceTransformerFactory = _ImportedSentenceTransformer
     _SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     _SENTENCE_TRANSFORMERS_AVAILABLE = False
-    _SentenceTransformer = None
 
 
 @dataclass(frozen=True)
@@ -59,8 +59,7 @@ class ContentProcessorBindings:
     file_loader_factory: Any
     extraction_chain_cls: Any
     postprocess_concepts: Callable[[list[Any]], list[Any]]
-    llm_factory: Callable[..., Any]
-    embedding_client_cls: Any
+    embedding_client_factory: Callable[[str, int], Any]
     compute_embedding_for_concepts: Callable[[list[Any], Any], Any]
     merge_by_name: Callable[[list[Any]], list[Any]]
     relation_engine_factory: Callable[..., RelationEngine]
@@ -84,10 +83,13 @@ def get_s3_client():
 
     return boto3.client(
         "s3",
-        endpoint_url=settings.s3_endpoint_url,
-        aws_access_key_id=settings.s3_access_key_id,
-        aws_secret_access_key=settings.s3_secret_access_key,
-        config=Config(s3={"addressing_style": "path"}),
+        endpoint_url=settings.object_storage_client_endpoint,
+        region_name=settings.object_storage_region,
+        aws_access_key_id=settings.object_storage_access_key,
+        aws_secret_access_key=settings.object_storage_secret_key,
+        config=Config(
+            s3={"addressing_style": settings.object_storage_addressing_style or "path"}
+        ),
     )
 
 
@@ -99,11 +101,15 @@ def calculate_file_hash(file_path: str) -> str:
     return hasher.hexdigest()
 
 
-def _get_embedding_client_cls():
-    return EmbeddingClient
+def _build_embedding_client(model_name: str, batch_size: int):
+    from .embed.embedding_client import EmbeddingClient  # noqa: PLC0415
+
+    return EmbeddingClient(model_name, batch_size=batch_size)
 
 
 def _compute_embedding_for_concepts(concepts, embedding_model):
+    from .embed.embeddings import compute_embedding_for_concepts  # noqa: PLC0415
+
     return compute_embedding_for_concepts(concepts, embedding_model)
 
 
@@ -143,9 +149,9 @@ def _apply_transitive_reduction(graph):
 
 def _build_saint_text_model():
     # sentence_transformers is an optional heavy dependency checked at module load.
-    if not _SENTENCE_TRANSFORMERS_AVAILABLE or _SentenceTransformer is None:
+    if not _SENTENCE_TRANSFORMERS_AVAILABLE or _SentenceTransformerFactory is None:
         raise ImportError("sentence-transformers is required for SAINT text model")
-    return _SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+    return _SentenceTransformerFactory("paraphrase-multilingual-mpnet-base-v2")
 
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:
@@ -153,8 +159,7 @@ def _build_content_processor_bindings() -> ContentProcessorBindings:
         file_loader_factory=FileLoaderFactory,
         extraction_chain_cls=ExtractionChain,
         postprocess_concepts=postprocess_concepts,
-        llm_factory=get_llm,
-        embedding_client_cls=_get_embedding_client_cls,
+        embedding_client_factory=_build_embedding_client,
         compute_embedding_for_concepts=_compute_embedding_for_concepts,
         merge_by_name=_merge_by_name,
         relation_engine_factory=_build_relation_engine,
@@ -172,17 +177,11 @@ def get_content_processor_bindings() -> ContentProcessorBindings:
     return _build_content_processor_bindings()
 
 
-@functools.lru_cache(maxsize=1)
-def get_content_processor_llm_factory():
-    """Load and cache the content pipeline LLM factory."""
-    return get_llm
-
-
 def try_import_content_processor() -> tuple[bool, str | None]:
     try:
         _build_content_processor_bindings()
     except Exception as exc:
-        logger.warning(f"Content pipeline modules not available: {exc}")
+        logger.warning("Content pipeline modules not available: {}", exc)
         return False, str(exc)
     else:
         return True, None

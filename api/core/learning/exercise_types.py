@@ -53,13 +53,13 @@ class ExerciseOptions(BaseModel):
 
 
 class MCQOutput(ExerciseBaseOutput):
-    exercise_type: Literal["mcq"] = "mcq"
+    exercise_type: Literal[ExerciseType.MCQ] = ExerciseType.MCQ
     options: ExerciseOptions = Field(..., description="Four options A/B/C/D")
     correct_option: Literal["A", "B", "C", "D"] = Field(..., description="Correct option label")
 
 
 class TrueFalseOutput(ExerciseBaseOutput):
-    exercise_type: Literal["true_false"] = "true_false"
+    exercise_type: Literal[ExerciseType.TRUE_FALSE] = ExerciseType.TRUE_FALSE
     statement: str = Field(
         ..., description="A single statement the learner judges as true or false"
     )
@@ -67,7 +67,7 @@ class TrueFalseOutput(ExerciseBaseOutput):
 
 
 class FillBlankOutput(ExerciseBaseOutput):
-    exercise_type: Literal["fill_blank"] = "fill_blank"
+    exercise_type: Literal[ExerciseType.FILL_BLANK] = ExerciseType.FILL_BLANK
     sentence: str = Field(
         ..., description="Sentence containing exactly one blank placeholder _____"
     )
@@ -86,7 +86,7 @@ class ExerciseOptionsFive(BaseModel):
 
 
 class MultiCorrectOutput(ExerciseBaseOutput):
-    exercise_type: Literal["multi_correct"] = "multi_correct"
+    exercise_type: Literal[ExerciseType.MULTI_CORRECT] = ExerciseType.MULTI_CORRECT
     options: ExerciseOptionsFive = Field(..., description="Five options A-E")
     correct_options: list[Literal["A", "B", "C", "D", "E"]] = Field(
         ...,
@@ -96,7 +96,7 @@ class MultiCorrectOutput(ExerciseBaseOutput):
 
 
 class OrderingOutput(ExerciseBaseOutput):
-    exercise_type: Literal["ordering"] = "ordering"
+    exercise_type: Literal[ExerciseType.ORDERING] = ExerciseType.ORDERING
     items: list[str] = Field(
         ..., min_length=3, description="Items shown to the learner in scrambled order"
     )
@@ -111,12 +111,12 @@ class MatchingPair(BaseModel):
 
 
 class MatchingOutput(ExerciseBaseOutput):
-    exercise_type: Literal["matching"] = "matching"
+    exercise_type: Literal[ExerciseType.MATCHING] = ExerciseType.MATCHING
     pairs: list[MatchingPair] = Field(..., min_length=3, description="Correct left-right pairs")
 
 
 class ShortAnswerOutput(ExerciseBaseOutput):
-    exercise_type: Literal["short_answer"] = "short_answer"
+    exercise_type: Literal[ExerciseType.SHORT_ANSWER] = ExerciseType.SHORT_ANSWER
     rubric: list[str] = Field(..., min_length=2, description="Short grading rubric bullets")
     sample_answer: str = Field(..., description="Reference answer for grading and review")
 

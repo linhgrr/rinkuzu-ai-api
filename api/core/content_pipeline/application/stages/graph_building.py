@@ -108,7 +108,7 @@ async def build_knowledge_graph(
     }
     extracted_relation_count, dropped_relation_count = sanitize_concept_relations(concepts)
     if dropped_relation_count:
-        logger.info(f"[Pipeline] Dropped {dropped_relation_count} invalid extracted relations")
+        logger.info("[Pipeline] Dropped {} invalid extracted relations", dropped_relation_count)
 
     builder = knowledge_graph_builder_factory(job.subject_id)
     await run_blocking_stage(
@@ -120,7 +120,7 @@ async def build_knowledge_graph(
     remove_invalid_graph_members(graph, concept_ids)
 
     existing_edges = set(graph.edges())
-    logger.debug(f"[Pipeline] Added {extracted_relation_count} relations from extraction")
+    logger.debug("[Pipeline] Added {} relations from extraction", extracted_relation_count)
 
     verified_relation_count = 0
     for source_id, target_id, evaluation in verified_relations:
@@ -149,7 +149,7 @@ async def build_knowledge_graph(
     remove_invalid_graph_members(graph, concept_ids)
     job.partial_graph = build_partial_graph(graph, concepts)
 
-    builder_stats = {}
+    builder_stats: dict[str, Any] = {}
     if hasattr(builder, "get_stats"):
         builder_stats = dict(
             await run_blocking_stage(

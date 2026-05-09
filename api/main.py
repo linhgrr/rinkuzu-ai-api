@@ -7,9 +7,11 @@ import os
 from pathlib import Path
 import sys
 import time
+from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
@@ -28,14 +30,13 @@ from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import Chu
 from .core.learning.exercise_service import ExerciseService
 from .core.learning.session import SessionManager
 from .core.shared import mongo_store
-from .core.shared.llm import initialize_shared_llm
 from .exceptions import register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
 from .rate_limit import limiter
 from .routers import history as history_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
-from .routers import quiz_extract as quiz_extract_router
+from .routers import quiz_drafts as quiz_drafts_router
 from .routers import quiz_tutor as quiz_tutor_router
 from .routers import session as session_router
 
@@ -95,15 +96,21 @@ def _init_pipeline(app: FastAPI) -> None:
         await pipeline_service_ref.persist_job_state(job, status, step, progress)
 
     pipeline_runner = PipelineRunner(
-        load_job=mongo_store.load_pipeline_job,
-        save_job=mongo_store.save_pipeline_job,
+        load_job=mongo_store.get_pipeline_repo().load,
+        save_job=mongo_store.get_pipeline_repo().save,
         persist_job_state=persist_pipeline_job_state,
         chunk_chroma_store=app.state.chunk_chroma_store,
         document_chunks_col=app.state.document_chunks_col,
     )
 
     async def run_content_pipeline(
-        job, file_path, prs_threshold, min_confidence, apply_reduction
+        job,
+        file_path,
+        prs_threshold,
+        min_confidence,
+        *,
+        apply_reduction,
+        page_batch_size,
     ) -> None:
         await pipeline_runner.run(
             job,
@@ -111,17 +118,33 @@ def _init_pipeline(app: FastAPI) -> None:
             prs_threshold=prs_threshold,
             min_confidence=min_confidence,
             apply_reduction=apply_reduction,
+            page_batch_size=page_batch_size,
         )
 
     pipeline_service = PipelineService(
-        save_job=mongo_store.save_pipeline_job,
+        save_job=mongo_store.get_pipeline_repo().save,
         run_pipeline=run_content_pipeline,
     )
     # Rebind so the closure in persist_pipeline_job_state sees the real service.
-    pipeline_service_ref = pipeline_service  # type: ignore[assignment]
+    pipeline_service_ref = pipeline_service
 
     app.state.content_pipeline_runner = pipeline_runner
     app.state.content_pipeline_service = pipeline_service
+
+
+def _log_llm_config(settings: Any) -> None:
+    from .core.content_pipeline.infrastructure.llm.openai_responses import normalize_openai_base_url
+
+    base_url = normalize_openai_base_url(settings.openai_base_url)
+    model = settings.openai_model or "(not set)"
+    api_key = settings.openai_api_key or ""
+    key_display = f"{api_key[:6]}…" if len(api_key) > 6 else ("(not set)" if not api_key else api_key)
+    exercise_model = settings.exercise_llm_model or model
+    logger.info("[LLM] base_url    = {}", base_url)
+    logger.info("[LLM] model       = {}", model)
+    logger.info("[LLM] api_key     = {}", key_display)
+    logger.info("[LLM] exercise    = {}", exercise_model)
+    logger.info("[LLM] max_retries = {}", settings.llm_max_retries)
 
 
 def _purge_stale_uploads() -> None:
@@ -149,14 +172,11 @@ async def lifespan(app: FastAPI):
     _configure_llm_tracing()
 
     settings = get_settings()
-    initialize_shared_llm(
-        base_url=settings.llm_base_url,
-        model=settings.llm_model,
-        api_key=settings.llm_api_key,
-    )
+
+    _log_llm_config(settings)
 
     logger.info("[0/2] Connecting to MongoDB...")
-    await mongo_store.init_mongo(mongo_url=settings.mongo_url)
+    await mongo_store.init_mongo(mongodb_uri=settings.mongodb_uri)
 
     _load_models(app)
 
@@ -200,9 +220,74 @@ app = FastAPI(
     openapi_url="/openapi.json" if _is_dev else None,
 )
 
+
+def _build_openapi_security() -> tuple[dict[str, dict[str, str]], list[dict[str, list[str]]]]:
+    schemes: dict[str, dict[str, str]] = {
+        "XUserIdHeader": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "x-user-id",
+            "description": "Authenticated user id forwarded by the frontend proxy.",
+        },
+    }
+    requirement: dict[str, list[str]] = {"XUserIdHeader": []}
+
+    if settings.internal_service_token:
+        schemes["XServiceTokenHeader"] = {
+            "type": "apiKey",
+            "in": "header",
+            "name": "x-service-token",
+            "description": "Shared internal token used by the frontend proxy when calling the backend API.",
+        }
+        requirement["XServiceTokenHeader"] = []
+
+    return schemes, [requirement]
+
+
+def custom_openapi() -> dict[str, Any]:
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    security_schemes, security = _build_openapi_security()
+    components = openapi_schema.setdefault("components", {})
+    components.setdefault("securitySchemes", {}).update(security_schemes)
+    openapi_schema["servers"] = [
+        {
+            "url": "/",
+            "description": "Same-origin deployment behind the current API host.",
+        }
+    ]
+    openapi_schema["security"] = security
+
+    public_operations = {
+        "/api/ready": {"get"},
+        "/api/health": {"get"},
+        "/api/info": {"get"},
+        "/api/pipeline/status": {"get"},
+    }
+    for path, methods in public_operations.items():
+        path_item = openapi_schema.get("paths", {}).get(path, {})
+        for method in methods:
+            operation = path_item.get(method)
+            if operation is not None:
+                operation["security"] = []
+
+    app.openapi_schema = openapi_schema
+    return openapi_schema
+
+
+app.openapi = custom_openapi
+
 register_exception_handlers(app)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, cast("Any", _rate_limit_exceeded_handler))
 
 # Middleware — outermost first (last added = outermost)
 app.add_middleware(RequestContextMiddleware)
@@ -218,7 +303,7 @@ app.include_router(session_router.router)
 app.include_router(knowledge_router.router)
 app.include_router(pipeline_router.router)
 app.include_router(history_router.router)
-app.include_router(quiz_extract_router.router)
+app.include_router(quiz_drafts_router.router)
 app.include_router(quiz_tutor_router.router)
 
 

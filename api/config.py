@@ -11,6 +11,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _normalize_endpoint(value: str | None, *, default_scheme: str) -> str | None:
+    raw = (value or "").strip().rstrip("/")
+    if not raw:
+        return None
+    if "://" in raw:
+        return raw
+    return f"{default_scheme}://{raw}"
+
+
 class Settings(BaseSettings):
     """Application settings — auto-loaded from .env file."""
 
@@ -31,7 +40,6 @@ class Settings(BaseSettings):
     internal_service_token: str | None = None
     log_level: str = "INFO"  # DEBUG | INFO | WARNING | ERROR
     log_format: str = "text"  # text | json
-    rate_limit_quiz_extract: str = "10/minute"
     rate_limit_tutor_chat: str = "30/minute"
     rate_limit_pipeline: str = "5/minute"
     rate_limit_ask_ai: str = "20/minute"
@@ -42,12 +50,12 @@ class Settings(BaseSettings):
     download_max_bytes: int = 100 * 1024 * 1024  # 100 MB
 
     # ── MongoDB ─────────────────────────────────────────────
-    mongo_url: str | None = None
+    mongodb_uri: str | None = None
 
     # ── LLM ─────────────────────────────────────────────────
-    llm_api_key: str | None = None
-    llm_base_url: str | None = None
-    llm_model: str | None = None
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
+    openai_model: str | None = None
     exercise_llm_model: str | None = Field(
         default=None,
         validation_alias=AliasChoices("EXERCISE_LLM_MODEL", "ADAPTIVE_EXERCISE_LLM_MODEL"),
@@ -99,18 +107,27 @@ class Settings(BaseSettings):
             "EXERCISE_RECENT_SAME_CONCEPT_LIMIT",
         ),
     )
-    pdf_ocr_concurrency: int = 5
-    vision_pdf_request_timeout_sec: float = 120
-    vision_agent_api_key: str | None = None
     content_pipeline_job_timeout_sec: float = 1800
     content_pipeline_stage_timeout_sec: float = 300
     content_pipeline_graph_cycle_timeout_sec: float = 900
+    content_pipeline_pdf_page_batch_size: int = 10
+    content_pipeline_pdf_batch_max_bytes: int = 4 * 1024 * 1024
+    content_pipeline_file_cache_ttl_hours: int = 24 * 7
+    content_pipeline_batch_failure_ratio_threshold: float = 0.5
+    content_pipeline_responses_timeout_sec: float = 180
+    content_pipeline_extraction_secs_per_page: float = 20.0
+    content_pipeline_default_retry_after_sec: int = 2
+    content_pipeline_delayed_retry_after_sec: int = 5
+    content_pipeline_job_delayed_after_sec: int = 360
 
     # ── S3 Cache ────────────────────────────────────────────
-    s3_endpoint_url: str | None = None
-    s3_access_key_id: str | None = None
-    s3_secret_access_key: str | None = None
-    s3_bucket_name: str | None = None
+    object_storage_region: str = "ap-southeast-1"
+    object_storage_endpoint_internal: str | None = None
+    object_storage_endpoint_external: str | None = None
+    object_storage_access_key: str | None = None
+    object_storage_secret_key: str | None = None
+    object_storage_bucket: str | None = None
+    object_storage_addressing_style: str = "path"
 
     # ── LangChain / LangSmith ──────────────────────────────
     langchain_tracing_v2: bool = Field(
@@ -136,7 +153,32 @@ class Settings(BaseSettings):
 
     @property
     def s3_available(self) -> bool:
-        return all([self.s3_endpoint_url, self.s3_access_key_id, self.s3_secret_access_key])
+        return all(
+            [
+                self.object_storage_client_endpoint,
+                self.object_storage_access_key,
+                self.object_storage_secret_key,
+                self.object_storage_bucket,
+            ]
+        )
+
+    @property
+    def object_storage_client_endpoint(self) -> str | None:
+        internal = _normalize_endpoint(
+            self.object_storage_endpoint_internal,
+            default_scheme="http",
+        )
+        external = self.object_storage_public_base_url
+        if self.environment == "dev":
+            return external or internal
+        return internal or external
+
+    @property
+    def object_storage_public_base_url(self) -> str | None:
+        return _normalize_endpoint(
+            self.object_storage_endpoint_external,
+            default_scheme="https",
+        )
 
 
 @lru_cache(maxsize=1)

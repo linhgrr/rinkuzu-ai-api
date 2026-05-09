@@ -556,7 +556,7 @@ jobs:
       - run: mypy api
       - run: pytest -q --cov=api --cov-fail-under=70
         env:
-          MONGO_URL: mongodb://localhost:27017
+          MONGODB_URI: mongodb://localhost:27017
           LOAD_MODELS: "false"
           ENVIRONMENT: dev
 

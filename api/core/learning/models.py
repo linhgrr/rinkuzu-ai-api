@@ -4,6 +4,7 @@ Ported from saint_model.py and train_dqn.py
 """
 
 import math
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -11,6 +12,8 @@ from torch import nn
 
 
 class PositionalEncoding(nn.Module):
+    pe: torch.Tensor
+
     def __init__(self, d_model: int, max_len: int = 512, dropout: float = 0.1):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -24,13 +27,14 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x + self.pe[:, : x.size(1)]
-        return self.dropout(x)
+        return cast("torch.Tensor", self.dropout(x))
 
 
 class SaintModel(nn.Module):
     """SAINT Knowledge Tracing Model with Bloom Taxonomy."""
 
     SOS_IDX = 3
+    concept_emb_matrix: torch.Tensor
 
     def __init__(
         self,
@@ -133,6 +137,8 @@ class SaintModel(nn.Module):
         if decoder_input is not None:
             dec_emb = self.response_emb(decoder_input)
         else:
+            if responses is None:
+                raise ValueError("responses are required when decoder_input is not provided")
             resp_idx = self._responses_to_idx(responses)
             shifted = torch.full(
                 (batch_size, seq_len), self.SOS_IDX, dtype=torch.long, device=device
@@ -154,7 +160,7 @@ class SaintModel(nn.Module):
         logits = self.output_proj(dec_out).squeeze(-1)
 
         if return_logits:
-            return logits
+            return cast("torch.Tensor", logits)
         return torch.sigmoid(logits)
 
     @torch.no_grad()
@@ -165,7 +171,7 @@ class SaintModel(nn.Module):
         decoder_input: torch.Tensor,
         query_position: int,
         external_embeddings: torch.Tensor | None = None,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         _batch_size, seq_len = concept_ids.shape
         device = concept_ids.device
 
@@ -260,13 +266,16 @@ class DuelingQNetwork(nn.Module):
 
 def load_saint_model(checkpoint_path: str, device: torch.device):
     """Load SAINT model from checkpoint. Returns (model, concept_map, config)."""
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    cfg = checkpoint["config"]
-    concept_map = checkpoint.get("concept_map", {})
+    checkpoint = cast(
+        "dict[str, Any]",
+        torch.load(checkpoint_path, map_location=device, weights_only=False),
+    )
+    cfg = cast("dict[str, Any]", checkpoint["config"])
+    concept_map = cast("dict[str, int]", checkpoint.get("concept_map", {}))
 
     # Extract concept embeddings from checkpoint
-    state_dict = checkpoint["model_state_dict"]
-    concept_emb_matrix = state_dict["concept_emb_matrix"]  # (N+1, 768)
+    state_dict = cast("dict[str, Any]", checkpoint["model_state_dict"])
+    concept_emb_matrix = cast("torch.Tensor", state_dict["concept_emb_matrix"])  # (N+1, 768)
     embeddings = concept_emb_matrix[1:].cpu().numpy()  # Remove PAD row
 
     model = SaintModel(

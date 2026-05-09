@@ -2,6 +2,11 @@
 schemas — Re-export all Pydantic models for backward compatibility.
 """
 
+from .common import (
+    StandardResponse,
+    StandardErrorResponse,
+    ErrorDetail,
+)
 from .exercise import (
     ExerciseOption,
     ExerciseResponse,
@@ -15,6 +20,8 @@ from .exercise import (
     TutorChatResponse,
 )
 from .history import (
+    DeleteSubjectResponse,
+    PipelineJobHistoryListResponse,
     SubjectHistoryDetailResponse,
     SubjectHistoryListResponse,
     SubjectHistoryResponse,
@@ -30,10 +37,19 @@ from .knowledge import (
     MasteryMatrixResponse,
     MasteryRow,
 )
+from .pipeline import (
+    PipelineFailedBatchResponse,
+    PipelineJobResultResponse,
+    PipelineJobStatusResponse,
+    PipelinePartialGraphEdgeResponse,
+    PipelinePartialGraphNodeResponse,
+    PipelinePartialGraphResponse,
+    PipelineProcessResponse,
+    PipelineSessionCreateResponse,
+)
 from .quiz_tutor import (
     QuizTutorChatMessage,
     QuizTutorRequest,
-    QuizTutorResponse,
     QuizTutorResponseData,
 )
 from .session import (
@@ -43,8 +59,12 @@ from .session import (
 )
 
 __all__ = [
+    "StandardResponse",
+    "StandardErrorResponse",
+    "ErrorDetail",
     "ConceptDetailResponse",
     "ConceptPrereq",
+    "DeleteSubjectResponse",
     "ExerciseOption",
     "ExerciseResponse",
     "KnowledgeEdgeResponse",
@@ -53,9 +73,17 @@ __all__ = [
     "MasteryMatrixResponse",
     "MasteryRow",
     "NextConceptResponse",
+    "PipelineFailedBatchResponse",
+    "PipelineJobHistoryListResponse",
+    "PipelineJobResultResponse",
+    "PipelineJobStatusResponse",
+    "PipelinePartialGraphEdgeResponse",
+    "PipelinePartialGraphNodeResponse",
+    "PipelinePartialGraphResponse",
+    "PipelineProcessResponse",
+    "PipelineSessionCreateResponse",
     "QuizTutorChatMessage",
     "QuizTutorRequest",
-    "QuizTutorResponse",
     "QuizTutorResponseData",
     "SessionCreateRequest",
     "SessionCreateResponse",

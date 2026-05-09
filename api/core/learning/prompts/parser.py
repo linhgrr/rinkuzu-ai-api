@@ -30,7 +30,7 @@ class OutputParser:
             try:
                 return schema(**output)
             except ValidationError as e:
-                logger.error(f"Validation error for {schema.__name__}: {e}")
+                logger.exception("Validation error for {}", schema.__name__)
                 raise OutputParsingError(f"Failed to parse dict to {schema.__name__}: {e}") from e
 
         raise OutputParsingError(

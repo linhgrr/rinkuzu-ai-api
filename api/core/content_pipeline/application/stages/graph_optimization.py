@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 
 from api.config import get_settings
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus

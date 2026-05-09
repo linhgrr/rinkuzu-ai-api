@@ -55,25 +55,34 @@ class PipelineNotCompletedError(AppError):
 # ── Global Exception Handler ───────────────────────────────
 
 
+def _build_error_response(code: str, message: str, detail: str | None = None, meta: list | dict | None = None) -> dict:
+    return {
+        "success": False,
+        "error": {
+            "code": code,
+            "message": message,
+            "detail": detail,
+            "meta": meta,
+        },
+    }
+
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     """Map domain exceptions to JSON error responses."""
+    code = exc.__class__.__name__
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail, "error": exc.detail},
+        content=_build_error_response(code, "Application error", exc.detail),
     )
 
 
 async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
     """Normalize FastAPI HTTPException responses into a stable JSON envelope."""
-    detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
-    content = {"detail": detail, "error": detail}
-
-    if not isinstance(exc.detail, str):
-        content["meta"] = exc.detail
+    detail_str = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    meta = exc.detail if not isinstance(exc.detail, str) else None
 
     return JSONResponse(
         status_code=exc.status_code,
-        content=content,
+        content=_build_error_response("HTTPException", "HTTP error occurred", detail_str, meta),
         headers=exc.headers,
     )
 
@@ -92,10 +101,9 @@ async def validation_exception_handler(
     safe_errors = [
         {"loc": e.get("loc"), "msg": e.get("msg"), "type": e.get("type")} for e in exc.errors()
     ]
-    detail = "Invalid request"
     return JSONResponse(
         status_code=422,
-        content={"detail": detail, "error": detail, "meta": safe_errors},
+        content=_build_error_response("ValidationError", "Invalid request body", str(exc), safe_errors),
     )
 
 
@@ -107,10 +115,9 @@ async def unexpected_exception_handler(request: Request, exc: Exception) -> JSON
         request.url.path,
         exc.__class__.__name__,
     )
-    detail = "Internal server error"
     return JSONResponse(
         status_code=500,
-        content={"detail": detail, "error": detail},
+        content=_build_error_response("InternalServerError", "Internal server error", None),
     )
 
 

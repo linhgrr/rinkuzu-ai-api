@@ -26,15 +26,6 @@ def test_get_content_processor_bindings_uses_cached_bindings():
     assert second is first
 
 
-def test_get_content_processor_llm_factory_uses_cached_factory():
-    runtime.get_content_processor_llm_factory.cache_clear()
-    first = runtime.get_content_processor_llm_factory()
-
-    second = runtime.get_content_processor_llm_factory()
-
-    assert second is first
-
-
 def test_content_processor_bindings_can_build_relation_engine():
     class _ExtractionChain:
         def verify_relations_batch(self, pairs):
@@ -44,6 +35,29 @@ def test_content_processor_bindings_can_build_relation_engine():
     engine = bindings.relation_engine_factory(extraction_chain=_ExtractionChain())
 
     assert hasattr(engine, "discover_relations")
+
+
+def test_build_embedding_client_passes_model_name_and_batch_size(monkeypatch):
+    module_name = "api.core.content_pipeline.infrastructure.embed.embedding_client"
+    original_module = sys.modules.get(module_name)
+
+    class _EmbeddingClient:
+        def __init__(self, model_name, *, batch_size=None):
+            self.model_name = model_name
+            self.batch_size = batch_size
+
+    monkeypatch.setitem(sys.modules, module_name, SimpleNamespace(EmbeddingClient=_EmbeddingClient))
+
+    try:
+        client = runtime._build_embedding_client("keepitreal/vietnamese-sbert", 32)
+    finally:
+        if original_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = original_module
+
+    assert client.model_name == "keepitreal/vietnamese-sbert"
+    assert client.batch_size == 32
 
 
 def test_runtime_root_no_longer_points_to_content_processor_folder():

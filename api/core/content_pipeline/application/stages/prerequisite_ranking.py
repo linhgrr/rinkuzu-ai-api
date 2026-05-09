@@ -23,7 +23,7 @@ async def rank_candidate_prerequisites(
     """Rank candidate prerequisite pairs and persist stage progress."""
     await persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
 
-    candidate_pairs = await run_blocking_stage(
+    candidate_pairs: list[tuple[str, str]] = await run_blocking_stage(
         rank_prerequisites,
         concepts,
         prs_threshold,

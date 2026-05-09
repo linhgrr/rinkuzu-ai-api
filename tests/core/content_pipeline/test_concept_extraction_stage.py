@@ -12,9 +12,11 @@ class _FakeExtractionChain:
     def __init__(self, response):
         self._response = response
         self.calls = []
+        self.last_batches = [{"batch_index": 0}, {"batch_index": 1}, {"batch_index": 2}]
+        self.last_failed_batches = [{"batch_index": 2, "reason": "Error: boom"}]
 
-    def extract_from_batch(self, chunk_texts, subject_id):
-        self.calls.append((chunk_texts, subject_id))
+    def extract_from_document(self, file_path, subject_id, page_batch_size, *, job_id=None):
+        self.calls.append((file_path, subject_id, page_batch_size, job_id))
         return self._response
 
 
@@ -36,11 +38,12 @@ def test_build_partial_concept_graph_serializes_basic_node_data():
 
 
 def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
-    job = PipelineJob(job_id="job-1", filename="lesson.pdf", subject_id="algebra")
-    chunks = [
-        SimpleNamespace(page_content="chunk one"),
-        SimpleNamespace(page_content="chunk two"),
-    ]
+    job = PipelineJob(
+        job_id="job-1",
+        filename="lesson.pdf",
+        subject_id="algebra",
+        page_batch_size=10,
+    )
     concepts = [
         SimpleNamespace(concept_id="c1", name="Alpha"),
         SimpleNamespace(concept_id="c2", name="Beta"),
@@ -64,7 +67,7 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
     extracted = asyncio.run(
         extract_concepts_from_chunks(
             job,
-            chunks=chunks,
+            file_path="/tmp/lesson.pdf",  # noqa: S108
             extraction_chain=extraction_chain,
             postprocess_concepts=postprocess,
             persist_job_state=persist_job_state,
@@ -72,7 +75,10 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
     )
 
     assert [concept.concept_id for concept in extracted] == ["c2", "c1"]
-    assert extraction_chain.calls == [(["chunk one", "chunk two"], "algebra")]
+    assert extraction_chain.calls == [("/tmp/lesson.pdf", "algebra", 10, "job-1")]  # noqa: S108
+    assert job.batch_count == 3
+    assert job.failed_batch_count == 1
+    assert job.partial_success is True
     assert job.concepts_extracted == 2
     assert job.partial_graph == {
         "nodes": [

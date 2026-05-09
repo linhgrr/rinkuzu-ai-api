@@ -13,7 +13,7 @@ def serialize_concepts(concepts: list[Any]) -> tuple[dict[str, dict[str, Any]], 
     for index, concept in enumerate(concepts):
         concept_id = concept.concept_id
         concept_map[concept_id] = index
-        serialized_relations = []
+        serialized_relations: list[dict[str, Any]] = []
         if hasattr(concept, "relations") and concept.relations:
             serialized_relations.extend(
                 {

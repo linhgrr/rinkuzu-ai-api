@@ -11,14 +11,16 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from api.config import get_settings
 from api.core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
 from api.dependencies import get_current_user
-from api.rate_limit import limiter
-from api.schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponse
+from api.rate_limit import is_admin_request, limiter
+from api.exceptions import AppError
+from api.schemas.common import StandardResponse
+from api.schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponseData
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
 
 
-@router.post("/ask-ai", response_model=QuizTutorResponse)
-@limiter.limit(get_settings().rate_limit_ask_ai)
+@router.post("/ask-ai", response_model=StandardResponse[QuizTutorResponseData])
+@limiter.limit(get_settings().rate_limit_ask_ai, exempt_when=is_admin_request)
 async def ask_ai_about_quiz(
     request: Request,
     req: QuizTutorRequest,
@@ -56,14 +58,9 @@ async def ask_ai_about_quiz(
             question_image=req.question_image,
             option_images=req.option_images,
         )
-        return QuizTutorResponse.model_validate(payload)
+        data = QuizTutorResponseData.model_validate(payload["data"])
+        return StandardResponse(data=data)
     except ValueError as exc:
-        return JSONResponse(
-            {"success": False, "error": str(exc)},
-            status_code=400,
-        )
+        raise AppError(str(exc), status_code=400)
     except RuntimeError as exc:
-        return JSONResponse(
-            {"success": False, "error": str(exc)},
-            status_code=502,
-        )
+        raise AppError(str(exc), status_code=502)

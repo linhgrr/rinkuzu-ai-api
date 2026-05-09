@@ -26,6 +26,11 @@ class SubjectHistoryListResponse(BaseModel):
     count: int
 
 
+class PipelineJobHistoryListResponse(BaseModel):
+    jobs: list[SubjectHistoryResponse]
+    count: int
+
+
 class SubjectProgressSummaryResponse(BaseModel):
     job_id: str
     filename: str = ""
@@ -65,3 +70,10 @@ class SubjectHistoryDetailResponse(BaseModel):
     created_at: float = 0
     updated_at: float = 0
     last_session_id: str | None = None
+
+
+class DeleteSubjectResponse(BaseModel):
+    job_id: str
+    deleted_job: int
+    deleted_sessions: int
+    status: str

@@ -5,22 +5,20 @@ tutor_chat.py — Adaptive tutor-chat prompt and validation logic.
 from __future__ import annotations
 
 import asyncio
-import codecs
-import json
 import re
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
+from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from api.config import get_settings
 from api.core.shared.llm import (
-    build_chat_completions_url,
     extract_llm_text,
-    get_shared_llm,
-    resolve_llm_api_key,
+    get_llm,
     resolve_retry_policy,
+    serialize_responses_sse_event,
     sleep_before_retry,
 )
 
@@ -28,8 +26,10 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
 _CHAT_HISTORY_SUMMARIZE_THRESHOLD = 6
-_HTTP_CLIENT_ERROR_STATUS = 400
 _MIN_EXPLANATION_LENGTH = 20
+_SUMMARY_SYSTEM_PROMPT = (
+    "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài."
+)
 
 TUTOR_SYSTEM_PROMPT = (
     "Bạn là Rin-chan, gia sư giúp học sinh hiểu câu hỏi trắc nghiệm. "
@@ -44,6 +44,16 @@ TUTOR_RESPONSE_REQUIREMENTS = (
     "- Nếu cần viết công thức toán, bắt buộc dùng LaTeX với $...$ hoặc $$...$$.\n"
     "- Có thể dùng bullet ngắn nếu giúp dễ hiểu hơn.\n"
 )
+
+
+def _extract_stream_chunk_text(chunk: Any) -> str:
+    text_accessor = getattr(chunk, "text", None)
+    if text_accessor is not None:
+        return str(text_accessor)
+    content = getattr(chunk, "content", "")
+    if isinstance(content, str):
+        return content
+    return extract_llm_text(content)
 
 
 def sanitize_chat_input(input_text: str) -> str:
@@ -103,11 +113,32 @@ def normalize_chat_history(chat_history: list[dict[str, str]] | None) -> list[di
     return normalized[-12:]
 
 
+def _request_text_response(
+    *,
+    instructions: str,
+    user_text: str,
+    model: str,
+    temperature: float,
+    timeout_sec: float,
+) -> str:
+    llm = get_llm(
+        model=model,
+        temperature=temperature,
+        timeout=timeout_sec,
+    )
+    response = llm.invoke(
+        [
+            SystemMessage(content=instructions),
+            HumanMessage(content=user_text),
+        ]
+    )
+    return extract_llm_text(response.content)
+
+
 def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
     if not chat_history:
         return ""
 
-    llm = get_shared_llm()
     chat_text = "\n\n".join(
         f"{msg.get('role', 'user')}: {msg.get('content', '')}"
         for msg in chat_history[-6:]
@@ -117,24 +148,18 @@ def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
         return ""
 
     try:
-        result = llm.invoke(
-            [
-                (
-                    "system",
-                    "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài.",
-                ),
-                (
-                    "human",
-                    (
-                        "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
-                        f"{chat_text}"
-                    ),
-                ),
-            ]
+        return _request_text_response(
+            instructions=_SUMMARY_SYSTEM_PROMPT,
+            user_text=(
+                "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
+                "{}"
+            ).format(chat_text),
+            model=_resolve_tutor_model(),
+            temperature=0.2,
+            timeout_sec=get_settings().llm_timeout_sec,
         )
-        return extract_llm_text(result.content)
     except Exception as exc:
-        logger.warning(f"[TutorChat] Failed to summarize chat history: {exc}")
+        logger.exception("[TutorChat] Failed to summarize chat history")
         return ""
 
 
@@ -208,138 +233,48 @@ def build_tutor_prompt(
 
 def _resolve_tutor_model() -> str:
     settings = get_settings()
-    return settings.exercise_llm_model or settings.llm_model or "gemini-3.0-pro"
+    return settings.exercise_llm_model or settings.openai_model or "gpt-4o-mini"
 
 
-def _build_stream_headers(*, accept: str) -> dict[str, str]:
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": accept,
-    }
-    api_key = resolve_llm_api_key()
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    return headers
+async def _open_tutor_chat_stream(
+    *,
+    model: str,
+    prompt: str,
+    timeout_sec: float,
+) -> Any:
+    max_retries, backoff_sec = resolve_retry_policy()
+    stream_timeout = httpx.Timeout(timeout_sec, read=None)
 
-
-def _extract_openai_delta_content(payload: dict) -> str:
-    choices = payload.get("choices") or []
-    if choices:
-        delta = choices[0].get("delta") or {}
-        content = delta.get("content")
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts: list[str] = []
-            for item in content:
-                if isinstance(item, str):
-                    parts.append(item)
-                    continue
-                if isinstance(item, dict) and isinstance(item.get("text"), str):
-                    parts.append(item["text"])
-            return "".join(parts)
-
-    content = payload.get("content")
-    return content if isinstance(content, str) else ""
-
-
-def _split_sse_events(buffer: str) -> tuple[list[str], str]:
-    events: list[str] = []
-    last_index = 0
-
-    for match in re.finditer(r"\r?\n\r?\n", buffer):
-        events.append(buffer[last_index : match.start()])
-        last_index = match.end()
-
-    return events, buffer[last_index:]
-
-
-def _parse_sse_event(event: str) -> tuple[str, bool]:
-    data_lines = [
-        line[5:].strip() for line in re.split(r"\r?\n", event) if line.startswith("data:")
-    ]
-    if not data_lines:
-        return "", False
-
-    data = "\n".join(data_lines)
-    if data == "[DONE]":
-        return "", True
-
-    try:
-        payload = json.loads(data)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("Tutor chat stream returned invalid SSE payload") from exc
-
-    error = payload.get("error")
-    if error:
-        raise RuntimeError(error if isinstance(error, str) else "Tutor chat streaming failed")
-
-    finish_reason = None
-    choices = payload.get("choices") or []
-    if choices:
-        finish_reason = choices[0].get("finish_reason")
-
-    return _extract_openai_delta_content(payload), payload.get(
-        "done"
-    ) is True or finish_reason is not None
-
-
-async def _raise_if_error_status(response: httpx.Response) -> None:
-    """Raise RuntimeError if the response has an HTTP error status."""
-    if response.status_code >= _HTTP_CLIENT_ERROR_STATUS:
-        error_body = (await response.aread()).decode("utf-8", errors="replace")
-        await response.aclose()
-        raise RuntimeError(
-            error_body or f"Tutor chat streaming failed with status {response.status_code}"
-        )
-
-
-async def _connect_stream_with_retries(
-    endpoint: str,
-    payload: dict,
-    headers: dict,
-    http_timeout: httpx.Timeout,
-    max_retries: int,
-    backoff_sec: float,
-) -> tuple[httpx.AsyncClient, httpx.Response]:
-    """Attempt to open an SSE stream, retrying on transient failures."""
     for attempt in range(1, max_retries + 1):
-        candidate_client = httpx.AsyncClient(timeout=http_timeout)
+        llm = get_llm(
+            model=model,
+            temperature=0.7,
+            timeout=stream_timeout,
+            streaming=True,
+        )
         try:
-            request = candidate_client.build_request(
-                "POST", endpoint, headers=headers, json=payload
+            stream = llm.astream(
+                [
+                    SystemMessage(content=TUTOR_SYSTEM_PROMPT),
+                    HumanMessage(content=prompt),
+                ]
             )
-            candidate_response = await candidate_client.send(request, stream=True)
-            await _raise_if_error_status(candidate_response)
         except Exception as exc:
             logger.warning(
-                f"[LLM] ⚠ tutor chat stream attempt {attempt}/{max_retries} failed "
-                f"(will_retry={attempt < max_retries}): {exc}"
+                "[LLM] ⚠ tutor chat stream attempt {}/{} failed "
+                "(will_retry={}): {}",
+                attempt,
+                max_retries,
+                attempt < max_retries,
+                exc,
             )
-            await candidate_client.aclose()
             if attempt < max_retries:
                 await asyncio.sleep(backoff_sec * attempt)
                 continue
-            if isinstance(exc, RuntimeError):
-                raise
             raise RuntimeError("Tutor chat service is temporarily unavailable") from exc
-        else:
-            return candidate_client, candidate_response
+        return stream
+
     raise RuntimeError("Tutor chat service is temporarily unavailable")
-
-
-async def _process_sse_buffer(
-    buffer: str, full_response: str, *, saw_terminal: bool
-) -> tuple[str, str, bool]:
-    """Process all complete SSE events from buffer; return (remaining_buffer, full_response, saw_terminal)."""
-    events, remaining = _split_sse_events(buffer)
-    for event in events:
-        delta, is_terminal = _parse_sse_event(event)
-        if delta:
-            full_response += delta
-        if is_terminal:
-            saw_terminal = True
-    return remaining, full_response, saw_terminal
 
 
 async def create_tutor_chat_stream(
@@ -357,10 +292,7 @@ async def create_tutor_chat_stream(
     if validation_error:
         raise ValueError(validation_error)
 
-    settings = get_settings()
-    endpoint = build_chat_completions_url(settings.llm_base_url)
-    prompt = await asyncio.to_thread(
-        build_tutor_prompt,
+    prompt = build_tutor_prompt(
         question=question,
         options=options,
         user_question=user_question,
@@ -369,70 +301,42 @@ async def create_tutor_chat_stream(
         bloom_level=bloom_level,
         rag_context=rag_context,
     )
-    payload = {
-        "model": _resolve_tutor_model(),
-        "temperature": 0.7,
-        "stream": True,
-        "messages": [
-            {
-                "role": "system",
-                "content": TUTOR_SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-    }
-
-    timeout = httpx.Timeout(settings.llm_timeout_sec, read=None)
-    max_retries, backoff_sec = resolve_retry_policy()
-    client, response = await _connect_stream_with_retries(
-        endpoint,
-        payload,
-        _build_stream_headers(accept="text/event-stream"),
-        http_timeout=timeout,
-        max_retries=max_retries,
-        backoff_sec=backoff_sec,
+    stream = await _open_tutor_chat_stream(
+        model=_resolve_tutor_model(),
+        prompt=prompt,
+        timeout_sec=get_settings().llm_timeout_sec,
     )
 
     async def iterator() -> AsyncIterator[bytes]:
-        decoder = codecs.getincrementaldecoder("utf-8")()
-        buf = ""
         full_response = ""
-        saw_terminal = False
+        started_stream = False
 
         try:
-            async for chunk in response.aiter_bytes():
-                yield chunk
-                buf += decoder.decode(chunk)
-                buf, full_response, saw_terminal = await _process_sse_buffer(
-                    buf, full_response, saw_terminal=saw_terminal
-                )
-
-            buf += decoder.decode(b"", final=True)
-            buf, full_response, saw_terminal = await _process_sse_buffer(
-                buf, full_response, saw_terminal=saw_terminal
-            )
-
-            if buf.strip():
-                delta, is_terminal = _parse_sse_event(buf)
+            async for chunk in stream:
+                started_stream = True
+                delta = _extract_stream_chunk_text(chunk)
                 if delta:
                     full_response += delta
-                if is_terminal:
-                    saw_terminal = True
+                    yield serialize_responses_sse_event(
+                        {"type": "response.output_text.delta", "delta": delta}
+                    )
+        except Exception as exc:
+            if not started_stream:
+                raise RuntimeError("Tutor chat service is temporarily unavailable") from exc
+            yield serialize_responses_sse_event(
+                {
+                    "type": "response.failed",
+                    "response": {"error": {"message": str(exc)}},
+                }
+            )
+            return
 
-            if not saw_terminal:
-                raise RuntimeError("Tutor chat stream ended before completion signal")
-
-            if on_complete and full_response.strip():
-                try:
-                    await on_complete(full_response.strip())
-                except Exception as exc:
-                    logger.warning(f"[TutorChat] Failed to persist chat history: {exc}")
-        finally:
-            await response.aclose()
-            await client.aclose()
+        yield serialize_responses_sse_event({"type": "response.completed"})
+        if on_complete and full_response.strip():
+            try:
+                await on_complete(full_response.strip())
+            except Exception as exc:
+                logger.exception("[TutorChat] Failed to persist chat history")
 
     return iterator()
 
@@ -450,7 +354,6 @@ def generate_tutor_chat_response(
     if validation_error:
         raise ValueError(validation_error)
 
-    llm = get_shared_llm()
     prompt = build_tutor_prompt(
         question=question,
         options=options,
@@ -465,12 +368,21 @@ def generate_tutor_chat_response(
     max_retries, backoff_sec = resolve_retry_policy()
     for attempt in range(1, max_retries + 1):
         try:
-            result = llm.invoke([("system", TUTOR_SYSTEM_PROMPT), ("human", prompt)])
-            explanation = extract_llm_text(result.content)
+            explanation = _request_text_response(
+                instructions=TUTOR_SYSTEM_PROMPT,
+                user_text=prompt,
+                model=_resolve_tutor_model(),
+                temperature=0.7,
+                timeout_sec=get_settings().llm_timeout_sec,
+            )
         except Exception as exc:
             logger.warning(
-                f"[LLM] ⚠ tutor chat attempt {attempt}/{max_retries} failed "
-                f"(will_retry={attempt < max_retries}): {exc}"
+                "[LLM] ⚠ tutor chat attempt {}/{} failed "
+                "(will_retry={}): {}",
+                attempt,
+                max_retries,
+                attempt < max_retries,
+                exc,
             )
             if attempt < max_retries:
                 sleep_before_retry(attempt, backoff_sec)
@@ -478,7 +390,7 @@ def generate_tutor_chat_response(
         else:
             if len(explanation) < _MIN_EXPLANATION_LENGTH:
                 raise ValueError("Chat explanation too short")
-            logger.info(f"[LLM] ✓ Tutor chat generated in {time.time() - t0:.2f}s")
+            logger.info("[LLM] ✓ Tutor chat generated in {:.2f}s", time.time() - t0)
             return explanation
 
     raise RuntimeError("Tutor chat service is temporarily unavailable")

@@ -62,7 +62,7 @@ async def verify_candidate_relations(
     pairs_to_verify = build_pairs_to_verify(concepts, candidate_pairs)
     verified: list[VerifiedRelation] = []
     if pairs_to_verify:
-        verifications = await run_blocking_stage(
+        verifications: list[Any] = await run_blocking_stage(
             verify_relations_batch,
             pairs_to_verify,
             stage_name="relation_verification",

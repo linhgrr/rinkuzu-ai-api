@@ -30,9 +30,4 @@ class QuizTutorResponseData(BaseModel):
     explanation: str
     structured: dict | None = None
     timestamp: str
-    turn_count: int = Field(alias="turnCount")
-
-
-class QuizTutorResponse(BaseModel):
-    success: bool = True
-    data: QuizTutorResponseData
+    turn_count: int

@@ -1,7 +1,7 @@
 """Transitive reduction for knowledge graphs."""
 
 from loguru import logger
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 
 
 def apply_transitive_reduction(graph: nx.DiGraph) -> nx.DiGraph:
@@ -23,7 +23,7 @@ def apply_transitive_reduction(graph: nx.DiGraph) -> nx.DiGraph:
     try:
         reduced_prereq = nx.transitive_reduction(prereq_graph)
     except Exception as e:
-        logger.error(f"Error applying transitive reduction: {e}")
+        logger.exception("Error applying transitive reduction")
         return graph
 
     removed_edges = _find_removed_edges(prereq_graph, reduced_prereq)

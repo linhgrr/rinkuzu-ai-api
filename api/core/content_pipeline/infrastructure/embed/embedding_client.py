@@ -1,5 +1,7 @@
 """Embedding client compatible with LangChain Embeddings interface."""
 
+from typing import cast
+
 from langchain_core.embeddings import Embeddings
 from loguru import logger
 from pyvi import ViTokenizer
@@ -49,12 +51,14 @@ class EmbeddingClient(Embeddings):
             try:
                 self.model.max_seq_length = settings.max_seq_length
             except Exception as e:
-                logger.warning(f"Cannot set max_seq_length: {e}")
+                logger.warning("Cannot set max_seq_length: {}", e)
 
         logger.info(
-            f"EmbeddingClient initialized: model={self.model_name}, "
-            f"device={self.device}, batch_size={self.batch_size}, "
-            f"use_vi_tokenizer={self.use_vi_tokenizer}"
+            "EmbeddingClient initialized: model={}, device={}, batch_size={}, use_vi_tokenizer={}",
+            self.model_name,
+            self.device,
+            self.batch_size,
+            self.use_vi_tokenizer,
         )
 
     def _maybe_tokenize(self, text: str) -> str:
@@ -87,7 +91,7 @@ class EmbeddingClient(Embeddings):
             normalize_embeddings=True,
             batch_size=1,
         )
-        return emb.astype(float).tolist()
+        return cast("list[float]", emb.astype(float).tolist())
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """

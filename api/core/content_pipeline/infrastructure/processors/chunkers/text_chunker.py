@@ -83,7 +83,12 @@ class TextChunker:
         base_meta.update({"doc_id": doc_id})
 
         if not text.strip():
-            logger.warning(f"No text to chunk for doc_id={doc_id}")
+            logger.warning(
+                "No extractable local text for chunking; likely scan PDF or image-only pages",
+                doc_id=doc_id,
+                page_count=len(pages),
+                source=base_meta.get("source"),
+            )
             return []
 
         # 1) Nếu nhìn giống có đề mục -> tách theo header markdown
@@ -114,7 +119,7 @@ class TextChunker:
             d.metadata.setdefault("start_page", 1)
             d.metadata.setdefault("end_page", max(1, len(pages)))
 
-        logger.info(f"Created {len(final_docs)} chunks from document {doc_id}")
+        logger.info("Created {} chunks from document {}", len(final_docs), doc_id)
         return final_docs
 
     # -----------------------
@@ -139,7 +144,8 @@ class TextChunker:
                 )
             except Exception as e:
                 logger.warning(
-                    f"HF tokenizer init failed ({e}). Fallback RecursiveCharacterTextSplitter."
+                    "HF tokenizer init failed ({}). Fallback RecursiveCharacterTextSplitter.",
+                    e,
                 )
             else:
                 logger.debug("Using HF tokenizer-based TextSplitter")
