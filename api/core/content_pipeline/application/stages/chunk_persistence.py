@@ -17,6 +17,8 @@ from loguru import logger
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
+from .execution import safe_run
+
 if TYPE_CHECKING:
     from langchain_core.documents import Document as LangChainDocument
 
@@ -58,7 +60,7 @@ async def persist_document_chunks(
 
     # ── MongoDB ────────────────────────────────────────────────
     if mongo_collection is not None:
-        try:
+        async def _persist_mongo():
             docs_to_upsert = [
                 {
                     "job_id": job.job_id,
@@ -82,14 +84,15 @@ async def persist_document_chunks(
                 len(docs_to_upsert),
                 job_id=job.job_id,
             )
-        except Exception:
-            logger.exception(
-                "[persist_chunks] MongoDB write failed, continuing pipeline",
-            )
+
+        await safe_run(
+            _persist_mongo,
+            fail_message="persist_chunks MongoDB write failed, continuing pipeline",
+        )
 
     # ── ChromaDB ───────────────────────────────────────────────
     if chunk_chroma_store is not None:
-        try:
+        async def _persist_chroma():
             ids = chunk_chroma_store.add_chunks(
                 chunks=chunks,
                 job_id=job.job_id,
@@ -100,10 +103,11 @@ async def persist_document_chunks(
                 len(ids),
                 job_id=job.job_id,
             )
-        except Exception:
-            logger.exception(
-                "[persist_chunks] ChromaDB write failed, continuing pipeline",
-            )
+
+        await safe_run(
+            _persist_chroma,
+            fail_message="persist_chunks ChromaDB write failed, continuing pipeline",
+        )
 
     await persist_job_state(
         job,

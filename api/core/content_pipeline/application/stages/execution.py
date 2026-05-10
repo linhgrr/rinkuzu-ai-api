@@ -6,13 +6,16 @@ import asyncio
 from functools import partial
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from loguru import logger
+
 from api.config import get_settings
 from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
 T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 def resolve_timeout_policy() -> tuple[float | None, float | None]:
@@ -53,3 +56,17 @@ def _normalize_timeout(raw_value: float | None) -> float | None:
         return None
     value = float(raw_value)
     return value if value > 0 else None
+
+
+async def safe_run(
+    fn: Callable[[], Awaitable[_T]],
+    *,
+    fail_message: str,
+    fallback: _T | None = None,
+) -> _T | None:
+    """Best-effort async execution. Logs exception and returns *fallback* on failure."""
+    try:
+        return await fn()
+    except Exception:
+        logger.exception("[Pipeline] {}", fail_message)
+        return fallback

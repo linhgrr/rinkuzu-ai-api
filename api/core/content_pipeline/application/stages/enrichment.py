@@ -10,7 +10,7 @@ from loguru import logger
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
-from .execution import run_blocking_stage
+from .execution import run_blocking_stage, safe_run
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 
@@ -45,7 +45,7 @@ async def generate_saint_concept_embeddings(
         "Generating concept embeddings for SAINT...",
         0.92,
     )
-    try:
+    async def _generate():
         text_model = text_model_factory()
         ordered_texts = build_ordered_embedding_texts(concepts_data, concept_map)
         embeddings: Any = await run_blocking_stage(
@@ -57,9 +57,11 @@ async def generate_saint_concept_embeddings(
         )
         logger.info("[Pipeline] ✓ Generated embeddings for {} concepts", len(ordered_texts))
         return cast("list[list[float]]", embeddings.tolist())
-    except Exception:
-        logger.exception("[Pipeline] ⚠ Could not generate embeddings")
-        return None
+
+    return await safe_run(
+        _generate,
+        fail_message="Could not generate embeddings",
+    )
 
 
 async def generate_concept_theories(
@@ -77,7 +79,7 @@ async def generate_concept_theories(
         "Generating concept theories...",
         0.93,
     )
-    try:
+    async def _generate_theories():
         semaphore = asyncio.Semaphore(concurrency)
 
         async def generate_one(concept_id: str, name: str, definition: str):
@@ -102,5 +104,8 @@ async def generate_concept_theories(
             for concept_id, theory in results:
                 concepts_data[concept_id]["theory"] = theory
             logger.info("[Pipeline] ✓ Theory generation complete")
-    except Exception:
-        logger.exception("[Pipeline] ⚠ Failed to pre-generate theory")
+
+    await safe_run(
+        _generate_theories,
+        fail_message="Failed to pre-generate theory",
+    )

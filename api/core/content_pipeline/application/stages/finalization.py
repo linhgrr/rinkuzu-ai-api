@@ -13,7 +13,7 @@ from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 from ..ports import PersistJobStateFn, SaveJobFn  # noqa: TC001
-from .execution import run_blocking_stage
+from .execution import run_blocking_stage, safe_run
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ async def upload_result_cache(
     if not s3_client or not bucket_name or not cache_key:
         return
 
-    try:
+    async def _upload():
         cache_data = json.dumps(result, ensure_ascii=False)
         await run_blocking_stage(
             s3_client.put_object,
@@ -64,8 +64,8 @@ async def upload_result_cache(
             stage_name="s3_cache_upload",
         )
         logger.info("[Pipeline] Uploaded result to S3 cache {}", cache_key)
-    except Exception:
-        logger.exception("[Pipeline] Failed to save S3 cache")
+
+    await safe_run(_upload, fail_message="Failed to save S3 cache")
 
 
 async def persist_terminal_failure(
@@ -92,14 +92,12 @@ async def persist_terminal_failure(
         details.status.value,
         details.error_message,
     )
-    try:
-        saved = await save_job(job)
-        if not saved:
-            logger.error(
-                "[Pipeline] Failed to persist terminal failure state for job {}", job.job_id
-            )
-    except Exception:
-        logger.exception(
+    if not await safe_run(
+        lambda: save_job(job),
+        fail_message=f"Failed to persist terminal failure state for job {job.job_id}",
+        fallback=False,
+    ):
+        logger.error(
             "[Pipeline] Failed to persist terminal failure state for job {}", job.job_id
         )
 
