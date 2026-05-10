@@ -2,7 +2,7 @@
 exceptions.py — Domain exceptions and global FastAPI exception handlers.
 """
 
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -55,7 +55,12 @@ class PipelineNotCompletedError(AppError):
 # ── Global Exception Handler ───────────────────────────────
 
 
-def _build_error_response(code: str, message: str, detail: str | None = None, meta: list | dict | None = None) -> dict:
+def _build_error_response(
+    code: str,
+    message: str,
+    detail: str | None = None,
+    meta: list[dict[str, object]] | dict[str, object] | None = None,
+) -> dict[str, object]:
     return {
         "success": False,
         "error": {
@@ -121,9 +126,9 @@ async def unexpected_exception_handler(request: Request, exc: Exception) -> JSON
     )
 
 
-def register_exception_handlers(app) -> None:
+def register_exception_handlers(app: FastAPI) -> None:
     """Register all custom exception handlers on the FastAPI app."""
-    app.add_exception_handler(AppError, app_error_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unexpected_exception_handler)

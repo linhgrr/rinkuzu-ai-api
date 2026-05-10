@@ -678,7 +678,7 @@ class ExtractionChain:
     ) -> bytes:
         with fitz.open() as sub_document:
             sub_document.insert_pdf(document, from_page=start_page - 1, to_page=end_page - 1)
-            return sub_document.tobytes(garbage=4, deflate=True)
+            return sub_document.tobytes(garbage=4, deflate=True)  # type: ignore[no-any-return]
 
     @staticmethod
     def _extract_compressed_pdf_bytes(
@@ -699,7 +699,7 @@ class ExtractionChain:
                     height=source_page.rect.height,
                 )
                 target_page.insert_image(target_page.rect, stream=image_bytes)
-            return compressed_document.tobytes(garbage=4, deflate=True)
+            return compressed_document.tobytes(garbage=4, deflate=True)  # type: ignore[no-any-return]
 
     @staticmethod
     def _verification_error(reasoning: str) -> EvidenceVerification:

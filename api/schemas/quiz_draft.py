@@ -2,26 +2,29 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from datetime import datetime
+
 
 class QuizDraftCreateRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    s3_key: str = Field(min_length=1)
-    file_name: str = Field(min_length=1)
-    file_size: int | None = Field(default=None, ge=1)
-    category_id: str | None = None
-    description: str | None = Field(default=None, max_length=1000)
-    prompt: str | None = Field(default=None, max_length=2000)
+    title: str = Field(min_length=1, max_length=200, description="Quiz title.")
+    s3_key: str = Field(min_length=1, description="S3 object key for the source document.")
+    file_name: str = Field(min_length=1, description="Original filename of the uploaded document.")
+    file_size: int | None = Field(default=None, ge=1, description="File size in bytes.")
+    category_id: str | None = Field(default=None, description="Optional category identifier.")
+    description: str | None = Field(default=None, max_length=1000, description="Optional quiz description.")
+    prompt: str | None = Field(default=None, max_length=2000, description="Custom AI prompt to guide question generation.")
 
 
 class QuizDraftPatchRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     category_id: str | None = None
-    questions: list[dict] | None = None
+    questions: list[dict[str, object]] | None = None
 
 
 class QuizDraftSubmitRequest(BaseModel):
@@ -50,12 +53,12 @@ class QuizDraftResponseData(BaseModel):
     pdf: QuizDraftPdfInfo = Field(default_factory=QuizDraftPdfInfo)
     status: str | None = None
     progress: QuizDraftProgress = Field(default_factory=QuizDraftProgress)
-    questions: list[dict[str, Any]] = Field(default_factory=list)
+    questions: list[dict[str, object]] = Field(default_factory=list)
     error: str | None = None
     submitted_quiz_id: str | None = None
-    created_at: Any = None
-    updated_at: Any = None
-    expires_at: Any = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    expires_at: datetime | None = None
 
 
 class QuizDraftSingleResponse(BaseModel):

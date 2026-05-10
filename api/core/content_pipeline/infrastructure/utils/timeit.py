@@ -9,16 +9,6 @@ from loguru import logger
 
 
 def timeit(func: Callable) -> Callable:
-    """
-    Decorator to measure function execution time.
-
-    Args:
-        func: Function to measure
-
-    Returns:
-        Wrapped function
-    """
-
     @wraps(func)
     def wrapper(*args, **kwargs) -> Any:
         start_time = time.time()
@@ -50,23 +40,15 @@ class Timer:
     """Context manager for timing code blocks."""
 
     def __init__(self, name: str = "block"):
-        """
-        Initialize timer.
-
-        Args:
-            name: Name of the timed block
-        """
         self.name = name
         self.start_time = None
         self.elapsed = None
 
     def __enter__(self):
-        """Start timer."""
         self.start_time = time.time()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Stop timer and log."""
         self.elapsed = time.time() - self.start_time
 
         if exc_type is None:

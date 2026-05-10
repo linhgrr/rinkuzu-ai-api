@@ -52,5 +52,5 @@ def compute_embedding_for_concepts(concepts: list[Concept], client: EmbeddingCli
             definition_embedding = client.embed_query(concept.definition)
             concept.definition_embedding = definition_embedding
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to compute embeddings for concept ID {}", concept.concept_id)

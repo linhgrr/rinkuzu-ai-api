@@ -12,6 +12,8 @@ PersistJobStateFn = Callable[
     [PipelineJob, PipelineStatus, str, float],
     Awaitable[None],
 ]
+SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
+LoadJobFn = Callable[[str], Awaitable[dict | None]]
 
 
 @dataclass(frozen=True)
@@ -19,7 +21,7 @@ class RelationDiscoveryResult:
     """Stable output contract for relation discovery implementations."""
 
     candidate_pairs: list[tuple[str, str]]
-    verified_relations: list[tuple[str, str, Any]]
+    verified_relations: list[tuple[str, str, float]]
 
 
 class RelationEngine(Protocol):

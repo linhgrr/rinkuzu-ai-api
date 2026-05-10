@@ -23,6 +23,7 @@ from api.core.shared.llm import (
 
 from .tutor_chat import (
     TUTOR_SYSTEM_PROMPT,
+    _extract_stream_chunk_text,
     build_tutor_prompt,
     validate_chat_input,
 )
@@ -31,16 +32,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 _MIN_EXPLANATION_LENGTH = 20
-
-
-def _extract_stream_chunk_text(chunk: Any) -> str:
-    text_accessor = getattr(chunk, "text", None)
-    if text_accessor is not None:
-        return str(text_accessor)
-    content = getattr(chunk, "content", "")
-    if isinstance(content, str):
-        return content
-    return extract_llm_text(content)
 
 
 def _resolve_quiz_tutor_model() -> str:
@@ -56,7 +47,7 @@ def _build_input_message(
     chat_history: list[dict[str, str]],
     question_image: str | None,
     option_images: list[str | None] | None,
-) -> list[Any]:
+) -> list[SystemMessage | HumanMessage]:
     prompt = build_tutor_prompt(
         question=question,
         options=options,
@@ -81,14 +72,14 @@ def _build_input_message(
 
     return [
         SystemMessage(content=TUTOR_SYSTEM_PROMPT),
-        HumanMessage(content=user_content),
+        HumanMessage(content=user_content),  # type: ignore[arg-type]
     ]
 
 
 def _request_quiz_tutor_text(
     *,
     model: str,
-    input_messages: list[Any],
+    input_messages: list[SystemMessage | HumanMessage],
     timeout_sec: float,
 ) -> str:
     llm = get_llm(
@@ -104,7 +95,7 @@ def _request_quiz_tutor_text(
 async def _open_quiz_tutor_stream(
     *,
     model: str,
-    input_messages: list[Any],
+    input_messages: list[SystemMessage | HumanMessage],
     timeout_sec: float,
 ) -> Any:
     max_retries, backoff_sec = resolve_retry_policy()
@@ -146,7 +137,7 @@ def generate_quiz_tutor_response(
     chat_history: list[dict[str, str]] | None = None,
     question_image: str | None = None,
     option_images: list[str | None] | None = None,
-) -> dict:
+) -> dict[str, bool | dict[str, str | int | None]]:
     if user_question:
         validation_error = validate_chat_input(user_question)
         if validation_error:

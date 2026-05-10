@@ -7,12 +7,14 @@ from .exercise_types import ExerciseType
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from .session import ExerciseRecord
+
 
 def normalize_text(value: str) -> str:
     return " ".join(value.strip().casefold().split())
 
 
-def serialize_answer_for_history(exercise: Any, answer: dict[str, Any]) -> Any:
+def serialize_answer_for_history(exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:
     exercise_type = getattr(exercise, "exercise_type", ExerciseType.MCQ)
     if exercise_type in {ExerciseType.MCQ, ExerciseType.MULTI_CORRECT}:
         choices = answer.get("choices") or []
@@ -37,10 +39,10 @@ def serialize_answer_for_history(exercise: Any, answer: dict[str, Any]) -> Any:
 
 
 def evaluate_answer(
-    exercise: Any,
+    exercise: ExerciseRecord,
     answer: dict[str, Any],
     *,
-    short_answer_grader: Callable[..., dict[str, Any]] | None = None,
+    short_answer_grader: Callable[..., dict[str, bool | str | int]] | None = None,
 ) -> tuple[bool, str]:
     exercise_type = getattr(exercise, "exercise_type", ExerciseType.MCQ)
 
@@ -125,6 +127,6 @@ def evaluate_answer(
         sample_answer=str(exercise.correct_answer or exercise.correct_option),
         student_answer=student_answer,
     )
-    exercise.explanation_correct = grading["explanation"]
-    exercise.explanation_incorrect = grading["explanation"]
+    exercise.explanation_correct = str(grading["explanation"])
+    exercise.explanation_incorrect = str(grading["explanation"])
     return bool(grading["is_correct"]), student_answer

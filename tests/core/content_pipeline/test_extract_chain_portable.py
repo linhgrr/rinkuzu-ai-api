@@ -13,7 +13,7 @@ from api.core.content_pipeline.infrastructure.llm.schemas import (
     materialize_concept_extraction,
 )
 from api.core.content_pipeline.infrastructure.processors.loaders.local_pdf_text_loader import (
-    LocalPdfTextLoader,
+    load_pdf,
 )
 
 
@@ -167,7 +167,7 @@ def test_local_pdf_text_loader_extracts_page_text(tmp_path):
     document.save(pdf_path)
     document.close()
 
-    payload = LocalPdfTextLoader().load(str(pdf_path))
+    payload = load_pdf(str(pdf_path))
 
     assert payload["metadata"]["source"] == "pymupdf"
     assert payload["metadata"]["page_count"] == 1

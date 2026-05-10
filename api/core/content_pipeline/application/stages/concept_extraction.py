@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable  # noqa: TC003
 from typing import Any
 
 import fitz
+from loguru import logger
 
 from api.config import get_settings
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
+from ..ports import PersistJobStateFn  # noqa: TC001
 from .execution import run_blocking_stage
-
-PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 
 
 def build_partial_concept_graph(concepts: list[Any]) -> dict[str, list[dict[str, str]]]:
@@ -94,7 +94,7 @@ def _resolve_extraction_timeout(file_path: str, job: PipelineJob, settings: Any)
     Falls back to content_pipeline_stage_timeout_sec if page count cannot be read.
     Formula: max(stage_timeout, n_pages * secs_per_page)
     """
-    from .execution import resolve_timeout_policy
+    from .execution import resolve_timeout_policy  # noqa: PLC0415
 
     _, default_stage_timeout = resolve_timeout_policy()
     fallback = default_stage_timeout or 300.0
@@ -102,14 +102,17 @@ def _resolve_extraction_timeout(file_path: str, job: PipelineJob, settings: Any)
     secs_per_page = float(getattr(settings, "content_pipeline_extraction_secs_per_page", 20.0))
     try:
         with fitz.open(file_path) as doc:
-            n_pages = doc.page_count
+            n_pages = int(doc.page_count)
         job.total_pages = n_pages
     except Exception:
+        logger.warning(
+            "[concept_extraction] Could not open PDF to count pages, using default timeout: {}",
+            fallback,
+        )
         return fallback
 
     if n_pages <= 0:
         return fallback
 
     dynamic = n_pages * secs_per_page
-    result = max(fallback, dynamic)
-    return result
+    return max(fallback, dynamic)

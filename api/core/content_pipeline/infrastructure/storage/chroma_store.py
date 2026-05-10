@@ -130,7 +130,7 @@ class ConceptChromaStore:
                 subject_id=subject_id,
             )
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error adding concepts to ChromaDB")
             raise
         else:
@@ -195,7 +195,7 @@ class ConceptChromaStore:
                 k=k,
             )
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error searching concepts")
             raise
         else:
@@ -222,7 +222,7 @@ class ConceptChromaStore:
                     "content": results["documents"][0] if results["documents"] else "",
                 }
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error retrieving concept {}", concept_id)
             return None
         else:
@@ -250,7 +250,7 @@ class ConceptChromaStore:
             else:
                 deleted_count = 0
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error deleting concepts for subject {}", subject_id)
             raise
         else:
@@ -294,24 +294,7 @@ class ConceptChromaStore:
 
             logger.info("Recreated collection: {}", self.collection_name)
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error resetting collection")
             raise
 
-    def as_retriever(self, **kwargs):
-        """
-        Chuyển vectorstore thành retriever để sử dụng với LangChain chains.
-
-        Args:
-            **kwargs: Arguments được pass vào retriever (search_type, search_kwargs, etc.)
-
-        Returns:
-            VectorStoreRetriever instance
-
-        Example:
-            retriever = store.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": 5, "filter": {"subject_id": "math"}}
-            )
-        """
-        return self.vectorstore.as_retriever(**kwargs)

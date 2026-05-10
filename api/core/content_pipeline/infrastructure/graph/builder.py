@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
-import networkx as nx  # type: ignore[import-untyped]
+import networkx as nx
 
 if TYPE_CHECKING:
     from api.core.content_pipeline.infrastructure.llm.schemas import Concept

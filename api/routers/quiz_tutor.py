@@ -6,13 +6,13 @@ import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from api.config import get_settings
 from api.core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
 from api.dependencies import get_current_user
-from api.rate_limit import is_admin_request, limiter
 from api.exceptions import AppError
+from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse
 from api.schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponseData
 
@@ -26,6 +26,7 @@ async def ask_ai_about_quiz(
     req: QuizTutorRequest,
     user_id: Annotated[str, Depends(get_current_user)],
 ):
+    """Ask an AI tutor for help understanding a quiz question (stream or single response)."""
     del request
     del user_id
 
@@ -61,6 +62,6 @@ async def ask_ai_about_quiz(
         data = QuizTutorResponseData.model_validate(payload["data"])
         return StandardResponse(data=data)
     except ValueError as exc:
-        raise AppError(str(exc), status_code=400)
+        raise AppError(str(exc), status_code=400) from exc
     except RuntimeError as exc:
-        raise AppError(str(exc), status_code=502)
+        raise AppError(str(exc), status_code=502) from exc

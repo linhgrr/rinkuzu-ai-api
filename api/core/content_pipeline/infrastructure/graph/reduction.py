@@ -1,7 +1,7 @@
 """Transitive reduction for knowledge graphs."""
 
 from loguru import logger
-import networkx as nx  # type: ignore[import-untyped]
+import networkx as nx
 
 
 def apply_transitive_reduction(graph: nx.DiGraph) -> nx.DiGraph:
@@ -22,7 +22,7 @@ def apply_transitive_reduction(graph: nx.DiGraph) -> nx.DiGraph:
 
     try:
         reduced_prereq = nx.transitive_reduction(prereq_graph)
-    except Exception as e:
+    except Exception:
         logger.exception("Error applying transitive reduction")
         return graph
 

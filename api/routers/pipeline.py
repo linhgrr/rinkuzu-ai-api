@@ -2,11 +2,13 @@
 routers/pipeline.py — Content pipeline endpoints.
 """
 
+from contextlib import suppress
 from pathlib import Path
 import time
 from typing import Annotated
 import uuid
 
+import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 import httpx
 from loguru import logger
@@ -30,8 +32,8 @@ from api.schemas import (
     PipelineProcessResponse,
     PipelineSessionCreateResponse,
 )
-
 from api.schemas.common import StandardResponse
+from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
@@ -42,10 +44,13 @@ _MAX_FILENAME_LENGTH = 200
 
 
 @router.get("/status", response_model=StandardResponse[dict])
+@limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def pipeline_status(
+    request: Request,
     availability: Annotated[dict, Depends(get_content_pipeline_availability)],
 ):
     """Check if content pipeline runtime modules are available."""
+    del request
     available = availability["available"]
     return {
         "success": True,
@@ -69,7 +74,7 @@ class ProcessDocumentRequest(BaseModel):
 
 @router.post("/process", response_model=StandardResponse[PipelineProcessResponse], status_code=202)
 @limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
-async def process_document(
+async def process_document(  # noqa: C901
     request: Request,
     req: ProcessDocumentRequest,
     user_id: Annotated[str, Depends(get_current_user)],
@@ -121,6 +126,17 @@ async def process_document(
         logger.exception("[PipelineRouter] Failed to download file from {}", req.file_url)
         raise HTTPException(status_code=502, detail="Failed to download file.") from None
 
+    # Verify the downloaded file is actually a PDF (magic bytes check).
+    try:
+        async with aiofiles.open(save_path, "rb") as _f:
+            _header = await _f.read(5)
+        if not _header.startswith(b"%PDF-"):
+            with suppress(OSError):
+                save_path.unlink()
+            raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF.")
+    except OSError:
+        raise HTTPException(status_code=500, detail="Failed to verify uploaded file.") from None
+
     try:
         job = await pipeline_service.start_job(
             file_path=str(save_path),
@@ -161,9 +177,15 @@ async def process_document(
 
 
 @router.get("/jobs/{job_id}", response_model=StandardResponse[PipelineJobStatusResponse])
-async def get_job_status(job_id: str, user_id: Annotated[str, Depends(get_current_user)]):
+@limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
+async def get_job_status(
+    request: Request,
+    job_id: PathID,
+    user_id: Annotated[str, Depends(get_current_user)],
+):
+    del request
     """Get pipeline job status and progress."""
-    job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
+    job_doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
@@ -234,8 +256,10 @@ async def get_job_status(job_id: str, user_id: Annotated[str, Depends(get_curren
 
 
 @router.post("/jobs/{job_id}/create-session", response_model=StandardResponse[PipelineSessionCreateResponse])
+@limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def create_session_from_pipeline(
-    job_id: str,
+    request: Request,
+    job_id: PathID,
     background_tasks: BackgroundTasks,
     max_steps: int = 9999,
     manager=Depends(get_session_manager),
@@ -243,7 +267,8 @@ async def create_session_from_pipeline(
     user_id: str = Depends(get_current_user),
 ):
     """Create a learning session from a completed pipeline job."""
-    job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
+    del request
+    job_doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 

@@ -17,7 +17,7 @@ from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from .config import get_settings
+from .config import Settings, get_settings
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
 from .core.content_pipeline.application.pipeline_service import PipelineService
 from .core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
@@ -96,8 +96,8 @@ def _init_pipeline(app: FastAPI) -> None:
         await pipeline_service_ref.persist_job_state(job, status, step, progress)
 
     pipeline_runner = PipelineRunner(
-        load_job=mongo_store.get_pipeline_repo().load,
-        save_job=mongo_store.get_pipeline_repo().save,
+        load_job=mongo_store.require_pipeline_repo().load,
+        save_job=mongo_store.require_pipeline_repo().save,
         persist_job_state=persist_pipeline_job_state,
         chunk_chroma_store=app.state.chunk_chroma_store,
         document_chunks_col=app.state.document_chunks_col,
@@ -122,7 +122,7 @@ def _init_pipeline(app: FastAPI) -> None:
         )
 
     pipeline_service = PipelineService(
-        save_job=mongo_store.get_pipeline_repo().save,
+        save_job=mongo_store.require_pipeline_repo().save,
         run_pipeline=run_content_pipeline,
     )
     # Rebind so the closure in persist_pipeline_job_state sees the real service.
@@ -132,13 +132,16 @@ def _init_pipeline(app: FastAPI) -> None:
     app.state.content_pipeline_service = pipeline_service
 
 
-def _log_llm_config(settings: Any) -> None:
-    from .core.content_pipeline.infrastructure.llm.openai_responses import normalize_openai_base_url
+def _log_llm_config(settings: Settings) -> None:
+    from .core.content_pipeline.infrastructure.llm.openai_responses import (  # noqa: PLC0415
+        normalize_openai_base_url,
+    )
 
     base_url = normalize_openai_base_url(settings.openai_base_url)
     model = settings.openai_model or "(not set)"
     api_key = settings.openai_api_key or ""
-    key_display = f"{api_key[:6]}…" if len(api_key) > 6 else ("(not set)" if not api_key else api_key)
+    _key_prefix_len = 6
+    key_display = f"{api_key[:_key_prefix_len]}…" if len(api_key) > _key_prefix_len else (api_key or "(not set)")
     exercise_model = settings.exercise_llm_model or model
     logger.info("[LLM] base_url    = {}", base_url)
     logger.info("[LLM] model       = {}", model)
@@ -154,8 +157,8 @@ def _purge_stale_uploads() -> None:
             try:
                 f.unlink()
                 purged += 1
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.warning("[Janitor] Failed to purge stale upload {}: {}", f.name, exc)
     if purged:
         logger.info("[Janitor] Purged {} stale upload(s) older than 24 h", purged)
 
@@ -214,6 +217,14 @@ app = FastAPI(
     title="ALSS-LEPC Adaptive Learning API",
     description="Adaptive Learning System with SAINT KT + D3QN RL",
     version="1.0.0",
+    contact={
+        "name": "Rinkuzu Team",
+        "url": "https://github.com/rinkuzu/rinkuzu-ai-api",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
     lifespan=lifespan,
     docs_url="/docs" if _is_dev else None,
     redoc_url="/redoc" if _is_dev else None,
@@ -283,7 +294,7 @@ def custom_openapi() -> dict[str, Any]:
     return openapi_schema
 
 
-app.openapi = custom_openapi
+app.openapi = custom_openapi  # type: ignore[method-assign]
 
 register_exception_handlers(app)
 app.state.limiter = limiter

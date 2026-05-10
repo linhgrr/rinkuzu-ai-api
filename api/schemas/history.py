@@ -2,8 +2,6 @@
 schemas/history.py — History-related Pydantic models.
 """
 
-from typing import Any
-
 from pydantic import BaseModel
 
 
@@ -66,7 +64,7 @@ class SubjectHistoryDetailResponse(BaseModel):
     concept_names: dict[str, str] = {}
     concept_mastery: list[float] = []
     bloom_mastery: list[list[float]] = []
-    exercise_history: list[dict[str, Any]] = []
+    exercise_history: list[dict[str, object]] = []
     created_at: float = 0
     updated_at: float = 0
     last_session_id: str | None = None

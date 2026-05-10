@@ -242,7 +242,7 @@ class OpenAIResponsesClient:
         try:
             payload = self._client.files.create(
                 file=(filename, io.BytesIO(pdf_bytes), "application/pdf"),
-                purpose=_FILE_PURPOSE,
+                purpose=_FILE_PURPOSE,  # type: ignore[arg-type]
             )
         except APIError as exc:
             message = _api_error_message(exc)
@@ -294,7 +294,7 @@ class OpenAIResponsesClient:
             response = self._client.responses.parse(
                 model=self.config.model,
                 instructions=instructions,
-                input=[{"role": "user", "content": input_blocks}],
+                input=[{"role": "user", "content": input_blocks}],  # type: ignore[list-item,misc]
                 text_format=text_format,
                 store=False,
             )

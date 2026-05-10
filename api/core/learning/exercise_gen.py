@@ -5,7 +5,7 @@ exercise_gen.py — LLM-powered exercise generation and answer evaluation.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from loguru import logger
 from pydantic import BaseModel
@@ -29,6 +29,8 @@ from .prompts import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from langchain_core.messages import BaseMessage
+
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
 
@@ -37,7 +39,7 @@ def _build_generation_spec(
     concept_definition: str,
     bloom_level: int,
     exercise_type: ExerciseType,
-    recent_same_concept_exercises: Sequence[dict[str, Any]] | None = None,
+    recent_same_concept_exercises: Sequence[dict[str, object]] | None = None,
     subject_context: str = "",
 ):
     spec = get_prompt_spec(exercise_type)
@@ -55,12 +57,10 @@ def _build_generation_spec(
 def _invoke_structured_llm(
     *,
     schema: type[StructuredModelT],
-    messages: list[Any],
+    messages: Sequence[BaseMessage],
     temperature: float = 0.3,
 ) -> StructuredModelT:
     model = _resolve_shared_llm_model(None)
-    if not model:
-        raise RuntimeError("OPENAI_MODEL (or EXERCISE_LLM_MODEL) is required.")
     structured_llm = get_structured_llm(
         schema,
         model=model,
@@ -79,9 +79,9 @@ def generate_exercise(
     concept_definition: str,
     bloom_level: int,
     mastery: float | None = None,
-    recent_same_concept_exercises: Sequence[dict[str, Any]] | None = None,
+    recent_same_concept_exercises: Sequence[dict[str, object]] | None = None,
     subject_context: str = "",
-) -> dict[str, Any] | None:
+) -> dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None:
     """Generate an exercise via LLM with a type selected from Bloom level and mastery."""
     exercise_type = select_exercise_type(bloom_level, mastery)
     logger.info(
@@ -110,7 +110,7 @@ def generate_exercise(
                 schema=schema,
                 messages=messages,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception(
                 "[LLM] ⚠ generate_exercise attempt {}/{} failed (will_retry={})",
                 attempt,
@@ -122,7 +122,7 @@ def generate_exercise(
             continue
         elapsed = time.time() - t0
         logger.info("[LLM] ✓ Exercise generated in {:.2f}s", elapsed)
-        return cast("dict[str, Any] | None", serializer(result))
+        return cast("dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None", serializer(result))
 
     elapsed = time.time() - t0
     logger.error("[LLM] ✗ generate_exercise failed after {:.2f}s", elapsed)
@@ -136,7 +136,7 @@ def evaluate_short_answer(
     rubric: Sequence[str],
     sample_answer: str,
     student_answer: str,
-) -> dict[str, Any]:
+) -> dict[str, bool | str | int]:
     """Evaluate short-answer exercises against a rubric using structured LLM output."""
     logger.info("[LLM-Grade] Short answer grading for concept: {}", concept_name)
     messages = build_grading_messages(
@@ -155,7 +155,7 @@ def evaluate_short_answer(
                 schema=ShortAnswerEvaluationOutput,
                 messages=messages,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception(
                 "[LLM] ⚠ evaluate_short_answer attempt {}/{} failed (will_retry={})",
                 attempt,
@@ -178,7 +178,7 @@ def generate_theory(
     concept_name: str,
     concept_definition: str,
     bloom_level: int = 2,
-) -> dict[str, Any] | None:
+) -> dict[str, str | list[str]] | None:
     """Generate a concise theory summary and examples via LLM using robust json schema."""
     logger.info("[LLM-Theory] Concept: {} | Bloom: {}", concept_name, bloom_level)
     messages = build_theory_messages(
@@ -189,7 +189,7 @@ def generate_theory(
 
     t0 = time.time()
     max_retries, backoff_sec = resolve_retry_policy()
-    fallback = {
+    fallback: dict[str, str | list[str]] = {
         "content": f"Lý thuyết cơ bản về {concept_name}: {concept_definition}",
         "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."],
     }
@@ -201,7 +201,7 @@ def generate_theory(
                 schema=TheoryOutput,
                 messages=messages,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception(
                 "[LLM] ⚠ generate_theory attempt {}/{} failed (will_retry={})",
                 attempt,

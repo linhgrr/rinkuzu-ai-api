@@ -129,19 +129,8 @@ class ChunkChromaStore:
                 k=k,
                 filter={"job_id": job_id},
             )
-            docs = [doc for doc, _score in results]
-            logger.debug(
-                "RAG retrieval returned {} chunks for query",
-                len(docs),
-                job_id=job_id,
-                k=k,
-            )
-        except Exception as exc:
+            return [doc for doc, _score in results]
+        except Exception:
             logger.exception("RAG retrieval failed")
             return []
-        else:
-            return docs
 
-    def as_retriever(self, **kwargs):
-        """Expose as LangChain retriever for future chain usage."""
-        return self.vectorstore.as_retriever(**kwargs)

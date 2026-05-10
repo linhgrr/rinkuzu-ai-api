@@ -6,15 +6,15 @@ This service owns request-independent job scheduling and persistence.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Coroutine  # noqa: TC003
 from pathlib import Path
 import time
-from typing import Protocol
+from typing import Any, Protocol
 import uuid
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
-SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
+from .ports import SaveJobFn  # noqa: TC001
 
 
 class RunPipelineFn(Protocol):
@@ -27,7 +27,7 @@ class RunPipelineFn(Protocol):
         *,
         apply_reduction: bool,
         page_batch_size: int,
-    ) -> Awaitable[None]: ...
+    ) -> Coroutine[Any, Any, None]: ...
 
 
 class PipelineService:
@@ -138,7 +138,7 @@ class PipelineService:
         apply_reduction: bool,
         page_batch_size: int,
     ) -> None:
-        task = asyncio.create_task(
+        task: asyncio.Task[None] = asyncio.create_task(
             self._run_pipeline(
                 job,
                 file_path,

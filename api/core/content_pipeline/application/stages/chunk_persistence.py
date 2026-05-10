@@ -82,11 +82,9 @@ async def persist_document_chunks(
                 len(docs_to_upsert),
                 job_id=job.job_id,
             )
-        except Exception as exc:
-            logger.warning(
-                "[persist_chunks] MongoDB write failed, continuing pipeline: {}",
-                exc,
-                job_id=job.job_id,
+        except Exception:
+            logger.exception(
+                "[persist_chunks] MongoDB write failed, continuing pipeline",
             )
 
     # ── ChromaDB ───────────────────────────────────────────────
@@ -102,11 +100,9 @@ async def persist_document_chunks(
                 len(ids),
                 job_id=job.job_id,
             )
-        except Exception as exc:
-            logger.warning(
-                "[persist_chunks] ChromaDB write failed, continuing pipeline: {}",
-                exc,
-                job_id=job.job_id,
+        except Exception:
+            logger.exception(
+                "[persist_chunks] ChromaDB write failed, continuing pipeline",
             )
 
     await persist_job_state(

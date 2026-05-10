@@ -8,7 +8,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from loguru import logger
-import networkx as nx  # type: ignore[import-untyped]
+import networkx as nx
 
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision
 from api.core.content_pipeline.infrastructure.prompts import CYCLE_REMOVAL_PROMPT
@@ -75,7 +75,7 @@ class CycleRemover:
 
             try:
                 cycles = list(nx.simple_cycles(dag_graph))
-            except Exception as e:
+            except Exception:
                 logger.exception("Error finding cycles")
                 break
 
@@ -142,7 +142,7 @@ class CycleRemover:
         """
         try:
             cycle_info = self._format_cycle_info(graph, cycle, cycle_edges)
-            logger.debug("Asking LLM to analyze cycle: {}", ' → '.join(cycle))
+            logger.debug("Asking LLM to analyze cycle: {}", " → ".join(cycle))
 
             logger.info("Cycle removal LLM Input: {}", cycle_info)
 
@@ -175,7 +175,7 @@ class CycleRemover:
                     graph.remove_edge(first_edge["source"], first_edge["target"])
                     edges_removed = 1
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error in LLM cycle removal")
             if cycle_edges:
                 first_edge = cycle_edges[0]

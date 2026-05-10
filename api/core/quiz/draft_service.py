@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 import uuid
 
-import fitz  # type: ignore[import-untyped]
+import fitz
 from loguru import logger
 
 from api.config import get_settings
@@ -135,19 +135,19 @@ class QuizDraftService:
             "expires_at": now + timedelta(hours=EXPIRY_HOURS),
         }
 
-        created = await mongo_store.get_quiz_draft_repo().create(doc)
+        created = await mongo_store.require_quiz_draft_repo().create(doc)
         if not created:
             raise QuizDraftDependencyError("Failed to create draft.")
         return created
 
     async def get_draft(self, draft_id: str, user_id: str) -> dict[str, Any]:
-        draft = await mongo_store.get_quiz_draft_repo().load_for_user(draft_id, user_id)
+        draft = await mongo_store.require_quiz_draft_repo().load_for_user(draft_id, user_id)
         if not draft:
             raise QuizDraftNotFoundError("Draft not found.")
         return draft
 
     async def list_drafts(self, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
-        return await mongo_store.get_quiz_draft_repo().list_recent_for_user(user_id, limit)
+        return await mongo_store.require_quiz_draft_repo().list_recent_for_user(user_id, limit)
 
     async def patch_draft(
         self,
@@ -172,13 +172,13 @@ class QuizDraftService:
         if not updates:
             return existing
 
-        updated = await mongo_store.get_quiz_draft_repo().update_for_user(draft_id, user_id, updates)
+        updated = await mongo_store.require_quiz_draft_repo().update_for_user(draft_id, user_id, updates)
         if not updated:
             raise QuizDraftNotFoundError("Draft not found.")
         return updated
 
     async def delete_draft(self, draft_id: str, user_id: str) -> dict[str, Any]:
-        deleted = await mongo_store.get_quiz_draft_repo().delete_for_user(draft_id, user_id)
+        deleted = await mongo_store.require_quiz_draft_repo().delete_for_user(draft_id, user_id)
         if not deleted:
             raise QuizDraftNotFoundError("Draft not found.")
 
@@ -187,7 +187,7 @@ class QuizDraftService:
 
     async def mark_submitted(self, draft_id: str, user_id: str, quiz_id: str) -> dict[str, Any]:
         existing = await self.get_draft(draft_id, user_id)
-        updated = await mongo_store.get_quiz_draft_repo().update_for_user(
+        updated = await mongo_store.require_quiz_draft_repo().update_for_user(
             draft_id,
             user_id,
             {
@@ -208,7 +208,7 @@ class QuizDraftService:
             if draft.get("status") in {"cancelled", "submitted", "completed"}:
                 return
 
-            await mongo_store.get_quiz_draft_repo().update_for_user(
+            await mongo_store.require_quiz_draft_repo().update_for_user(
                 draft_id,
                 user_id,
                 {"status": "processing", "error": None},
@@ -236,11 +236,11 @@ class QuizDraftService:
                     "No quiz questions extracted from PDF."
                 )
 
-            latest = await mongo_store.get_quiz_draft_repo().load_for_user(draft_id, user_id)
+            latest = await mongo_store.require_quiz_draft_repo().load_for_user(draft_id, user_id)
             if not latest or latest.get("status") in {"cancelled", "submitted"}:
                 return
 
-            await mongo_store.get_quiz_draft_repo().update_for_user(
+            await mongo_store.require_quiz_draft_repo().update_for_user(
                 draft_id,
                 user_id,
                 {
@@ -260,7 +260,7 @@ class QuizDraftService:
             )
 
     async def _mark_failed(self, draft_id: str, user_id: str, message: str) -> None:
-        await mongo_store.get_quiz_draft_repo().update_for_user(
+        await mongo_store.require_quiz_draft_repo().update_for_user(
             draft_id,
             user_id,
             {

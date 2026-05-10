@@ -24,9 +24,18 @@ def _normalize_openai_base_url(url: str) -> str:
     return f"{raw}/v1"
 
 
-def resolve_llm_api_key() -> str | None:
+class LLMConfigurationError(ValueError):
+    """Raised when required LLM settings are missing."""
+
+
+def resolve_llm_api_key() -> str:
     settings = get_settings()
-    return settings.openai_api_key or settings.gemini_api_key or settings.google_api_key
+    key = settings.openai_api_key
+    if not key:
+        raise LLMConfigurationError(
+            "OPENAI_API_KEY is not set. Configure it via environment or .env file."
+        )
+    return key
 
 
 def resolve_retry_policy() -> tuple[int, float]:
@@ -48,22 +57,32 @@ def _ngrok_headers() -> dict[str, str]:
 
 
 def get_llm(temperature: float = 0.0, **kwargs: Any) -> ChatOpenAI:
-    """Create a configured LangChain chat model for the current settings."""
+    """Create a configured LangChain chat model for the current settings.
+
+    Raises LLMConfigurationError if required settings (api_key, model) are missing.
+    """
     settings = get_settings()
-    base_url_raw = kwargs.pop("base_url", None) or settings.openai_base_url or "http://localhost:6969"
-    base_url = _normalize_openai_base_url(base_url_raw)
-    model = kwargs.pop("model", None) or settings.openai_model or "gemini-3.0-pro"
+
+    base_url_raw = kwargs.pop("base_url", None) or settings.openai_base_url
+    base_url = _normalize_openai_base_url(base_url_raw) if base_url_raw else None
+
+    model = kwargs.pop("model", None) or settings.openai_model
+    if not model:
+        raise LLMConfigurationError(
+            "OPENAI_MODEL is not set. Configure it via environment or .env file."
+        )
+
     api_key = kwargs.pop("api_key", None) or resolve_llm_api_key()
     timeout = kwargs.pop("timeout", settings.llm_timeout_sec)
     max_retries = kwargs.pop("max_retries", settings.llm_max_retries)
 
     return ChatOpenAI(
-        base_url=base_url,
         model=model,
         api_key=api_key,
         temperature=temperature,
         max_retries=max_retries,
         timeout=timeout,
+        **({"base_url": base_url} if base_url else {}),
         default_headers=_ngrok_headers(),
         **kwargs,
     )
@@ -82,7 +101,7 @@ def get_structured_llm(
     return llm.with_structured_output(schema, method=method, strict=strict)
 
 
-def serialize_responses_sse_event(event: Any) -> bytes:
+def serialize_responses_sse_event(event: object) -> bytes:
     if hasattr(event, "model_dump_json"):
         payload = event.model_dump_json(exclude_none=True)
     elif hasattr(event, "to_json"):
@@ -92,12 +111,17 @@ def serialize_responses_sse_event(event: Any) -> bytes:
     return f"data: {payload}\n\n".encode()
 
 
-def _resolve_shared_llm_model(explicit_model: str | None) -> str | None:
+def _resolve_shared_llm_model(explicit_model: str | None) -> str:
     settings = get_settings()
-    return settings.exercise_llm_model or explicit_model or settings.openai_model
+    model = settings.exercise_llm_model or explicit_model or settings.openai_model
+    if not model:
+        raise LLMConfigurationError(
+            "OPENAI_MODEL is not set. Configure it via environment or .env file."
+        )
+    return model
 
 
-def extract_llm_text(content: Any) -> str:
+def extract_llm_text(content: object) -> str:
     if isinstance(content, str):
         return content.strip()
     if isinstance(content, list):

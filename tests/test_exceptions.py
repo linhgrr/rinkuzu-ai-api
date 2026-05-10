@@ -33,7 +33,11 @@ def test_http_exception_is_normalized():
     response = client.get("/http")
 
     assert response.status_code == 418
-    assert response.json() == {"detail": "teapot", "error": "teapot"}
+    payload = response.json()
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "HTTPException"
+    assert payload["error"]["detail"] == "teapot"
+    assert payload["error"]["message"] == "HTTP error occurred"
 
 
 def test_app_error_is_normalized():
@@ -42,7 +46,11 @@ def test_app_error_is_normalized():
     response = client.get("/app")
 
     assert response.status_code == 409
-    assert response.json() == {"detail": "app boom", "error": "app boom"}
+    payload = response.json()
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "AppError"
+    assert payload["error"]["detail"] == "app boom"
+    assert payload["error"]["message"] == "Application error"
 
 
 def test_validation_error_is_normalized():
@@ -52,10 +60,11 @@ def test_validation_error_is_normalized():
 
     assert response.status_code == 422
     payload = response.json()
-    assert payload["detail"] == "Invalid request"
-    assert payload["error"] == "Invalid request"
-    assert isinstance(payload["meta"], list)
-    assert payload["meta"]
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "ValidationError"
+    assert payload["error"]["message"] == "Invalid request body"
+    assert isinstance(payload["error"]["meta"], list)
+    assert payload["error"]["meta"]
 
 
 def test_unexpected_error_is_sanitized():
@@ -64,7 +73,8 @@ def test_unexpected_error_is_sanitized():
     response = client.get("/unexpected")
 
     assert response.status_code == 500
-    assert response.json() == {
-        "detail": "Internal server error",
-        "error": "Internal server error",
-    }
+    payload = response.json()
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "InternalServerError"
+    assert payload["error"]["detail"] is None
+    assert payload["error"]["message"] == "Internal server error"

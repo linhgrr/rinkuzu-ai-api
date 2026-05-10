@@ -516,7 +516,7 @@ class AdaptiveLearningEnv(gym.Env):
             self._compute_mastery_vector()
         return self._current_mastery.copy()
 
-    def get_session_stats(self) -> dict:
+    def get_session_stats(self) -> dict[str, int | float | dict[int, int]]:
         """Return current session statistics."""
         return {
             "step": self._step_count,

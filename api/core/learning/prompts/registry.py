@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from api.core.learning.exercise_types import (
     ExerciseBaseOutput,
@@ -28,7 +28,7 @@ class ExercisePromptSpec:
     instruction: str
     negative_constraints: str
     explanation_guidance: str
-    serializer: Callable[[ExerciseBaseOutput], dict[str, Any]]
+    serializer: Callable[[ExerciseBaseOutput], dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]]]
 
 
 PROMPT_REGISTRY: dict[ExerciseType, ExercisePromptSpec] = {

@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     rate_limit_tutor_chat: str = "30/minute"
     rate_limit_pipeline: str = "5/minute"
     rate_limit_ask_ai: str = "20/minute"
+    rate_limit_session: str = "30/minute"
+    rate_limit_quiz_drafts: str = "20/minute"
+    rate_limit_history: str = "30/minute"
 
     # ── Download safety ─────────────────────────────────────
     # empty list = allow any non-private HTTPS host

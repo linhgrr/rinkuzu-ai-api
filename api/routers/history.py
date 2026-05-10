@@ -4,13 +4,13 @@ history.py — Endpoints for querying persisted subject progress and pipeline jo
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from api.config import get_settings
 from api.core.shared import mongo_store
 from api.dependencies import get_current_user
 from api.exceptions import PipelineNotFoundError
-from api.schemas.common import StandardResponse
+from api.rate_limit import is_admin_request, limiter
 from api.schemas import (
     DeleteSubjectResponse,
     PipelineJobHistoryListResponse,
@@ -18,6 +18,8 @@ from api.schemas import (
     SubjectHistoryListResponse,
     SubjectProgressListResponse,
 )
+from api.schemas.common import StandardResponse
+from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 _MASTERED_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
@@ -112,12 +114,15 @@ def _build_subject_progress_summary(
 
 
 @router.get("/subjects", response_model=StandardResponse[SubjectHistoryListResponse])
+@limiter.limit(get_settings().rate_limit_history, exempt_when=is_admin_request)
 async def list_subjects(
+    request: Request,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     user_id: str = Depends(get_current_user),
 ):
+    del request
     """List all completed pipeline jobs (= subjects) enriched with mastery stats."""
-    subjects = await mongo_store.get_pipeline_repo().list_recent(
+    subjects = await mongo_store.require_pipeline_repo().list_recent(
         limit=limit,
         user_id=user_id,
         status="completed",
@@ -127,7 +132,7 @@ async def list_subjects(
         return {"success": True, "data": {"subjects": [], "count": 0}}
 
     job_ids = [s["job_id"] for s in subjects]
-    progress_map = await mongo_store.get_subject_progress_repo().load_many_for_user(job_ids, user_id)
+    progress_map = await mongo_store.require_subject_progress_repo().load_many_for_user(job_ids, user_id)
 
     for subj in subjects:
         jid = subj["job_id"]
@@ -149,14 +154,17 @@ async def list_subjects(
 
 
 @router.get("/subjects/progress", response_model=StandardResponse[SubjectProgressListResponse])
+@limiter.limit(get_settings().rate_limit_history, exempt_when=is_admin_request)
 async def list_subject_progress(
+    request: Request,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     user_id: str = Depends(get_current_user),
 ):
+    del request
     """List recent subject-level progress records."""
-    progress_docs = await mongo_store.get_subject_progress_repo().list_recent(limit=limit, user_id=user_id)
+    progress_docs = await mongo_store.require_subject_progress_repo().list_recent(limit=limit, user_id=user_id)
     job_ids = [job_id for doc in progress_docs if isinstance((job_id := doc.get("job_id")), str)]
-    job_map = await mongo_store.get_pipeline_repo().load_many_for_user(
+    job_map = await mongo_store.require_pipeline_repo().load_many_for_user(
         job_ids,
         user_id,
         projection={"_id": 0, "job_id": 1, "filename": 1, "subject_id": 1},
@@ -171,47 +179,62 @@ async def list_subject_progress(
 
 
 @router.get("/subjects/{job_id}", response_model=StandardResponse[SubjectHistoryDetailResponse])
+@limiter.limit(get_settings().rate_limit_history, exempt_when=is_admin_request)
 async def get_subject_history(
-    job_id: str,
+    request: Request,
+    job_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
 ):
+    del request
     """Get subject-level learning history for one pipeline job."""
-    job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
+    job_doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
-    progress_doc = await mongo_store.get_subject_progress_repo().load_for_user(job_id, user_id)
+    progress_doc = await mongo_store.require_subject_progress_repo().load_for_user(job_id, user_id)
     return {"success": True, "data": _build_subject_progress_detail(job_doc, progress_doc)}
 
 
 @router.get("/pipeline-jobs", response_model=StandardResponse[PipelineJobHistoryListResponse])
+@limiter.limit(get_settings().rate_limit_history, exempt_when=is_admin_request)
 async def list_pipeline_jobs(
+    request: Request,
     limit: Annotated[int, Query(ge=1, le=500)] = 20,
     user_id: str = Depends(get_current_user),
 ):
+    del request
     """List recent pipeline jobs."""
-    jobs = await mongo_store.get_pipeline_repo().list_recent(limit=limit, user_id=user_id)
+    jobs = await mongo_store.require_pipeline_repo().list_recent(limit=limit, user_id=user_id)
     return {"success": True, "data": {"jobs": jobs, "count": len(jobs)}}
 
 
 @router.get("/pipeline-jobs/{job_id}", response_model=StandardResponse[dict])
-async def get_pipeline_job(job_id: str, user_id: Annotated[str, Depends(get_current_user)]):
+@limiter.limit(get_settings().rate_limit_history, exempt_when=is_admin_request)
+async def get_pipeline_job(
+    request: Request,
+    job_id: PathID,
+    user_id: Annotated[str, Depends(get_current_user)],
+):
+    del request
     """Get full pipeline job result."""
-    doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
+    doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
     if not doc:
         raise PipelineNotFoundError(job_id)
     return {"success": True, "data": doc}
 
 
 @router.delete("/subjects/{job_id}", response_model=StandardResponse[DeleteSubjectResponse])
+@limiter.limit(get_settings().rate_limit_history, exempt_when=is_admin_request)
 async def delete_subject(
-    job_id: str,
+    request: Request,
+    job_id: PathID,
     user_id: str = Depends(get_current_user),
     *,
     delete_sessions: bool = True,
 ):
+    del request
     """Delete a subject (pipeline job) and optionally its sessions."""
-    result = await mongo_store.get_pipeline_repo().delete_for_user(
+    result = await mongo_store.require_pipeline_repo().delete_for_user(
         job_id=job_id,
         user_id=user_id,
         delete_sessions=delete_sessions,

@@ -5,7 +5,7 @@ exercise_types.py — Shared exercise type schemas, selection, and serialization
 from collections.abc import Sequence
 from enum import StrEnum
 import secrets
-from typing import Any, Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -146,7 +146,7 @@ def shuffle_ordering_items(correct_order: Sequence[str], max_attempts: int = 5) 
     return items[1:] + items[:1]
 
 
-def serialize_exercise_result(result: ExerciseBaseOutput) -> dict[str, Any]:
+def serialize_exercise_result(result: ExerciseBaseOutput) -> dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]]:
     if isinstance(result, MCQOutput):
         return {
             "exercise_type": result.exercise_type,
@@ -189,7 +189,7 @@ def serialize_exercise_result(result: ExerciseBaseOutput) -> dict[str, Any]:
         }
 
     if isinstance(result, MultiCorrectOutput):
-        correct_options = sorted(set(result.correct_options))
+        correct_options = cast("list[str]", sorted(set(result.correct_options)))
         return {
             "exercise_type": result.exercise_type,
             "question": result.question,

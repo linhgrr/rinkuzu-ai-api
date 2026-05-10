@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import json
 import time
@@ -13,10 +12,8 @@ from loguru import logger
 from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
+from ..ports import PersistJobStateFn, SaveJobFn  # noqa: TC001
 from .execution import run_blocking_stage
-
-PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
-SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
 
 
 @dataclass(frozen=True)
@@ -67,7 +64,7 @@ async def upload_result_cache(
             stage_name="s3_cache_upload",
         )
         logger.info("[Pipeline] Uploaded result to S3 cache {}", cache_key)
-    except Exception as exc:
+    except Exception:
         logger.exception("[Pipeline] Failed to save S3 cache")
 
 

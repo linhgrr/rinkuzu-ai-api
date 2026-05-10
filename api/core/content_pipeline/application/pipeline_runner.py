@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +16,7 @@ from api.core.content_pipeline.infrastructure.runtime import (
     get_s3_client,
 )
 
+from .ports import LoadJobFn, PersistJobStateFn, SaveJobFn  # noqa: TC001
 from .stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
@@ -43,10 +43,6 @@ from .stages.result_assembly import (
     serialize_concepts,
     serialize_prerequisite_edges,
 )
-
-PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
-SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
-LoadJobFn = Callable[[str], Awaitable[dict | None]]
 
 
 def populate_job_metrics_from_result(job: PipelineJob) -> None:
@@ -149,7 +145,7 @@ class PipelineRunner:
                 chunks = await load_document_chunks(
                     job,
                     file_path=file_path,
-                    load_and_chunk=bindings.file_loader_factory.load_and_chunk,
+                    load_and_chunk=bindings.file_loader_factory,
                     persist_job_state=self._persist_job_state,
                 )
                 job.page_batch_size = page_batch_size
@@ -180,12 +176,12 @@ class PipelineRunner:
                 if job.batch_count > 0 and (
                     failure_ratio > settings.content_pipeline_batch_failure_ratio_threshold
                 ):
-                    raise RuntimeError(
+                    raise RuntimeError(  # noqa: TRY301
                         "Too many PDF concept-extraction batches failed "
                         f"({job.failed_batch_count}/{job.batch_count})."
                     )
                 if not all_concepts:
-                    raise RuntimeError("No concepts were extracted from the document.")
+                    raise RuntimeError("No concepts were extracted from the document.")  # noqa: TRY301
 
                 model_name, batch_size = resolve_embedding_settings()
                 await compute_concept_embeddings(

@@ -2,26 +2,11 @@
 schemas/pipeline.py — Pipeline-related Pydantic models.
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-PipelineStatus = Literal[
-    "pending",
-    "queued",
-    "loading",
-    "chunking",
-    "extracting",
-    "embedding",
-    "merging",
-    "ranking",
-    "verifying",
-    "building_graph",
-    "optimizing",
-    "completed",
-    "failed",
-    "cancelled",
-]
+from api.core.content_pipeline.domain.jobs import PipelineStatus
 
 
 class PipelineProcessResponse(BaseModel):
@@ -74,7 +59,7 @@ class PipelineJobResultResponse(BaseModel):
     graph: PipelineGraphResponse = Field(
         default_factory=lambda: PipelineGraphResponse(nodes=[], edges=[])
     )
-    stats: dict[str, Any] = Field(default_factory=dict)
+    stats: dict[str, object] = Field(default_factory=dict)
     n_concepts: int = 0
 
 
@@ -93,7 +78,7 @@ class PipelineJobStatusResponse(BaseModel):
     concepts_extracted: int = 0
     concepts_after_merge: int = 0
     relations_verified: int = 0
-    graph_stats: dict[str, Any] = Field(default_factory=dict)
+    graph_stats: dict[str, object] = Field(default_factory=dict)
     error_message: str | None = None
     error_code: str | None = None
     user_message: str | None = None

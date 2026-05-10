@@ -2,8 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 
+from api.config import get_settings
 from api.core.quiz.draft_service import (
     QuizDraftDependencyError,
     QuizDraftNotFoundError,
@@ -12,12 +13,14 @@ from api.core.quiz.draft_service import (
     public_draft,
 )
 from api.dependencies import get_current_user
+from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse
 from api.schemas.quiz_draft import (
     QuizDraftCreateRequest,
     QuizDraftPatchRequest,
     QuizDraftSubmitRequest,
 )
+from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/quiz/drafts", tags=["quiz-drafts"])
 
@@ -33,11 +36,15 @@ def _service_error_to_http(exc: Exception) -> HTTPException:
 
 
 @router.post("", response_model=StandardResponse[dict])
+@limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def create_quiz_draft(
+    request: Request,
     req: QuizDraftCreateRequest,
     background_tasks: BackgroundTasks,
     user_id: Annotated[str, Depends(get_current_user)],
 ):
+    """Create a new quiz draft and enqueue AI processing."""
+    del request
     service = QuizDraftService()
     try:
         draft = await service.create_draft(req, user_id)
@@ -49,17 +56,28 @@ async def create_quiz_draft(
 
 
 @router.get("", response_model=StandardResponse[dict])
+@limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def list_quiz_drafts(
+    request: Request,
     user_id: Annotated[str, Depends(get_current_user)],
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ):
+    """List recent quiz drafts for the authenticated user."""
+    del request
     service = QuizDraftService()
     drafts = await service.list_drafts(user_id, limit)
     return {"success": True, "data": {"drafts": [public_draft(draft) for draft in drafts]}}
 
 
 @router.get("/{draft_id}", response_model=StandardResponse[dict])
-async def get_quiz_draft(draft_id: str, user_id: Annotated[str, Depends(get_current_user)]):
+@limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
+async def get_quiz_draft(
+    request: Request,
+    draft_id: PathID,
+    user_id: Annotated[str, Depends(get_current_user)],
+):
+    """Retrieve a single quiz draft by ID."""
+    del request
     service = QuizDraftService()
     try:
         draft = await service.get_draft(draft_id, user_id)
@@ -69,11 +87,15 @@ async def get_quiz_draft(draft_id: str, user_id: Annotated[str, Depends(get_curr
 
 
 @router.patch("/{draft_id}", response_model=StandardResponse[dict])
+@limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def patch_quiz_draft(
-    draft_id: str,
+    request: Request,
+    draft_id: PathID,
     req: QuizDraftPatchRequest,
     user_id: Annotated[str, Depends(get_current_user)],
 ):
+    """Update fields of an existing quiz draft."""
+    del request
     service = QuizDraftService()
     try:
         draft = await service.patch_draft(draft_id, user_id, req)
@@ -83,7 +105,14 @@ async def patch_quiz_draft(
 
 
 @router.delete("/{draft_id}", response_model=StandardResponse[dict])
-async def delete_quiz_draft(draft_id: str, user_id: Annotated[str, Depends(get_current_user)]):
+@limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
+async def delete_quiz_draft(
+    request: Request,
+    draft_id: PathID,
+    user_id: Annotated[str, Depends(get_current_user)],
+):
+    """Delete a quiz draft owned by the authenticated user."""
+    del request
     service = QuizDraftService()
     try:
         draft = await service.delete_draft(draft_id, user_id)
@@ -93,11 +122,15 @@ async def delete_quiz_draft(draft_id: str, user_id: Annotated[str, Depends(get_c
 
 
 @router.post("/{draft_id}/submit", response_model=StandardResponse[dict])
+@limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def submit_quiz_draft(
-    draft_id: str,
+    request: Request,
+    draft_id: PathID,
     req: QuizDraftSubmitRequest,
     user_id: Annotated[str, Depends(get_current_user)],
 ):
+    """Finalize a quiz draft and persist it as a published quiz."""
+    del request
     service = QuizDraftService()
     try:
         draft = await service.mark_submitted(draft_id, user_id, req.quiz_id)

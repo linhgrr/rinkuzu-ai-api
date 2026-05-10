@@ -2,7 +2,7 @@
 schemas/exercise.py — Exercise-related Pydantic models.
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,7 +60,7 @@ class ExerciseResponse(BaseModel):
 
     step: int
     max_steps: int
-    theory: dict[str, Any] | None = None
+    theory: TheoryResponse | None = None
     recommendation_reason: RecommendationReason | None = None
 
 
@@ -88,7 +88,7 @@ class SubmitAnswerResponse(BaseModel):
     avg_mastery: float
     step: int
     session_completed: bool
-    stats: dict[str, Any]
+    stats: dict[str, int | float]
 
 
 class TutorChatMessage(BaseModel):

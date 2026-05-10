@@ -23,7 +23,7 @@ from .graph.reduction import apply_transitive_reduction
 from .llm.extract_chain import ExtractionChain
 from .llm.postprocess import postprocess_concepts
 from .merge.name_merge import merge_by_name
-from .processors.factory import FileLoaderFactory
+from .processors.factory import load_and_chunk_pdf
 
 if TYPE_CHECKING:
     from api.core.content_pipeline.application.ports import RelationEngine
@@ -156,7 +156,7 @@ def _build_saint_text_model():
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:
     return ContentProcessorBindings(
-        file_loader_factory=FileLoaderFactory,
+        file_loader_factory=load_and_chunk_pdf,
         extraction_chain_cls=ExtractionChain,
         postprocess_concepts=postprocess_concepts,
         embedding_client_factory=_build_embedding_client,

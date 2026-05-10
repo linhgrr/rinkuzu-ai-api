@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import time
-from typing import Literal
+from typing import Literal, cast
 
 from langchain_core.messages import HumanMessage
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
-from api.config import get_settings
+from api.config import Settings, get_settings
 from api.core.shared.llm import get_structured_llm, resolve_llm_api_key
 
 MAX_PDF_BYTES = 50 * 1024 * 1024
@@ -89,14 +89,14 @@ class ExtractedQuizQuestion(BaseModel):
             raise ValueError("correctIndexes contains an out-of-range value")
         return self
 
-    def to_public_dict(self) -> dict:
-        payload = {
+    def to_public_dict(self) -> dict[str, str | int | list[str] | list[int]]:
+        payload: dict[str, str | int | list[str] | list[int]] = {
             "question": self.question,
             "type": self.type,
             "options": self.options,
         }
         if self.type == "single":
-            payload["correctIndex"] = self.correct_index
+            payload["correctIndex"] = cast("int", self.correct_index)
         else:
             payload["correctIndexes"] = self.correct_indexes
         return payload
@@ -120,7 +120,7 @@ async def invoke_pdf_extract_llm(
     filename: str,
     prompt: str,
     model: str,
-) -> list[dict]:
+) -> list[dict[str, str | int | list[str] | list[int]]]:
     timeout_sec = max(1.0, float(get_settings().llm_timeout_sec))
 
     logger.info(
@@ -156,7 +156,7 @@ def _invoke_pdf_extract_llm_sync(
     prompt: str,
     model: str,
     timeout_sec: float,
-) -> list[dict]:
+) -> list[dict[str, str | int | list[str] | list[int]]]:
     structured_llm = get_structured_llm(
         ExtractedQuizQuestionList,
         model=model,
@@ -187,7 +187,7 @@ def _invoke_pdf_extract_llm_sync(
     return [question.to_public_dict() for question in response.root]
 
 
-def validate_quiz_extract_dependencies(settings, s3_client) -> None:
+def validate_quiz_extract_dependencies(settings: Settings, s3_client: object) -> None:
     """Raise ValueError when external dependencies are not configured."""
     if not s3_client or not settings.object_storage_bucket:
         raise ValueError("S3 is not configured.")

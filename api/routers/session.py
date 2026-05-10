@@ -5,7 +5,7 @@ Session router — Session lifecycle endpoints.
 import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from api.config import get_settings
@@ -20,8 +20,12 @@ from api.dependencies import (
     get_session_manager,
     get_session_service,
 )
-from api.exceptions import ExerciseGenerationError, SessionCompletedError, SessionNotFoundError
-from api.schemas.common import StandardResponse
+from api.exceptions import (
+    AppError,
+    ExerciseGenerationError,
+    SessionCompletedError,
+    SessionNotFoundError,
+)
 from api.rate_limit import is_admin_request, limiter
 from api.schemas import (
     ExerciseResponse,
@@ -35,6 +39,8 @@ from api.schemas import (
     TutorChatRequest,
     TutorChatResponse,
 )
+from api.schemas.common import StandardResponse
+from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -125,13 +131,17 @@ async def _build_rag_context(
 
 
 @router.post("/start", response_model=StandardResponse[SessionCreateResponse])
+@limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
 async def start_session(
+    request: Request,
     req: SessionCreateRequest,
     background_tasks: BackgroundTasks,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
+    """Create a new adaptive learning session."""
+    del request
     session = await manager.create_session(max_steps=req.max_steps, user_id=user_id)
 
     id_to_concept = {v: k for k, v in session.concept_map.items()}
@@ -162,12 +172,16 @@ async def start_session(
 
 
 @router.post("/{session_id}/next-concept", response_model=StandardResponse[NextConceptResponse])
+@limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
 async def next_concept(
-    session_id: str,
+    request: Request,
+    session_id: PathID,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
+    """Recommend the next concept to study based on mastery and prerequisites."""
+    del request
     session = await _resolve_user_session(manager, session_id, user_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
@@ -180,12 +194,16 @@ async def next_concept(
 
 
 @router.get("/{session_id}/theory", response_model=StandardResponse[TheoryResponse])
+@limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
 async def theory(
-    session_id: str,
+    request: Request,
+    session_id: PathID,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
+    """Retrieve theory content for the current pending concept."""
+    del request
     session = await _resolve_user_session(manager, session_id, user_id)
 
     theory_data = await exercise_svc.get_theory(session)
@@ -196,13 +214,17 @@ async def theory(
 
 
 @router.post("/{session_id}/exercise", response_model=StandardResponse[ExerciseResponse])
+@limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
 async def generate_exercise(
-    session_id: str,
+    request: Request,
+    session_id: PathID,
     background_tasks: BackgroundTasks,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
+    """Generate an exercise for the current concept at the appropriate Bloom level."""
+    del request
     session = await _resolve_user_session(manager, session_id, user_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
@@ -239,14 +261,18 @@ async def generate_exercise(
 
 
 @router.post("/{session_id}/submit", response_model=StandardResponse[SubmitAnswerResponse])
+@limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
 async def submit_answer(
-    session_id: str,
+    request: Request,
+    session_id: PathID,
     req: SubmitAnswerRequest,
     background_tasks: BackgroundTasks,
     manager=Depends(get_session_manager),
     exercise_svc=Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ):
+    """Evaluate the user's answer and update BKT mastery estimates."""
+    del request
     session = await _resolve_user_session(manager, session_id, user_id)
 
     result = await exercise_svc.submit_answer(session, req.answer.model_dump(), background_tasks)
@@ -280,12 +306,13 @@ def _resolve_exercise_options(exercise) -> list[str]:
 @limiter.limit(get_settings().rate_limit_tutor_chat, exempt_when=is_admin_request)
 async def chat_about_exercise(
     request: Request,
-    session_id: str,
+    session_id: PathID,
     req: TutorChatRequest,
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
     chunk_store=Depends(get_chunk_chroma_store),
 ):
+    """Chat with an AI tutor about the current exercise, with optional RAG context."""
     del request
     session = await _resolve_user_session(manager, session_id, user_id)
     exercise = session.current_exercise or (
@@ -353,22 +380,24 @@ async def chat_about_exercise(
             user_question=req.user_question,
             assistant_response=explanation,
         )
-        return {"success": True, "data": {"explanation": explanation}}
     except ValueError as exc:
         logger.warning("[SessionRouter] Tutor chat ValueError: {}", exc)
-        raise AppError("Invalid tutor chat request", status_code=400)
+        raise AppError("Invalid tutor chat request", status_code=400) from exc
     except RuntimeError as exc:
         logger.warning("[SessionRouter] Tutor chat RuntimeError: {}", exc)
-        raise AppError("Tutor service temporarily unavailable", status_code=502)
+        raise AppError("Tutor service temporarily unavailable", status_code=502) from exc
+    else:
+        return {"success": True, "data": {"explanation": explanation}}
     # Unexpected errors fall through to the global unexpected_exception_handler.
 
 
 @router.get("/{session_id}/status", response_model=StandardResponse[SessionStatusResponse])
 async def session_status(
-    session_id: str,
+    session_id: PathID,
     manager=Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
 ):
+    """Return the current status and progress of a learning session."""
     await _resolve_user_session(manager, session_id, user_id)
     status = manager.get_session_status(session_id)
     if not status:

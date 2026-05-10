@@ -60,7 +60,7 @@ def get_chunk_chroma_store(request: Request):
     return getattr(request.app.state, "chunk_chroma_store", None)
 
 
-def get_content_pipeline_availability(request: Request) -> dict:
+def get_content_pipeline_availability(request: Request) -> dict[str, bool | str | None]:
     """Expose runtime availability of the unified content pipeline modules."""
     return {
         "available": bool(getattr(request.app.state, "content_processor_available", False)),

@@ -57,7 +57,7 @@ async def generate_saint_concept_embeddings(
         )
         logger.info("[Pipeline] ✓ Generated embeddings for {} concepts", len(ordered_texts))
         return cast("list[list[float]]", embeddings.tolist())
-    except Exception as exc:
+    except Exception:
         logger.exception("[Pipeline] ⚠ Could not generate embeddings")
         return None
 
@@ -102,5 +102,5 @@ async def generate_concept_theories(
             for concept_id, theory in results:
                 concepts_data[concept_id]["theory"] = theory
             logger.info("[Pipeline] ✓ Theory generation complete")
-    except Exception as exc:
+    except Exception:
         logger.exception("[Pipeline] ⚠ Failed to pre-generate theory")

@@ -55,8 +55,8 @@ class ExerciseRecord:
     correct_answer: Any = None
     explanation_correct: str = ""
     explanation_incorrect: str = ""
-    theory: dict[str, Any] | None = None
-    user_answer: Any | None = None
+    theory: dict[str, str | list[str]] | None = None
+    user_answer: str | None = None
     is_correct: bool | None = None
     timestamp: float = field(default_factory=time.time)
 
@@ -82,7 +82,7 @@ class SessionState:
     accessed_at: float = field(default_factory=time.time)
     status: str = "active"
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    concept_theories: dict[str, dict[str, Any]] = field(default_factory=dict)
+    concept_theories: dict[str, dict[str, str | list[str]]] = field(default_factory=dict)
     _prefetch_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     tutor_chat_history: list[dict[str, str]] = field(default_factory=list)
     tutor_chat_exercise_id: str | None = None
@@ -108,8 +108,8 @@ class SessionManager:
         self,
         saint_path: str,
         dqn_path: str,
-        concepts_data: dict | None = None,
-        prereq_data: list[dict] | None = None,
+        concepts_data: dict[str, dict[str, object]] | None = None,
+        prereq_data: list[dict[str, str]] | None = None,
         device: str | None = None,
     ):
         self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -266,7 +266,7 @@ class SessionManager:
     async def persist_subject_progress(self, session: SessionState) -> bool:
         if not session.job_id or not session.user_id:
             return True
-        return await mongo_store.get_subject_progress_repo().save_snapshot(
+        return await mongo_store.require_subject_progress_repo().save_snapshot(
             session.job_id,
             session.user_id,
             self.build_subject_progress_snapshot(session),
@@ -370,7 +370,7 @@ class SessionManager:
             return [], 0, 0
 
         try:
-            subject_progress = await mongo_store.get_subject_progress_repo().load_for_user(
+            subject_progress = await mongo_store.require_subject_progress_repo().load_for_user(
                 job_id, user_id=user_id
             )
         except Exception:
@@ -522,7 +522,7 @@ class SessionManager:
             if active and getattr(active, "user_id", None) == user_id:
                 return active
 
-            session_doc = await mongo_store.get_subject_progress_repo().load_by_session_for_user(session_id, user_id)
+            session_doc = await mongo_store.require_subject_progress_repo().load_by_session_for_user(session_id, user_id)
             if not session_doc:
                 return None
 
@@ -534,7 +534,7 @@ class SessionManager:
             )
             return None
 
-        job_doc = await mongo_store.get_pipeline_repo().load_for_user(job_id, user_id)
+        job_doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
         if not job_doc:
             logger.warning(
                 "[Session] Cannot recover session={}: pipeline job {} not found",

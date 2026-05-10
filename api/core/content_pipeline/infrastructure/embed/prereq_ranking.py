@@ -2,7 +2,7 @@
 
 from loguru import logger
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
+from sklearn.metrics.pairwise import cosine_similarity
 
 from api.config import settings
 from api.core.content_pipeline.infrastructure.llm.schemas import Concept

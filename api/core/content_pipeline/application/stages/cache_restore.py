@@ -11,10 +11,10 @@ from loguru import logger
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
+from ..ports import SaveJobFn  # noqa: TC001
 from .execution import run_blocking_stage
 
 LoadMongoJobFn = Callable[[str], Awaitable[dict[str, Any] | None]]
-SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
 PopulateMetricsFn = Callable[[PipelineJob], None]
 HashFileFn = Callable[[str], str]
 

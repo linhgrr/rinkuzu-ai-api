@@ -46,7 +46,7 @@ TUTOR_RESPONSE_REQUIREMENTS = (
 )
 
 
-def _extract_stream_chunk_text(chunk: Any) -> str:
+def _extract_stream_chunk_text(chunk: object) -> str:
     text_accessor = getattr(chunk, "text", None)
     if text_accessor is not None:
         return str(text_accessor)
@@ -152,13 +152,13 @@ def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
             instructions=_SUMMARY_SYSTEM_PROMPT,
             user_text=(
                 "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
-                "{}"
-            ).format(chat_text),
+                f"{chat_text}"
+            ),
             model=_resolve_tutor_model(),
             temperature=0.2,
             timeout_sec=get_settings().llm_timeout_sec,
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("[TutorChat] Failed to summarize chat history")
         return ""
 
@@ -335,7 +335,7 @@ async def create_tutor_chat_stream(
         if on_complete and full_response.strip():
             try:
                 await on_complete(full_response.strip())
-            except Exception as exc:
+            except Exception:
                 logger.exception("[TutorChat] Failed to persist chat history")
 
     return iterator()

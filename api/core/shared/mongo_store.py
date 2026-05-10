@@ -57,7 +57,11 @@ async def init_mongo(mongodb_uri: str | None = None) -> bool:
         return False
 
     try:
-        client: Any = _motor.AsyncIOMotorClient(mongodb_uri, serverSelectionTimeoutMS=5000)
+        client: Any = _motor.AsyncIOMotorClient(
+            mongodb_uri,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+        )
         await client.admin.command("ping")
         db = client["adaptive_learning"]
         _state["client"] = client
@@ -75,7 +79,7 @@ async def init_mongo(mongodb_uri: str | None = None) -> bool:
         _state["subject_progress_repo"] = subject_progress_repo
         _state["available"] = True
         logger.info("[MongoDB] ✓ Connected to adaptive_learning database")
-    except Exception as e:
+    except Exception:
         logger.exception("[MongoDB] ✗ Could not connect — persistence disabled")
         _state["available"] = False
         return False
@@ -105,3 +109,24 @@ def get_subject_progress_repo() -> SubjectProgressRepository | None:
 
 def get_quiz_draft_repo() -> QuizDraftRepository | None:
     return _state["quiz_draft_repo"]
+
+
+def require_pipeline_repo() -> PipelineRepository:
+    repo = _state["pipeline_repo"]
+    if repo is None:
+        raise RuntimeError("Pipeline repository not initialized — MongoDB may be unavailable")
+    return repo
+
+
+def require_subject_progress_repo() -> SubjectProgressRepository:
+    repo = _state["subject_progress_repo"]
+    if repo is None:
+        raise RuntimeError("Subject progress repository not initialized — MongoDB may be unavailable")
+    return repo
+
+
+def require_quiz_draft_repo() -> QuizDraftRepository:
+    repo = _state["quiz_draft_repo"]
+    if repo is None:
+        raise RuntimeError("Quiz draft repository not initialized — MongoDB may be unavailable")
+    return repo
