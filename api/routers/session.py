@@ -19,6 +19,7 @@ from api.dependencies import (
     get_current_user,
     get_session_manager,
     get_session_service,
+    resolve_user_session,
 )
 from api.exceptions import (
     AppError,
@@ -53,12 +54,6 @@ BLOOM_LABELS = {
     6: "Create",
 }
 
-
-async def _resolve_user_session(manager, session_id: str, user_id: str):
-    session = await manager.get_or_recover_session(session_id, user_id)
-    if not session:
-        raise SessionNotFoundError(session_id)
-    return session
 
 
 async def _get_tutor_chat_history(session, exercise_id: str) -> list[dict[str, str]]:
@@ -182,7 +177,7 @@ async def next_concept(
 ):
     """Recommend the next concept to study based on mastery and prerequisites."""
     del request
-    session = await _resolve_user_session(manager, session_id, user_id)
+    session = await resolve_user_session(manager, session_id, user_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
 
@@ -204,7 +199,7 @@ async def theory(
 ):
     """Retrieve theory content for the current pending concept."""
     del request
-    session = await _resolve_user_session(manager, session_id, user_id)
+    session = await resolve_user_session(manager, session_id, user_id)
 
     theory_data = await exercise_svc.get_theory(session)
     if not theory_data:
@@ -225,7 +220,7 @@ async def generate_exercise(
 ):
     """Generate an exercise for the current concept at the appropriate Bloom level."""
     del request
-    session = await _resolve_user_session(manager, session_id, user_id)
+    session = await resolve_user_session(manager, session_id, user_id)
     if session.status != "active":
         raise SessionCompletedError(session_id)
 
@@ -273,7 +268,7 @@ async def submit_answer(
 ):
     """Evaluate the user's answer and update BKT mastery estimates."""
     del request
-    session = await _resolve_user_session(manager, session_id, user_id)
+    session = await resolve_user_session(manager, session_id, user_id)
 
     result = await exercise_svc.submit_answer(session, req.answer.model_dump(), background_tasks)
     if not result:
@@ -314,7 +309,7 @@ async def chat_about_exercise(
 ):
     """Chat with an AI tutor about the current exercise, with optional RAG context."""
     del request
-    session = await _resolve_user_session(manager, session_id, user_id)
+    session = await resolve_user_session(manager, session_id, user_id)
     exercise = session.current_exercise or (
         session.exercise_history[-1] if session.exercise_history else None
     )
@@ -398,7 +393,7 @@ async def session_status(
     user_id: str = Depends(get_current_user),
 ):
     """Return the current status and progress of a learning session."""
-    await _resolve_user_session(manager, session_id, user_id)
+    await resolve_user_session(manager, session_id, user_id)
     status = manager.get_session_status(session_id)
     if not status:
         raise SessionNotFoundError(session_id)

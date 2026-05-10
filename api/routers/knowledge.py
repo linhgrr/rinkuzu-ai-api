@@ -5,7 +5,7 @@ Knowledge router — Knowledge graph and mastery endpoints.
 from fastapi import APIRouter, Depends, Request
 
 from api.config import get_settings
-from api.dependencies import get_current_user, get_session_manager
+from api.dependencies import get_current_user, get_session_manager, resolve_user_session
 from api.exceptions import SessionNotFoundError
 from api.rate_limit import is_admin_request, limiter
 from api.schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
@@ -13,13 +13,6 @@ from api.schemas.common import StandardResponse
 from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
-
-
-async def _resolve_user_session(manager, session_id: str, user_id: str):
-    session = await manager.get_or_recover_session(session_id, user_id)
-    if not session:
-        raise SessionNotFoundError(session_id)
-    return session
 
 
 @router.get("/{session_id}/graph", response_model=StandardResponse[KnowledgeGraphResponse])
@@ -32,7 +25,7 @@ async def get_knowledge_graph(
 ):
     """Return the prerequisite knowledge graph for a session."""
     del request
-    await _resolve_user_session(manager, session_id, user_id)
+    await resolve_user_session(manager, session_id, user_id)
     data = manager.get_knowledge_graph(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
@@ -49,7 +42,7 @@ async def get_mastery_matrix(
 ):
     """Return the concept x Bloom-level mastery matrix for a session."""
     del request
-    await _resolve_user_session(manager, session_id, user_id)
+    await resolve_user_session(manager, session_id, user_id)
     data = manager.get_mastery_matrix(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
@@ -67,7 +60,7 @@ async def get_concept_detail(
 ):
     """Return detailed information about a specific concept."""
     del request
-    await _resolve_user_session(manager, session_id, user_id)
+    await resolve_user_session(manager, session_id, user_id)
     data = manager.get_concept_detail(session_id, concept_id)
     if not data:
         raise SessionNotFoundError(session_id)
