@@ -17,7 +17,7 @@ from loguru import logger
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
-from .execution import safe_run
+from .execution import run_blocking_stage, safe_run
 
 if TYPE_CHECKING:
     from langchain_core.documents import Document as LangChainDocument
@@ -93,10 +93,12 @@ async def persist_document_chunks(
     # ── ChromaDB ───────────────────────────────────────────────
     if chunk_chroma_store is not None:
         async def _persist_chroma():
-            ids = chunk_chroma_store.add_chunks(
+            ids = await run_blocking_stage(
+                chunk_chroma_store.add_chunks,
                 chunks=chunks,
                 job_id=job.job_id,
                 subject_id=job.subject_id,
+                stage_name="chroma_add_chunks",
             )
             logger.info(
                 "[persist_chunks] ChromaDB: added {} chunks",
