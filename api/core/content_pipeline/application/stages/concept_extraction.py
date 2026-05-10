@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable  # noqa: TC003
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import fitz
 from loguru import logger
@@ -13,6 +12,9 @@ from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress,
 
 from ..ports import PersistJobStateFn  # noqa: TC001
 from .execution import run_blocking_stage
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def build_partial_concept_graph(concepts: list[Any]) -> dict[str, list[dict[str, str]]]:

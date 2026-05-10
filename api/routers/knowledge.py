@@ -15,6 +15,15 @@ from api.schemas.validators import PathID
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
 
 
+async def _get_session_resource(manager, session_id: str, user_id: str, fetcher, response_cls: type):
+    """Resolve session → fetch data → build response, raising 404 on miss."""
+    await resolve_user_session(manager, session_id, user_id)
+    data = await fetcher()
+    if not data:
+        raise SessionNotFoundError(session_id)
+    return ok(response_cls(**data).model_dump())
+
+
 @router.get("/{session_id}/graph", response_model=StandardResponse[KnowledgeGraphResponse])
 @limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
 async def get_knowledge_graph(
@@ -25,11 +34,11 @@ async def get_knowledge_graph(
 ):
     """Return the prerequisite knowledge graph for a session."""
     del request
-    await resolve_user_session(manager, session_id, user_id)
-    data = manager.get_knowledge_graph(session_id)
-    if not data:
-        raise SessionNotFoundError(session_id)
-    return ok(KnowledgeGraphResponse(**data).model_dump())
+    return await _get_session_resource(
+        manager, session_id, user_id,
+        fetcher=lambda: manager.get_knowledge_graph(session_id),
+        response_cls=KnowledgeGraphResponse,
+    )
 
 
 @router.get("/{session_id}/mastery-matrix", response_model=StandardResponse[MasteryMatrixResponse])
@@ -42,11 +51,11 @@ async def get_mastery_matrix(
 ):
     """Return the concept x Bloom-level mastery matrix for a session."""
     del request
-    await resolve_user_session(manager, session_id, user_id)
-    data = manager.get_mastery_matrix(session_id)
-    if not data:
-        raise SessionNotFoundError(session_id)
-    return ok(MasteryMatrixResponse(**data).model_dump())
+    return await _get_session_resource(
+        manager, session_id, user_id,
+        fetcher=lambda: manager.get_mastery_matrix(session_id),
+        response_cls=MasteryMatrixResponse,
+    )
 
 
 @router.get("/{session_id}/concept/{concept_id}", response_model=StandardResponse[ConceptDetailResponse])
@@ -60,8 +69,8 @@ async def get_concept_detail(
 ):
     """Return detailed information about a specific concept."""
     del request
-    await resolve_user_session(manager, session_id, user_id)
-    data = manager.get_concept_detail(session_id, concept_id)
-    if not data:
-        raise SessionNotFoundError(session_id)
-    return ok(ConceptDetailResponse(**data).model_dump())
+    return await _get_session_resource(
+        manager, session_id, user_id,
+        fetcher=lambda: manager.get_concept_detail(session_id, concept_id),
+        response_cls=ConceptDetailResponse,
+    )

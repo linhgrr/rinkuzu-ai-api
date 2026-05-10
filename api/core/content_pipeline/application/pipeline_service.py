@@ -6,15 +6,17 @@ This service owns request-independent job scheduling and persistence.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine  # noqa: TC003
 from pathlib import Path
 import time
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 import uuid
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .ports import SaveJobFn  # noqa: TC001
+
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
 
 
 class RunPipelineFn(Protocol):

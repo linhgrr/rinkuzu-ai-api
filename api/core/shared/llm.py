@@ -5,14 +5,16 @@ llm.py — Shared LLM helpers for the API codebase.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable  # noqa: TC003
 import json
 import time
-from typing import Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from langchain_openai import ChatOpenAI
 from loguru import logger
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from api.config import get_settings
 

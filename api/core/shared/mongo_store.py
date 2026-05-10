@@ -111,22 +111,20 @@ def get_quiz_draft_repo() -> QuizDraftRepository | None:
     return _state["quiz_draft_repo"]
 
 
-def require_pipeline_repo() -> PipelineRepository:
-    repo = _state["pipeline_repo"]
+def _require_repo(key: str, label: str) -> Any:
+    repo = _state[key]
     if repo is None:
-        raise RuntimeError("Pipeline repository not initialized — MongoDB may be unavailable")
+        raise RuntimeError(f"{label} repository not initialized — MongoDB may be unavailable")
     return repo
+
+
+def require_pipeline_repo() -> PipelineRepository:
+    return _require_repo("pipeline_repo", "Pipeline")
 
 
 def require_subject_progress_repo() -> SubjectProgressRepository:
-    repo = _state["subject_progress_repo"]
-    if repo is None:
-        raise RuntimeError("Subject progress repository not initialized — MongoDB may be unavailable")
-    return repo
+    return _require_repo("subject_progress_repo", "Subject progress")
 
 
 def require_quiz_draft_repo() -> QuizDraftRepository:
-    repo = _state["quiz_draft_repo"]
-    if repo is None:
-        raise RuntimeError("Quiz draft repository not initialized — MongoDB may be unavailable")
-    return repo
+    return _require_repo("quiz_draft_repo", "Quiz draft")
