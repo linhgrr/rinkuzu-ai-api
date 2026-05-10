@@ -22,7 +22,7 @@ from .stages.cache_restore import (
     try_restore_completed_job_from_s3,
 )
 from .stages.chunk_persistence import persist_document_chunks
-from .stages.concept_extraction import extract_concepts_from_chunks
+from .stages.concept_extraction import _resolve_extraction_timeout, extract_concepts_from_chunks
 from .stages.concept_merge import merge_duplicate_concepts
 from .stages.document_loading import load_document_chunks
 from .stages.embedding import compute_concept_embeddings, resolve_embedding_settings
@@ -77,6 +77,29 @@ def populate_job_metrics_from_result(job: PipelineJob) -> None:
     job.graph_stats = merged_stats
 
 
+async def _resolve_effective_job_timeout(
+    *,
+    file_path: str,
+    job: PipelineJob,
+    settings: Any,
+) -> float | None:
+    job_timeout_sec, stage_timeout_sec = resolve_timeout_policy()
+    if job_timeout_sec is None:
+        return None
+
+    extraction_timeout_sec = await _resolve_extraction_timeout(file_path, job, settings)
+    stage_buffer_sec = max(float(stage_timeout_sec or 0.0), 300.0)
+    effective_timeout_sec = max(job_timeout_sec, extraction_timeout_sec + (stage_buffer_sec * 2))
+    logger.info(
+        "[PipelineRunner] effective_job_timeout_sec={} configured_job_timeout_sec={} extraction_timeout_sec={} stage_buffer_sec={}",
+        effective_timeout_sec,
+        job_timeout_sec,
+        extraction_timeout_sec,
+        stage_buffer_sec,
+    )
+    return effective_timeout_sec
+
+
 class PipelineRunner:
     """Runs the content pipeline by composing extracted stages."""
 
@@ -116,7 +139,12 @@ class PipelineRunner:
         page_batch_size: int,
     ) -> None:
         settings = get_settings()
-        job_timeout_sec, _ = resolve_timeout_policy()
+        job.page_batch_size = page_batch_size
+        job_timeout_sec = await _resolve_effective_job_timeout(
+            file_path=file_path,
+            job=job,
+            settings=settings,
+        )
         try:
             async with asyncio.timeout(job_timeout_sec):
                 bindings = get_content_processor_bindings()
@@ -148,7 +176,6 @@ class PipelineRunner:
                     load_and_chunk=bindings.file_loader_factory,
                     persist_job_state=self._persist_job_state,
                 )
-                job.page_batch_size = page_batch_size
 
                 # Persist document chunks for RAG (MongoDB + ChromaDB)
                 await persist_document_chunks(

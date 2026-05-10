@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from api.core.content_pipeline.application.stages.concept_extraction import (
+    _resolve_extraction_timeout,
     build_partial_concept_graph,
     extract_concepts_from_chunks,
 )
@@ -91,3 +92,41 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
         (PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.15),
         (PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.30),
     ]
+
+
+def test_resolve_extraction_timeout_uses_retry_aware_llm_budget(monkeypatch):
+    job = PipelineJob(
+        job_id="job-timeout",
+        filename="lesson.pdf",
+        subject_id="algebra",
+        page_batch_size=10,
+    )
+
+    async def fake_run_process_stage(*_args, **_kwargs):
+        return 25
+
+    monkeypatch.setattr(
+        "api.core.content_pipeline.application.stages.concept_extraction.run_process_stage",
+        fake_run_process_stage,
+    )
+    monkeypatch.setattr(
+        "api.core.content_pipeline.application.stages.concept_extraction.resolve_timeout_policy",
+        lambda: (1800.0, 300.0),
+    )
+
+    timeout = asyncio.run(
+        _resolve_extraction_timeout(
+            "/tmp/lesson.pdf",  # noqa: S108
+            job,
+            SimpleNamespace(
+                content_pipeline_extraction_secs_per_page=20.0,
+                content_pipeline_pdf_page_batch_size=10,
+                content_pipeline_llm_request_timeout_sec=60.0,
+                content_pipeline_llm_retry_attempts=3,
+                content_pipeline_llm_retry_backoff_sec=2.0,
+            ),
+        )
+    )
+
+    assert timeout == 738.0
+    assert job.total_pages == 25

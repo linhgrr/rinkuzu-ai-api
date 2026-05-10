@@ -118,7 +118,29 @@ class Settings(BaseSettings):
     content_pipeline_pdf_batch_max_bytes: int = 4 * 1024 * 1024
     content_pipeline_file_cache_ttl_hours: int = 24 * 7
     content_pipeline_batch_failure_ratio_threshold: float = 0.5
-    content_pipeline_responses_timeout_sec: float = 180
+    content_pipeline_llm_request_timeout_sec: float = Field(
+        default=180,
+        validation_alias=AliasChoices(
+            "CONTENT_PIPELINE_LLM_REQUEST_TIMEOUT_SEC",
+            "CONTENT_PIPELINE_RESPONSES_TIMEOUT_SEC",
+        ),
+    )
+    content_pipeline_llm_retry_attempts: int = Field(
+        default=3,
+        validation_alias=AliasChoices(
+            "CONTENT_PIPELINE_LLM_RETRY_ATTEMPTS",
+            "LLM_RETRY_ATTEMPTS",
+            "ADAPTIVE_LLM_RETRY_ATTEMPTS",
+        ),
+    )
+    content_pipeline_llm_retry_backoff_sec: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices(
+            "CONTENT_PIPELINE_LLM_RETRY_BACKOFF_SEC",
+            "LLM_RETRY_BACKOFF_SEC",
+            "ADAPTIVE_LLM_RETRY_BACKOFF_SEC",
+        ),
+    )
     content_pipeline_extraction_secs_per_page: float = 20.0
     content_pipeline_default_retry_after_sec: int = 2
     content_pipeline_delayed_retry_after_sec: int = 5

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import TYPE_CHECKING, Any
 
 import fitz
@@ -100,12 +101,32 @@ async def _resolve_extraction_timeout(file_path: str, job: PipelineJob, settings
     """Calculate extraction timeout based on PDF page count.
 
     Falls back to content_pipeline_stage_timeout_sec if page count cannot be read.
-    Formula: max(stage_timeout, n_pages * secs_per_page)
+    Formula: max(stage_timeout, page-based heuristic, retry-aware LLM budget).
     """
     _, default_stage_timeout = resolve_timeout_policy()
     fallback = default_stage_timeout or 300.0
 
     secs_per_page = float(getattr(settings, "content_pipeline_extraction_secs_per_page", 20.0))
+    batch_size = max(
+        1,
+        int(
+            getattr(job, "page_batch_size", 0)
+            or getattr(settings, "content_pipeline_pdf_page_batch_size", 10)
+            or 10
+        ),
+    )
+    request_timeout = max(
+        1.0,
+        float(getattr(settings, "content_pipeline_llm_request_timeout_sec", fallback) or fallback),
+    )
+    retry_attempts = max(
+        1,
+        int(getattr(settings, "content_pipeline_llm_retry_attempts", 1) or 1),
+    )
+    retry_backoff_sec = max(
+        0.0,
+        float(getattr(settings, "content_pipeline_llm_retry_backoff_sec", 0.0) or 0.0),
+    )
     try:
         n_pages = await run_process_stage(
             "api.core.content_pipeline.application.stages.concept_extraction:_read_pdf_page_count",
@@ -123,5 +144,20 @@ async def _resolve_extraction_timeout(file_path: str, job: PipelineJob, settings
     if n_pages <= 0:
         return fallback
 
-    dynamic = n_pages * secs_per_page
-    return max(fallback, dynamic)
+    page_based_budget = n_pages * secs_per_page
+    batch_count = max(1, math.ceil(n_pages / batch_size))
+    retry_backoff_budget = retry_backoff_sec * retry_attempts * max(0, retry_attempts - 1) / 2
+    per_batch_budget = request_timeout * (retry_attempts + 1) + retry_backoff_budget
+    retry_aware_budget = batch_count * per_batch_budget
+    timeout = max(fallback, page_based_budget, retry_aware_budget)
+    logger.info(
+        "[concept_extraction] timeout_sec={} pages={} batch_size={} batches={} request_timeout_sec={} retry_attempts={} retry_backoff_sec={}",
+        timeout,
+        n_pages,
+        batch_size,
+        batch_count,
+        request_timeout,
+        retry_attempts,
+        retry_backoff_sec,
+    )
+    return timeout

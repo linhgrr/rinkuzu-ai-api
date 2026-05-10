@@ -23,13 +23,30 @@ def test_build_provider_config_requires_openai_settings(monkeypatch):
             openai_base_url="",
             openai_api_key="",
             openai_model="",
-            content_pipeline_responses_timeout_sec=180,
+            content_pipeline_llm_request_timeout_sec=180,
             llm_max_retries=2,
         ),
     )
 
     with pytest.raises(ProviderConfigError):
         build_provider_config()
+
+
+def test_build_provider_config_disables_sdk_retries_for_pipeline(monkeypatch):
+    monkeypatch.setattr(
+        "api.core.content_pipeline.infrastructure.llm.openai_responses.get_settings",
+        lambda: SimpleNamespace(
+            openai_base_url="https://api.openai.com",
+            openai_api_key="test-key",
+            openai_model="gpt-4.1-mini",
+            content_pipeline_llm_request_timeout_sec=180,
+        ),
+    )
+
+    config = build_provider_config()
+
+    assert config.request_timeout_sec == 180
+    assert config.max_retries == 0
 
 
 def test_object_storage_client_endpoint_prefers_external_in_dev():

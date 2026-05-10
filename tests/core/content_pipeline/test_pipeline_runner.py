@@ -1,5 +1,9 @@
+import asyncio
+from types import SimpleNamespace
+
 from api.core.content_pipeline.application.pipeline_runner import (
     PipelineRunner,
+    _resolve_effective_job_timeout,
     populate_job_metrics_from_result,
 )
 from api.core.content_pipeline.domain.jobs import PipelineJob
@@ -45,3 +49,36 @@ def test_pipeline_runner_keeps_constructor_dependencies():
     assert runner._load_job is load_job
     assert runner._save_job is save_job
     assert runner._persist_job_state is persist_job_state
+
+
+def test_resolve_effective_job_timeout_exceeds_extraction_timeout(monkeypatch):
+    job = PipelineJob(
+        job_id="job-timeout",
+        filename="lesson.pdf",
+        subject_id="algebra",
+        page_batch_size=10,
+    )
+
+    async def fake_resolve_extraction_timeout(file_path, job_arg, settings):
+        del file_path, settings
+        assert job_arg is job
+        return 2400.0
+
+    monkeypatch.setattr(
+        "api.core.content_pipeline.application.pipeline_runner._resolve_extraction_timeout",
+        fake_resolve_extraction_timeout,
+    )
+    monkeypatch.setattr(
+        "api.core.content_pipeline.application.pipeline_runner.resolve_timeout_policy",
+        lambda: (1800.0, 300.0),
+    )
+
+    timeout = asyncio.run(
+        _resolve_effective_job_timeout(
+            file_path="/tmp/lesson.pdf",  # noqa: S108
+            job=job,
+            settings=SimpleNamespace(),
+        )
+    )
+
+    assert timeout == 3000.0

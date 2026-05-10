@@ -108,8 +108,8 @@ def build_provider_config() -> ProviderConfig:
         api_key=api_key,
         model=model,
         fingerprint=base_url,
-        request_timeout_sec=settings.content_pipeline_responses_timeout_sec,
-        max_retries=max(1, settings.llm_max_retries),
+        request_timeout_sec=settings.content_pipeline_llm_request_timeout_sec,
+        max_retries=0,
     )
 
 

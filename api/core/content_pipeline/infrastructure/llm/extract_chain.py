@@ -905,7 +905,8 @@ class ExtractionChain:
         previous_concepts: list[tuple[str, str]],
         max_retries: int | None = None,
     ) -> tuple[ConceptExtractionPayload, dict[str, int]]:
-        retry_count = max(1, max_retries or (self.settings.llm_max_retries + 1))
+        retry_count = max(1, int(max_retries or self.settings.content_pipeline_llm_retry_attempts))
+        retry_backoff_sec = max(0.0, float(self.settings.content_pipeline_llm_retry_backoff_sec))
         last_error: BaseException | None = None
         for attempt in range(retry_count):
             attempt_started_at = time.perf_counter()
@@ -938,7 +939,7 @@ class ExtractionChain:
                     str(exc)[:200],
                     int((time.perf_counter() - attempt_started_at) * 1000),
                 )
-                await asyncio.sleep(1.0 * (attempt + 1))
+                await asyncio.sleep(retry_backoff_sec * (attempt + 1))
         raise RuntimeError(str(last_error or "Extraction response failed."))
 
     async def _verify_single_relation(
