@@ -42,9 +42,9 @@ COPY --chown=user:user . .
 RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')" && \
     python3 -c "import underthesea; underthesea.pos_tag('Chào thế giới')"
 
-EXPOSE 8000
+EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/live || exit 1
+    CMD curl -fsS http://localhost:7860/api/live || exit 1
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "7860"]
