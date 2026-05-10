@@ -2,7 +2,11 @@
 Knowledge router — Knowledge graph and mastery endpoints.
 """
 
+from collections.abc import Callable
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
 
 from api.config import get_settings
 from api.dependencies import get_current_user, get_session_manager, resolve_user_session
@@ -15,10 +19,16 @@ from api.schemas.validators import PathID
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
 
 
-async def _get_session_resource(manager, session_id: str, user_id: str, fetcher, response_cls: type):
+async def _get_session_resource(
+    manager,
+    session_id: str,
+    user_id: str,
+    fetcher: Callable[[], dict[str, Any] | None],
+    response_cls: type[BaseModel],
+):
     """Resolve session → fetch data → build response, raising 404 on miss."""
     await resolve_user_session(manager, session_id, user_id)
-    data = await fetcher()
+    data = fetcher()
     if not data:
         raise SessionNotFoundError(session_id)
     return ok(response_cls(**data).model_dump())
