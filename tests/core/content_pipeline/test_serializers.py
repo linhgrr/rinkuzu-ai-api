@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 from api.core.content_pipeline.infrastructure.serializers import pipeline_job_to_document
 from api.core.learning.prompts.grading import TheoryOutput
@@ -41,7 +43,7 @@ def test_pipeline_job_to_document_matches_repository_shape():
     assert doc["batch_count"] == 3
     assert doc["failed_batch_count"] == 1
     assert doc["partial_success"] is True
-    assert doc["created_at"] == 123.0
+    assert doc["created_at"] == datetime.fromtimestamp(123.0, tz=UTC)
     assert doc["completed_at"] is None
 
 
@@ -59,7 +61,10 @@ def test_pipeline_job_to_document_normalizes_nested_pydantic_models():
                 }
             }
         },
-        partial_graph={"nodes": [{"id": "c1"}], "meta": TheoryOutput(content="Tóm tắt", examples=[])},
+        partial_graph={
+            "nodes": [{"id": "c1"}],
+            "meta": TheoryOutput(content="Tóm tắt", examples=[]),
+        },
         completed_at=456.0,
     )
 

@@ -1,130 +1,96 @@
-"""
-mongo_store.py — MongoDB connection management.
+"""MongoDB + Beanie bootstrap utilities."""
 
-Centralizes MongoDB client lifecycle and provides repository accessors
-for direct use by application code.
-"""
+from __future__ import annotations
 
-from typing import Any, TypedDict
+import os
+from typing import TYPE_CHECKING, Any, TypedDict
 
+from beanie import init_beanie
 from loguru import logger
+from pymongo import AsyncMongoClient
 
 from api.config import get_settings
-from api.repositories.pipeline_repo import PipelineRepository
-from api.repositories.quiz_draft_repo import QuizDraftRepository
-from api.repositories.subject_progress_repo import SubjectProgressRepository
+from api.core.shared.persistence.documents import (
+    DocumentChunkDocument,
+    OpenAIFileCacheDocument,
+    PipelineJobDocument,
+    QuizDraftDocument,
+    SubjectProgressDocument,
+)
 
-try:
-    import motor.motor_asyncio as _motor
+if TYPE_CHECKING:
+    from pymongo.asynchronous.client_session import AsyncClientSession
 
-    _MOTOR_AVAILABLE = True
-except ImportError:
-    _motor = None  # type: ignore[assignment]
-    _MOTOR_AVAILABLE = False
 
 class _MongoState(TypedDict):
     available: bool
-    pipeline_repo: PipelineRepository | None
-    quiz_draft_repo: QuizDraftRepository | None
-    subject_progress_repo: SubjectProgressRepository | None
-    client: Any | None
+    client: AsyncMongoClient[Any] | None
 
 
-# Module-level state stored in a dict to avoid `global` statements.
 _state: _MongoState = {
     "available": False,
-    "pipeline_repo": None,
-    "quiz_draft_repo": None,
-    "subject_progress_repo": None,
     "client": None,
 }
 
 
 async def init_mongo(mongodb_uri: str | None = None) -> bool:
-    """Connect to MongoDB and initialize repositories.
-
-    Returns True if successful, False otherwise.
-    """
     if not mongodb_uri:
         mongodb_uri = get_settings().mongodb_uri
 
     if not mongodb_uri:
         logger.warning("[MongoDB] MONGODB_URI not set — persistence disabled")
+        _state["available"] = False
         return False
 
-    if not _MOTOR_AVAILABLE or _motor is None:
-        logger.warning("[MongoDB] motor package not available — persistence disabled")
-        return False
+    allow_index_dropping = get_settings().environment in {"dev", "staging"}
+    skip_indexes = bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
     try:
-        client: Any = _motor.AsyncIOMotorClient(
+        client: AsyncMongoClient[Any] = AsyncMongoClient(
             mongodb_uri,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
         )
         await client.admin.command("ping")
         db = client["adaptive_learning"]
+        await init_beanie(
+            database=db,
+            document_models=[
+                PipelineJobDocument,
+                SubjectProgressDocument,
+                QuizDraftDocument,
+                DocumentChunkDocument,
+                OpenAIFileCacheDocument,
+            ],
+            allow_index_dropping=allow_index_dropping,
+            skip_indexes=skip_indexes,
+        )
         _state["client"] = client
-
-        pipeline_repo = PipelineRepository(db)
-        quiz_draft_repo = QuizDraftRepository(db)
-        subject_progress_repo = SubjectProgressRepository(db)
-
-        await pipeline_repo.ensure_indexes()
-        await quiz_draft_repo.ensure_indexes()
-        await subject_progress_repo.ensure_indexes()
-
-        _state["pipeline_repo"] = pipeline_repo
-        _state["quiz_draft_repo"] = quiz_draft_repo
-        _state["subject_progress_repo"] = subject_progress_repo
         _state["available"] = True
-        logger.info("[MongoDB] ✓ Connected to adaptive_learning database")
+        logger.info("[MongoDB] ✓ Connected to adaptive_learning database via Beanie")
     except Exception:
         logger.exception("[MongoDB] ✗ Could not connect — persistence disabled")
         _state["available"] = False
+        _state["client"] = None
         return False
-    else:
-        return True
+    return True
+
+
+async def shutdown_mongo() -> None:
+    client = _state.get("client")
+    if client is None:
+        return
+    client.close()
+    _state["client"] = None
+    _state["available"] = False
+
+
+def start_session() -> AsyncClientSession:
+    client = _state.get("client")
+    if client is None:
+        raise RuntimeError("MongoDB client not initialized")
+    return client.start_session()
 
 
 def is_available() -> bool:
     return bool(_state["available"])
-
-
-def _get_db() -> Any | None:
-    """Return the adaptive_learning database if MongoDB is connected, else None."""
-    client = _state["client"]
-    if client is None:
-        return None
-    return client["adaptive_learning"]
-
-
-def get_pipeline_repo() -> PipelineRepository | None:
-    return _state["pipeline_repo"]
-
-
-def get_subject_progress_repo() -> SubjectProgressRepository | None:
-    return _state["subject_progress_repo"]
-
-
-def get_quiz_draft_repo() -> QuizDraftRepository | None:
-    return _state["quiz_draft_repo"]
-
-
-def _require_repo(key: str, label: str) -> Any:
-    repo = _state[key]
-    if repo is None:
-        raise RuntimeError(f"{label} repository not initialized — MongoDB may be unavailable")
-    return repo
-
-
-def require_pipeline_repo() -> PipelineRepository:
-    return _require_repo("pipeline_repo", "Pipeline")
-
-
-def require_subject_progress_repo() -> SubjectProgressRepository:
-    return _require_repo("subject_progress_repo", "Subject progress")
-
-
-def require_quiz_draft_repo() -> QuizDraftRepository:
-    return _require_repo("quiz_draft_repo", "Quiz draft")

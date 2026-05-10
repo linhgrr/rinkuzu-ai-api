@@ -11,6 +11,7 @@ from loguru import logger
 
 from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.core.shared.persistence.common import normalize_for_bson
 
 from ..ports import PersistJobStateFn, SaveJobFn  # noqa: TC001
 from .execution import run_blocking_stage, safe_run
@@ -54,7 +55,7 @@ async def upload_result_cache(
         return
 
     async def _upload():
-        cache_data = json.dumps(result, ensure_ascii=False)
+        cache_data = json.dumps(normalize_for_bson(result), ensure_ascii=False)
         await run_blocking_stage(
             s3_client.put_object,
             Bucket=bucket_name,

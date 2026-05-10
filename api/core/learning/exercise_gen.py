@@ -150,6 +150,9 @@ def generate_theory(
 
     return with_llm_retry(
         label="generate_theory",
-        fn=lambda: _invoke_structured_llm(schema=TheoryOutput, messages=messages),
+        fn=lambda: _invoke_structured_llm(
+            schema=TheoryOutput,
+            messages=messages,
+        ).model_dump(),
         on_exhausted=lambda: fallback,
     )

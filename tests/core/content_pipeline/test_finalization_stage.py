@@ -1,5 +1,7 @@
 import asyncio
 
+from pydantic import BaseModel
+
 from api.core.content_pipeline.application.stages.execution import resolve_timeout_policy
 from api.core.content_pipeline.application.stages.finalization import (
     classify_terminal_failure,
@@ -58,6 +60,33 @@ def test_upload_result_cache_writes_json_payload_when_s3_is_configured():
     assert s3_client.calls[0]["Key"] == "cache/job-1.json"
     assert s3_client.calls[0]["ContentType"] == "application/json"
     assert '"xin chao"' in s3_client.calls[0]["Body"]
+
+
+def test_upload_result_cache_normalizes_nested_pydantic_payloads():
+    class _TheoryPayload(BaseModel):
+        content: str
+        examples: list[str]
+
+    s3_client = _S3ClientStub()
+
+    asyncio.run(
+        upload_result_cache(
+            result={
+                "concepts_data": {
+                    "c1": {
+                        "theory": _TheoryPayload(content="Lý thuyết", examples=["Ví dụ 1"]),
+                    }
+                }
+            },
+            s3_client=s3_client,
+            bucket_name="bucket-1",
+            cache_key="cache/job-2.json",
+        )
+    )
+
+    assert len(s3_client.calls) == 1
+    assert '"content": "Lý thuyết"' in s3_client.calls[0]["Body"]
+    assert '"examples": ["Ví dụ 1"]' in s3_client.calls[0]["Body"]
 
 
 def test_persist_terminal_failure_updates_job_and_saves_once():

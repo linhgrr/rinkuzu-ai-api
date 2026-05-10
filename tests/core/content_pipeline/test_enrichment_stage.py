@@ -1,6 +1,6 @@
 import asyncio
 
-import pytest
+from pydantic import BaseModel
 
 from api.core.content_pipeline.application.stages import enrichment as enrichment_stage
 from api.core.content_pipeline.application.stages.enrichment import (
@@ -116,3 +116,35 @@ def test_generate_concept_theories_fills_missing_theories_only():
     assert calls == [
         (PipelineStatus.OPTIMIZING, "Generating concept theories...", 0.93),
     ]
+
+
+def test_generate_concept_theories_normalizes_pydantic_theory_payloads():
+    class _TheoryPayload(BaseModel):
+        content: str
+        examples: list[str]
+
+    job = PipelineJob(job_id="job-3", filename="lesson.pdf", subject_id="algebra")
+    concepts_data = {
+        "c1": {"name": "Alpha", "definition": "alpha def"},
+    }
+
+    async def persist_job_state(*_args, **_kwargs):
+        return None
+
+    def generate_theory(name: str, definition: str):
+        return _TheoryPayload(content=f"{name}:{definition}", examples=["Ví dụ A"])
+
+    asyncio.run(
+        generate_concept_theories(
+            job,
+            concepts_data=concepts_data,
+            generate_theory=generate_theory,
+            persist_job_state=persist_job_state,
+            concurrency=1,
+        )
+    )
+
+    assert concepts_data["c1"]["theory"] == {
+        "content": "Alpha:alpha def",
+        "examples": ["Ví dụ A"],
+    }

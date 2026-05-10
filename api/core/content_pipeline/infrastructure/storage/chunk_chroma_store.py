@@ -39,16 +39,6 @@ class ChunkChromaStore:
         job_id: str,
         subject_id: str,
     ) -> list[str]:
-        """Add document chunks to ChromaDB.
-
-        Args:
-            chunks: List of LangChain Documents (from text chunker).
-            job_id: Pipeline job ID (used for filtering at retrieval time).
-            subject_id: Subject/topic ID.
-
-        Returns:
-            List of chunk IDs added.
-        """
         if not chunks:
             return []
 
@@ -74,22 +64,30 @@ class ChunkChromaStore:
         )
         return ids
 
+    def delete_by_job(self, job_id: str) -> int:
+        try:
+            collection = self.chroma_client.get_collection(self.collection_name)
+            results = collection.get(where={"job_id": job_id})
+            if results and results.get("ids"):
+                collection.delete(ids=results["ids"])
+                deleted_count = len(results["ids"])
+                logger.info("Deleted {} chunk vectors for job {}", deleted_count, job_id)
+                return deleted_count
+        except Exception:
+            logger.exception("Error deleting chunks for job {}", job_id)
+            raise
+        return 0
+
+    def replace_chunks(self, chunks: list[Document], job_id: str, subject_id: str) -> list[str]:
+        self.delete_by_job(job_id)
+        return self.add_chunks(chunks, job_id, subject_id)
+
     async def aretrieve(
         self,
         query: str,
         job_id: str,
         k: int = 3,
     ) -> list[Document]:
-        """Async retrieval of relevant chunks for a query.
-
-        Args:
-            query: User's chat message.
-            job_id: Filter to chunks from this pipeline job.
-            k: Number of top chunks to return.
-
-        Returns:
-            List of top-k relevant Documents with page_content and metadata.
-        """
         return await asyncio.to_thread(self._retrieve_sync, query, job_id, k)
 
     def _retrieve_sync(
@@ -98,7 +96,6 @@ class ChunkChromaStore:
         job_id: str,
         k: int = 3,
     ) -> list[Document]:
-        """Synchronous retrieval (run in thread pool from async wrapper)."""
         try:
             results = self.vectorstore.similarity_search_with_score(
                 query=query,
@@ -110,3 +107,15 @@ class ChunkChromaStore:
             logger.exception("RAG retrieval failed")
             return []
 
+    def reset_collection(self) -> None:
+        try:
+            self.chroma_client.delete_collection(self.collection_name)
+        except Exception:
+            logger.exception("Error resetting chunk collection")
+            raise
+        self.chroma_client, self.vectorstore, self.embedding_client = init_chroma_store(
+            collection_name=self.collection_name,
+            persist_directory=self.persist_directory,
+            embedding_client=self.embedding_client,
+            log_label="ChunkChromaStore",
+        )

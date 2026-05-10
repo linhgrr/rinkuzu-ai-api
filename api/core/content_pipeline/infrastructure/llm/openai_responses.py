@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 import io
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 from loguru import logger
 from openai import APIError, AsyncOpenAI, BadRequestError, NotFoundError
 from pydantic import BaseModel
-from pymongo import ASCENDING, MongoClient
 
 from api.config import get_settings
-
-if TYPE_CHECKING:
-    from pymongo.collection import Collection
+from api.core.shared.persistence import (
+    delete_cached_openai_file,
+    load_cached_openai_file,
+    save_cached_openai_file,
+)
 
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _FILE_PURPOSE = "user_data"
@@ -46,13 +46,6 @@ class ProviderConfig:
 
 
 @dataclass(frozen=True)
-class FileCacheEntry:
-    file_id: str
-    purpose: str
-    cached_at: float
-
-
-@dataclass(frozen=True)
 class UploadedFileRef:
     file_id: str
     purpose: str
@@ -72,7 +65,7 @@ class StructuredExtractionClient(Protocol):
         job_id: str | None = None,
     ) -> UploadedFileRef: ...
 
-    def invalidate_cached_file(self, *, sha256: str) -> None: ...
+    async def invalidate_cached_file(self, *, sha256: str) -> None: ...
 
     async def parse_response(
         self,
@@ -113,88 +106,6 @@ def build_provider_config() -> ProviderConfig:
     )
 
 
-class MongoFileCache:
-    """Minimal persistent cache for uploaded OpenAI files.
-
-    MongoDB operations are synchronous (pymongo). All public methods are
-    sync — callers must wrap them in ``asyncio.to_thread`` when running
-    from an async context.
-    """
-
-    def __init__(self, mongodb_uri: str | None, ttl_hours: int):
-        self._mongodb_uri = (mongodb_uri or "").strip()
-        self._ttl_seconds = max(1, ttl_hours) * 3600
-        self._client: MongoClient[Any] | None = None
-        self._collection: Collection[Any] | None = None
-
-    def _get_collection(self) -> Collection[Any] | None:
-        if not self._mongodb_uri:
-            return None
-        if self._collection is not None:
-            return self._collection
-        self._client = MongoClient(self._mongodb_uri, serverSelectionTimeoutMS=3000)
-        collection = self._client["adaptive_learning"]["al_openai_file_cache"]
-        collection.create_index(
-            [("provider_fingerprint", ASCENDING), ("sha256", ASCENDING)],
-            unique=True,
-        )
-        collection.create_index("cached_at")
-        self._collection = collection
-        return collection
-
-    def load(self, *, provider_fingerprint: str, sha256: str, now_ts: float) -> FileCacheEntry | None:
-        collection = self._get_collection()
-        if collection is None:
-            return None
-        doc = collection.find_one(
-            {"provider_fingerprint": provider_fingerprint, "sha256": sha256},
-            {"_id": 0, "file_id": 1, "purpose": 1, "cached_at": 1},
-        )
-        if not doc:
-            return None
-        cached_at = float(doc.get("cached_at", 0))
-        if now_ts - cached_at > self._ttl_seconds:
-            collection.delete_one({"provider_fingerprint": provider_fingerprint, "sha256": sha256})
-            return None
-        file_id = str(doc.get("file_id") or "").strip()
-        purpose = str(doc.get("purpose") or "").strip()
-        if not file_id or not purpose:
-            return None
-        return FileCacheEntry(file_id=file_id, purpose=purpose, cached_at=cached_at)
-
-    def save(
-        self,
-        *,
-        provider_fingerprint: str,
-        sha256: str,
-        file_id: str,
-        purpose: str,
-        cached_at: float,
-    ) -> None:
-        collection = self._get_collection()
-        if collection is None:
-            return
-        collection.update_one(
-            {"provider_fingerprint": provider_fingerprint, "sha256": sha256},
-            {
-                "$set": {
-                    "provider_fingerprint": provider_fingerprint,
-                    "sha256": sha256,
-                    "file_id": file_id,
-                    "purpose": purpose,
-                    "cached_at": cached_at,
-                }
-            },
-            upsert=True,
-        )
-
-    def delete(self, *, provider_fingerprint: str, sha256: str) -> None:
-        collection = self._get_collection()
-        if collection is None:
-            return
-        collection.delete_one({"provider_fingerprint": provider_fingerprint, "sha256": sha256})
-
-
 class OpenAIResponsesClient:
     """Thin wrapper around the official OpenAI Files + Responses APIs (async)."""
 
@@ -202,15 +113,9 @@ class OpenAIResponsesClient:
         self,
         *,
         config: ProviderConfig | None = None,
-        cache: MongoFileCache | None = None,
         client: Any | None = None,
     ):
-        settings = get_settings()
         self.config = config or build_provider_config()
-        self.cache = cache or MongoFileCache(
-            settings.mongodb_uri,
-            settings.content_pipeline_file_cache_ttl_hours,
-        )
         self._client = client or AsyncOpenAI(
             api_key=self.config.api_key,
             base_url=self.config.base_url,
@@ -227,11 +132,10 @@ class OpenAIResponsesClient:
         now_ts: float,
         job_id: str | None = None,
     ) -> UploadedFileRef:
-        cached = await asyncio.to_thread(
-            self.cache.load,
+        del now_ts
+        cached = await load_cached_openai_file(
             provider_fingerprint=self.config.fingerprint,
             sha256=sha256,
-            now_ts=now_ts,
         )
         if cached is not None:
             logger.info(
@@ -267,13 +171,11 @@ class OpenAIResponsesClient:
         if not file_id:
             raise RuntimeError(f"OpenAI did not return a file id: {payload}")
 
-        await asyncio.to_thread(
-            self.cache.save,
+        await save_cached_openai_file(
             provider_fingerprint=self.config.fingerprint,
             sha256=sha256,
             file_id=file_id,
             purpose=_FILE_PURPOSE,
-            cached_at=now_ts,
         )
         logger.debug(
             "openai upload done job_id={} filename={} file_id={} purpose={} size_bytes={}",
@@ -285,8 +187,11 @@ class OpenAIResponsesClient:
         )
         return UploadedFileRef(file_id=file_id, purpose=_FILE_PURPOSE, cache_hit=False)
 
-    def invalidate_cached_file(self, *, sha256: str) -> None:
-        self.cache.delete(provider_fingerprint=self.config.fingerprint, sha256=sha256)
+    async def invalidate_cached_file(self, *, sha256: str) -> None:
+        await delete_cached_openai_file(
+            provider_fingerprint=self.config.fingerprint,
+            sha256=sha256,
+        )
 
     async def parse_response(
         self,

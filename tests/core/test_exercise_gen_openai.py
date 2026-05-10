@@ -5,6 +5,7 @@ from api.core.learning.exercise_types import (
     MCQOutput,
     ShortAnswerEvaluationOutput,
 )
+from api.core.learning.prompts.grading import TheoryOutput
 from api.core.shared import llm as llm_module
 
 
@@ -93,4 +94,24 @@ def test_generate_theory_returns_fallback_after_retries(monkeypatch):
     assert result == {
         "content": "Lý thuyết cơ bản về Động lượng: Động lượng là đại lượng đặc trưng cho chuyển động.",
         "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."],
+    }
+
+
+def test_generate_theory_returns_model_dump_on_success(monkeypatch):
+    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (1, 0.0))
+
+    def _fake_invoke(**_kwargs):
+        return TheoryOutput(content="Nội dung", examples=["Ví dụ 1"])
+
+    monkeypatch.setattr(exercise_gen, "_invoke_structured_llm", _fake_invoke)
+
+    result = exercise_gen.generate_theory(
+        concept_name="Động lượng",
+        concept_definition="Động lượng là đại lượng đặc trưng cho chuyển động.",
+        bloom_level=2,
+    )
+
+    assert result == {
+        "content": "Nội dung",
+        "examples": ["Ví dụ 1"],
     }

@@ -2,7 +2,6 @@
 subject_progress_snapshot.py — Shared helpers for serializing subject progress state.
 """
 
-import time
 from typing import Any
 
 import numpy as np
@@ -21,7 +20,9 @@ def build_subject_progress_snapshot(session) -> dict[str, Any]:
             "bloom_level": ex.bloom_level,
             "question": ex.question,
             "sentence": ex.sentence,
-            "exercise_type": ex.exercise_type,
+            "exercise_type": ex.exercise_type.value
+            if hasattr(ex.exercise_type, "value")
+            else ex.exercise_type,
             "options": ex.options,
             "statement": ex.statement,
             "hint": ex.hint,
@@ -34,6 +35,7 @@ def build_subject_progress_snapshot(session) -> dict[str, Any]:
             "explanation": ex.explanation,
             "explanation_correct": ex.explanation_correct,
             "explanation_incorrect": ex.explanation_incorrect,
+            "theory": ex.theory,
             "user_answer": ex.user_answer,
             "is_correct": ex.is_correct,
             "timestamp": ex.timestamp,
@@ -52,10 +54,11 @@ def build_subject_progress_snapshot(session) -> dict[str, Any]:
         "step": env_stats.get("step", 0),
         "max_steps": env_stats.get("max_steps", 9999),
         "avg_mastery": float(np.mean(concept_mastery)),
+        "concept_indices": session.concept_map,
         "concept_mastery": concept_mastery.tolist(),
         "bloom_mastery": bloom_mastery.tolist(),
         "concept_names": session.concept_names,
         "exercise_history": history,
         "created_at": session.created_at,
-        "updated_at": time.time(),
+        "updated_at": session.accessed_at,
     }

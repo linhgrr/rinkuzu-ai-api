@@ -22,7 +22,12 @@ from sentence_transformers import SentenceTransformer
 import torch
 
 from api.config import get_settings
-from api.core.shared import mongo_store
+from api.core.shared.persistence import (
+    load_pipeline_job_for_user,
+    load_subject_progress_by_session_for_user,
+    load_subject_progress_for_user,
+    save_subject_progress_snapshot,
+)
 
 from .environment import AdaptiveLearningEnv
 from .exercise_types import ExerciseType
@@ -266,7 +271,7 @@ class SessionManager:
     async def persist_subject_progress(self, session: SessionState) -> bool:
         if not session.job_id or not session.user_id:
             return True
-        return await mongo_store.require_subject_progress_repo().save_snapshot(
+        return await save_subject_progress_snapshot(
             session.job_id,
             session.user_id,
             self.build_subject_progress_snapshot(session),
@@ -370,9 +375,7 @@ class SessionManager:
             return [], 0, 0
 
         try:
-            subject_progress = await mongo_store.require_subject_progress_repo().load_for_user(
-                job_id, user_id=user_id
-            )
+            subject_progress = await load_subject_progress_for_user(job_id, user_id=user_id)
         except Exception:
             logger.exception("[Session] Error loading saved subject progress, starting fresh")
             return [], 0, 0
@@ -522,7 +525,7 @@ class SessionManager:
             if active and getattr(active, "user_id", None) == user_id:
                 return active
 
-            session_doc = await mongo_store.require_subject_progress_repo().load_by_session_for_user(session_id, user_id)
+            session_doc = await load_subject_progress_by_session_for_user(session_id, user_id)
             if not session_doc:
                 return None
 
@@ -534,7 +537,7 @@ class SessionManager:
             )
             return None
 
-        job_doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
+        job_doc = await load_pipeline_job_for_user(job_id, user_id)
         if not job_doc:
             logger.warning(
                 "[Session] Cannot recover session={}: pipeline job {} not found",
@@ -567,7 +570,9 @@ class SessionManager:
                 session_id=session_id,
                 history_source_doc=session_doc,
             )
-            logger.info("[Session] Recovered session={} for user={} from Mongo", session_id, user_id)
+            logger.info(
+                "[Session] Recovered session={} for user={} from Mongo", session_id, user_id
+            )
         except Exception:
             logger.exception("[Session] Failed recovering session={}", session_id)
             return None

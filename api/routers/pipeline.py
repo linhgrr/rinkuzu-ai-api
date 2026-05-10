@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from api.config import get_settings
 from api.core.content_pipeline import PipelineStatus
 from api.core.shared import mongo_store
+from api.core.shared.persistence import load_pipeline_job_for_user
 from api.core.shared.url_fetch import UnsafeURLError, stream_download
 from api.dependencies import (
     get_content_pipeline_availability,
@@ -52,11 +53,13 @@ async def pipeline_status(
     """Check if content pipeline runtime modules are available."""
     del request
     available = availability["available"]
-    return ok({
-        "available": available,
-        "service_initialized": availability["service_initialized"],
-        "message": "Content pipeline ready" if available else "Content pipeline unavailable",
-    })
+    return ok(
+        {
+            "available": available,
+            "service_initialized": availability["service_initialized"],
+            "message": "Content pipeline ready" if available else "Content pipeline unavailable",
+        }
+    )
 
 
 class ProcessDocumentRequest(BaseModel):
@@ -147,9 +150,7 @@ async def process_document(  # noqa: C901
             page_batch_size=req.page_batch_size,
         )
     except (RuntimeError, ValueError, OSError):
-        logger.exception(
-            "[PipelineRouter] Failed to initialize pipeline job for {}", req.filename
-        )
+        logger.exception("[PipelineRouter] Failed to initialize pipeline job for {}", req.filename)
         try:
             if save_path.exists():
                 save_path.unlink()
@@ -157,17 +158,19 @@ async def process_document(  # noqa: C901
             logger.warning("[PipelineRouter] Failed to cleanup upload {}", save_path)
         raise HTTPException(status_code=500, detail="Failed to initialize pipeline job.") from None
 
-    return ok({
-        "job_id": job.job_id,
-        "filename": req.filename,
-        "file_size": save_path.stat().st_size,
-        "subject_id": job.subject_id,
-        "status": job.status.value,
-        "status_url": f"/api/pipeline/jobs/{job.job_id}",
-        "page_batch_size": job.page_batch_size,
-        "retry_after_seconds": get_settings().content_pipeline_default_retry_after_sec,
-        "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
-    })
+    return ok(
+        {
+            "job_id": job.job_id,
+            "filename": req.filename,
+            "file_size": save_path.stat().st_size,
+            "subject_id": job.subject_id,
+            "status": job.status.value,
+            "status_url": f"/api/pipeline/jobs/{job.job_id}",
+            "page_batch_size": job.page_batch_size,
+            "retry_after_seconds": get_settings().content_pipeline_default_retry_after_sec,
+            "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
+        }
+    )
 
 
 @router.get("/jobs/{job_id}", response_model=StandardResponse[PipelineJobStatusResponse])
@@ -179,7 +182,7 @@ async def get_job_status(
 ):
     del request
     """Get pipeline job status and progress."""
-    job_doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
+    job_doc = await load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
@@ -246,7 +249,9 @@ async def get_job_status(
     return ok(response)
 
 
-@router.post("/jobs/{job_id}/create-session", response_model=StandardResponse[PipelineSessionCreateResponse])
+@router.post(
+    "/jobs/{job_id}/create-session", response_model=StandardResponse[PipelineSessionCreateResponse]
+)
 @limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def create_session_from_pipeline(
     request: Request,
@@ -259,7 +264,7 @@ async def create_session_from_pipeline(
 ):
     """Create a learning session from a completed pipeline job."""
     del request
-    job_doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
+    job_doc = await load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
@@ -312,10 +317,12 @@ async def create_session_from_pipeline(
     except TypeError as exc:
         logger.warning("[PipelineRouter] Failed to schedule eager prefetch: {}", exc)
 
-    return ok({
-        "session_id": session.session_id,
-        "n_concepts": len(result["concept_map"]),
-        "source": "new_session",
-        "job_id": job_id,
-        "status": "active",
-    })
+    return ok(
+        {
+            "session_id": session.session_id,
+            "n_concepts": len(result["concept_map"]),
+            "source": "new_session",
+            "job_id": job_id,
+            "status": "active",
+        }
+    )

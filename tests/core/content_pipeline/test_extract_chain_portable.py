@@ -10,6 +10,10 @@ from api.core.content_pipeline.infrastructure.llm.extract_chain import (
     ProviderUploadTooLargeError,
     build_page_batches,
 )
+from api.core.content_pipeline.infrastructure.llm.openai_responses import (
+    FileReferenceError,
+    UploadedFileRef,
+)
 from api.core.content_pipeline.infrastructure.llm.schemas import (
     ConceptExtraction,
     ConceptExtractionPayload,
@@ -46,7 +50,6 @@ class _RetryClient:
 
 
 async def _noop_upload_pdf_bytes(*, filename, pdf_bytes, sha256, now_ts, job_id=None):
-    from api.core.content_pipeline.infrastructure.llm.openai_responses import UploadedFileRef
     return UploadedFileRef(file_id="file-123", purpose="user_data", cache_hit=False)
 
 
@@ -142,6 +145,63 @@ def test_invoke_extraction_response_uses_pydantic_structured_output():
     input_blocks = captured["input_blocks"]
     assert isinstance(input_blocks, list)
     assert input_blocks[1]["type"] == "input_file"
+
+
+def test_extract_single_batch_awaits_cache_invalidation_on_file_reference_error():
+    class _Client:
+        def __init__(self) -> None:
+            self.invalidated: list[str] = []
+            self.uploads = 0
+
+        async def upload_pdf_bytes(self, **_: object) -> UploadedFileRef:
+            self.uploads += 1
+            return UploadedFileRef(
+                file_id=f"file-{self.uploads}",
+                purpose="user_data",
+                cache_hit=self.uploads == 1,
+            )
+
+        async def invalidate_cached_file(self, *, sha256: str) -> None:
+            self.invalidated.append(sha256)
+
+    client = _Client()
+    chain = ExtractionChain(client=client)  # type: ignore[arg-type]
+    calls = 0
+
+    async def fake_invoke(*, job_id, subject_id, file_id, previous_concepts, max_retries=2):
+        del job_id, subject_id, file_id, previous_concepts, max_retries
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise FileReferenceError("stale file ref")
+        payload = ConceptExtractionPayload.model_validate(
+            {"concepts": [], "subject_id": "math", "notes": None}
+        )
+        return payload, {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+
+    chain._invoke_extraction_response_with_retries = fake_invoke  # type: ignore[method-assign]
+
+    async def _run():
+        return await chain._extract_single_batch(
+            job_id="job-1",
+            subject_id="math",
+            batch={
+                "batch_index": 0,
+                "page_start": 1,
+                "page_end": 2,
+                "size_bytes": 128,
+                "pdf_bytes": b"pdf",
+                "sha256": "abc123",
+            },
+            previous_concepts=[],
+            source_name="source",
+        )
+
+    result = asyncio.run(_run())
+
+    assert isinstance(result, ConceptExtraction)
+    assert client.invalidated == ["abc123"]
+    assert client.uploads == 2
 
 
 def test_render_batched_pdfs_uses_compressed_pdf_when_it_fits(monkeypatch):

@@ -110,13 +110,11 @@ class PipelineRunner:
         save_job: SaveJobFn,
         persist_job_state: PersistJobStateFn,
         chunk_chroma_store: Any = None,
-        document_chunks_col: Any = None,
     ) -> None:
         self._load_job = load_job
         self._save_job = save_job
         self._persist_job_state = persist_job_state
         self._chunk_chroma_store = chunk_chroma_store
-        self._document_chunks_col = document_chunks_col
 
     @staticmethod
     def _cleanup_upload(file_path: str) -> None:
@@ -182,7 +180,6 @@ class PipelineRunner:
                     job,
                     chunks=chunks,
                     chunk_chroma_store=self._chunk_chroma_store,
-                    mongo_collection=self._document_chunks_col,
                     persist_job_state=self._persist_job_state,
                 )
 

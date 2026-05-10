@@ -765,7 +765,7 @@ class ExtractionChain:
                     batch.get("file_id"),
                     str(batch["sha256"])[:12],
                 )
-                self.client.invalidate_cached_file(sha256=str(batch["sha256"]))
+                await self.client.invalidate_cached_file(sha256=str(batch["sha256"]))
                 upload_started_at = time.perf_counter()
                 uploaded_file = await self.client.upload_pdf_bytes(
                     filename=batch_label,
@@ -925,7 +925,6 @@ class ExtractionChain:
                     retry_count,
                     int((time.perf_counter() - attempt_started_at) * 1000),
                 )
-                return payload, usage
             except Exception as exc:
                 last_error = exc
                 if attempt >= retry_count - 1:
@@ -940,6 +939,8 @@ class ExtractionChain:
                     int((time.perf_counter() - attempt_started_at) * 1000),
                 )
                 await asyncio.sleep(retry_backoff_sec * (attempt + 1))
+            else:
+                return payload, usage
         raise RuntimeError(str(last_error or "Extraction response failed."))
 
     async def _verify_single_relation(

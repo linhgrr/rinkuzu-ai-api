@@ -21,7 +21,9 @@ from .config import Settings, get_settings
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
 from .core.content_pipeline.application.pipeline_service import PipelineService
 from .core.content_pipeline.application.stages.execution import shutdown_pipeline_executor
-from .core.content_pipeline.application.stages.model_worker import shutdown_sentence_transformer_worker
+from .core.content_pipeline.application.stages.model_worker import (
+    shutdown_sentence_transformer_worker,
+)
 from .core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
 from .core.content_pipeline.infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -32,6 +34,7 @@ from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import Chu
 from .core.learning.exercise_service import ExerciseService
 from .core.learning.session import SessionManager
 from .core.shared import mongo_store
+from .core.shared.persistence import load_pipeline_job, save_pipeline_job
 from .exceptions import register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
 from .rate_limit import limiter
@@ -84,9 +87,7 @@ def _load_models(app: FastAPI) -> None:
 
 def _init_rag_stores(app: FastAPI) -> None:
     app.state.chunk_chroma_store = ChunkChromaStore(embedding_client=EmbeddingClient())
-    db = mongo_store._get_db() if mongo_store.is_available() else None
-    app.state.document_chunks_col = db["al_document_chunks"] if db is not None else None
-    logger.info("[RAG] ChunkChromaStore and MongoDB collection initialized")
+    logger.info("[RAG] ChunkChromaStore initialized")
 
 
 def _init_pipeline(app: FastAPI) -> None:
@@ -98,11 +99,10 @@ def _init_pipeline(app: FastAPI) -> None:
         await pipeline_service_ref.persist_job_state(job, status, step, progress)
 
     pipeline_runner = PipelineRunner(
-        load_job=mongo_store.require_pipeline_repo().load,
-        save_job=mongo_store.require_pipeline_repo().save,
+        load_job=load_pipeline_job,
+        save_job=save_pipeline_job,
         persist_job_state=persist_pipeline_job_state,
         chunk_chroma_store=app.state.chunk_chroma_store,
-        document_chunks_col=app.state.document_chunks_col,
     )
 
     async def run_content_pipeline(
@@ -125,7 +125,7 @@ def _init_pipeline(app: FastAPI) -> None:
 
     settings = get_settings()
     pipeline_service = PipelineService(
-        save_job=mongo_store.require_pipeline_repo().save,
+        save_job=save_pipeline_job,
         run_pipeline=run_content_pipeline,
         max_concurrent_jobs=settings.content_pipeline_max_concurrent_jobs,
     )
@@ -145,7 +145,11 @@ def _log_llm_config(settings: Settings) -> None:
     model = settings.openai_model or "(not set)"
     api_key = settings.openai_api_key or ""
     _key_prefix_len = 6
-    key_display = f"{api_key[:_key_prefix_len]}…" if len(api_key) > _key_prefix_len else (api_key or "(not set)")
+    key_display = (
+        f"{api_key[:_key_prefix_len]}…"
+        if len(api_key) > _key_prefix_len
+        else (api_key or "(not set)")
+    )
     exercise_model = settings.exercise_llm_model or model
     logger.info("[LLM] base_url    = {}", base_url)
     logger.info("[LLM] model       = {}", model)
@@ -218,6 +222,7 @@ async def lifespan(app: FastAPI):
     exercise_service = getattr(app.state, "exercise_service", None)
     if exercise_service:
         exercise_service.close()
+    await mongo_store.shutdown_mongo()
 
 
 settings = get_settings()

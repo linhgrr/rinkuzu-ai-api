@@ -9,6 +9,7 @@ from typing import Any, cast
 from loguru import logger
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.core.shared.persistence.common import normalize_for_bson
 
 from .execution import resolve_timeout_policy, run_blocking_stage, safe_run
 from .model_worker import encode_texts_with_sentence_transformer_worker
@@ -107,7 +108,7 @@ async def generate_concept_theories(
             logger.info("[Pipeline] Generating theory for {} concepts...", len(tasks))
             results = await asyncio.gather(*tasks)
             for concept_id, theory in results:
-                concepts_data[concept_id]["theory"] = theory
+                concepts_data[concept_id]["theory"] = normalize_for_bson(theory)
             logger.info("[Pipeline] ✓ Theory generation complete")
 
     await safe_run(
