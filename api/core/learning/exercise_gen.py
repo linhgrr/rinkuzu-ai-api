@@ -4,7 +4,6 @@ exercise_gen.py — LLM-powered exercise generation and answer evaluation.
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING, TypeVar, cast
 
 from loguru import logger
@@ -13,8 +12,7 @@ from pydantic import BaseModel
 from api.core.shared.llm import (
     _resolve_shared_llm_model,
     get_structured_llm,
-    resolve_retry_policy,
-    sleep_before_retry,
+    with_llm_retry,
 )
 
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
@@ -101,32 +99,11 @@ def generate_exercise(
         subject_context=subject_context,
     )
 
-    t0 = time.time()
-    max_retries, backoff_sec = resolve_retry_policy()
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.debug("[LLM] ⏳ generate_exercise attempt {}/{}", attempt, max_retries)
-            result = _invoke_structured_llm(
-                schema=schema,
-                messages=messages,
-            )
-        except Exception:
-            logger.exception(
-                "[LLM] ⚠ generate_exercise attempt {}/{} failed (will_retry={})",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-            )
-            if attempt < max_retries:
-                sleep_before_retry(attempt, backoff_sec)
-            continue
-        elapsed = time.time() - t0
-        logger.info("[LLM] ✓ Exercise generated in {:.2f}s", elapsed)
-        return cast("dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None", serializer(result))
-
-    elapsed = time.time() - t0
-    logger.error("[LLM] ✗ generate_exercise failed after {:.2f}s", elapsed)
-    raise RuntimeError("Exercise generation service is temporarily unavailable")
+    result = with_llm_retry(
+        label="generate_exercise",
+        fn=lambda: _invoke_structured_llm(schema=schema, messages=messages),
+    )
+    return cast("dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None", serializer(result))
 
 
 def evaluate_short_answer(
@@ -146,32 +123,11 @@ def evaluate_short_answer(
         student_answer=student_answer,
     )
 
-    t0 = time.time()
-    max_retries, backoff_sec = resolve_retry_policy()
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.debug("[LLM] ⏳ evaluate_short_answer attempt {}/{}", attempt, max_retries)
-            result = _invoke_structured_llm(
-                schema=ShortAnswerEvaluationOutput,
-                messages=messages,
-            )
-        except Exception:
-            logger.exception(
-                "[LLM] ⚠ evaluate_short_answer attempt {}/{} failed (will_retry={})",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-            )
-            if attempt < max_retries:
-                sleep_before_retry(attempt, backoff_sec)
-            continue
-        elapsed = time.time() - t0
-        logger.info("[LLM] ✓ Short answer graded in {:.2f}s", elapsed)
-        return result.model_dump()
-
-    elapsed = time.time() - t0
-    logger.error("[LLM] ✗ evaluate_short_answer failed after {:.2f}s", elapsed)
-    raise RuntimeError("Short-answer grading service is temporarily unavailable")
+    result = with_llm_retry(
+        label="evaluate_short_answer",
+        fn=lambda: _invoke_structured_llm(schema=ShortAnswerEvaluationOutput, messages=messages),
+    )
+    return result.model_dump()
 
 
 def generate_theory(
@@ -187,34 +143,13 @@ def generate_theory(
         bloom_level=bloom_level,
     )
 
-    t0 = time.time()
-    max_retries, backoff_sec = resolve_retry_policy()
     fallback: dict[str, str | list[str]] = {
         "content": f"Lý thuyết cơ bản về {concept_name}: {concept_definition}",
         "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."],
     }
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.debug("[LLM] ⏳ generate_theory attempt {}/{}", attempt, max_retries)
-            result = _invoke_structured_llm(
-                schema=TheoryOutput,
-                messages=messages,
-            )
-        except Exception:
-            logger.exception(
-                "[LLM] ⚠ generate_theory attempt {}/{} failed (will_retry={})",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-            )
-            if attempt < max_retries:
-                sleep_before_retry(attempt, backoff_sec)
-            continue
-        elapsed = time.time() - t0
-        logger.info("[LLM] ✓ Theory generated in {:.2f}s", elapsed)
-        return result.model_dump()
-
-    elapsed = time.time() - t0
-    logger.error("[LLM] ✗ generate_theory failed after {:.2f}s", elapsed)
-    return fallback
+    return with_llm_retry(
+        label="generate_theory",
+        fn=lambda: _invoke_structured_llm(schema=TheoryOutput, messages=messages),
+        on_exhausted=lambda: fallback,
+    )

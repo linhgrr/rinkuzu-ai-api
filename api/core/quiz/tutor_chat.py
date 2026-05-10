@@ -4,9 +4,7 @@ tutor_chat.py — Adaptive tutor-chat prompt and validation logic.
 
 from __future__ import annotations
 
-import asyncio
 import re
-import time
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -15,11 +13,11 @@ from loguru import logger
 
 from api.config import get_settings
 from api.core.shared.llm import (
+    awith_llm_retry,
     extract_llm_text,
     get_llm,
-    resolve_retry_policy,
     serialize_responses_sse_event,
-    sleep_before_retry,
+    with_llm_retry,
 )
 
 if TYPE_CHECKING:
@@ -242,39 +240,23 @@ async def _open_tutor_chat_stream(
     prompt: str,
     timeout_sec: float,
 ) -> Any:
-    max_retries, backoff_sec = resolve_retry_policy()
     stream_timeout = httpx.Timeout(timeout_sec, read=None)
 
-    for attempt in range(1, max_retries + 1):
+    async def _try():
         llm = get_llm(
             model=model,
             temperature=0.7,
             timeout=stream_timeout,
             streaming=True,
         )
-        try:
-            stream = llm.astream(
-                [
-                    SystemMessage(content=TUTOR_SYSTEM_PROMPT),
-                    HumanMessage(content=prompt),
-                ]
-            )
-        except Exception as exc:
-            logger.warning(
-                "[LLM] ⚠ tutor chat stream attempt {}/{} failed "
-                "(will_retry={}): {}",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-                exc,
-            )
-            if attempt < max_retries:
-                await asyncio.sleep(backoff_sec * attempt)
-                continue
-            raise RuntimeError("Tutor chat service is temporarily unavailable") from exc
-        return stream
+        return llm.astream(
+            [
+                SystemMessage(content=TUTOR_SYSTEM_PROMPT),
+                HumanMessage(content=prompt),
+            ]
+        )
 
-    raise RuntimeError("Tutor chat service is temporarily unavailable")
+    return await awith_llm_retry(label="tutor chat stream", fn=_try)
 
 
 async def create_tutor_chat_stream(
@@ -364,33 +346,16 @@ def generate_tutor_chat_response(
         rag_context=rag_context,
     )
 
-    t0 = time.time()
-    max_retries, backoff_sec = resolve_retry_policy()
-    for attempt in range(1, max_retries + 1):
-        try:
-            explanation = _request_text_response(
-                instructions=TUTOR_SYSTEM_PROMPT,
-                user_text=prompt,
-                model=_resolve_tutor_model(),
-                temperature=0.7,
-                timeout_sec=get_settings().llm_timeout_sec,
-            )
-        except Exception as exc:
-            logger.warning(
-                "[LLM] ⚠ tutor chat attempt {}/{} failed "
-                "(will_retry={}): {}",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-                exc,
-            )
-            if attempt < max_retries:
-                sleep_before_retry(attempt, backoff_sec)
-            continue
-        else:
-            if len(explanation) < _MIN_EXPLANATION_LENGTH:
-                raise ValueError("Chat explanation too short")
-            logger.info("[LLM] ✓ Tutor chat generated in {:.2f}s", time.time() - t0)
-            return explanation
+    def _try():
+        explanation = _request_text_response(
+            instructions=TUTOR_SYSTEM_PROMPT,
+            user_text=prompt,
+            model=_resolve_tutor_model(),
+            temperature=0.7,
+            timeout_sec=get_settings().llm_timeout_sec,
+        )
+        if len(explanation) < _MIN_EXPLANATION_LENGTH:
+            raise ValueError("Chat explanation too short")
+        return explanation
 
-    raise RuntimeError("Tutor chat service is temporarily unavailable")
+    return with_llm_retry(label="tutor chat", fn=_try)

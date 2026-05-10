@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessageChunk
 import pytest
 
 from api.core.quiz import tutor_chat
+from api.core.shared import llm as llm_module
 
 
 class _FakeLLM:
@@ -52,7 +53,7 @@ async def test_create_tutor_chat_stream_emits_openai_compatible_sse(monkeypatch)
     llm = _FakeLLM([AIMessageChunk(content="Xin "), AIMessageChunk(content="chào")])
 
     monkeypatch.setattr(tutor_chat, "get_llm", lambda **_kwargs: llm)
-    monkeypatch.setattr(tutor_chat, "resolve_retry_policy", lambda: (1, 0.0))
+    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (1, 0.0))
     monkeypatch.setattr(
         tutor_chat,
         "get_settings",

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from api.core.quiz import quiz_tutor
+from api.core.shared import llm as llm_module
 
 
 class _FakeLLM:
@@ -23,7 +24,7 @@ def test_generate_quiz_tutor_response_uses_langchain_messages(monkeypatch):
         "get_llm",
         lambda **_kwargs: llm,
     )
-    monkeypatch.setattr(quiz_tutor, "resolve_retry_policy", lambda: (1, 0.0))
+    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (1, 0.0))
     monkeypatch.setattr(
         quiz_tutor,
         "get_settings",

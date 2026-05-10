@@ -3,14 +3,14 @@
 from pathlib import Path
 from typing import Any
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from loguru import logger
 
 from api.core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
 from api.core.content_pipeline.infrastructure.llm.schemas import Concept
+
+from ._base import init_chroma_store
 
 
 class ConceptChromaStore:
@@ -22,48 +22,18 @@ class ConceptChromaStore:
         persist_directory: str | None = None,
         embedding_client: EmbeddingClient | None = None,
     ):
-        """
-        Khởi tạo ChromaDB store với LangChain integration.
-
-        Args:
-            collection_name: Tên collection trong ChromaDB
-            persist_directory: Thư mục lưu trữ dữ liệu ChromaDB (default: ./chroma_db)
-            embedding_client: EmbeddingClient instance (nếu None, sẽ tạo mới)
-        """
         self.collection_name = collection_name
 
-        # Set default persist directory
         if persist_directory is None:
             persist_directory = str(Path(__file__).parent.parent.parent / "chroma_db")
 
         self.persist_directory = persist_directory
-        Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
 
-        # Initialize embedding client
-        if embedding_client is None:
-            self.embedding_client = EmbeddingClient()
-        else:
-            self.embedding_client = embedding_client
-
-        # Initialize ChromaDB client with persistent storage
-        self.chroma_client = chromadb.PersistentClient(
-            path=self.persist_directory,
-            settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True),
-        )
-
-        # Initialize LangChain Chroma vectorstore
-        # Sử dụng trực tiếp EmbeddingClient vì nó đã implement Embeddings interface
-        self.vectorstore = Chroma(
-            client=self.chroma_client,
+        self.chroma_client, self.vectorstore, self.embedding_client = init_chroma_store(
             collection_name=self.collection_name,
-            embedding_function=self.embedding_client,
-        )
-
-        logger.info(
-            "ConceptChromaStore initialized with LangChain Chroma",
-            collection=self.collection_name,
-            persist_dir=self.persist_directory,
-            embedding_model=self.embedding_client.model_name,
+            persist_directory=self.persist_directory,
+            embedding_client=embedding_client,
+            log_label="ConceptChromaStore",
         )
 
     def add_concepts(self, concepts: list[Concept], subject_id: str) -> list[str]:

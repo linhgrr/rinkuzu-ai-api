@@ -6,13 +6,10 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from loguru import logger
 
-from api.core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
+from ._base import init_chroma_store
 
 _DEFAULT_PERSIST_DIRECTORY = str(Path(__file__).parent.parent.parent.parent / "chroma_db")
 
@@ -29,32 +26,11 @@ class ChunkChromaStore:
         self.persist_directory = persist_directory or _DEFAULT_PERSIST_DIRECTORY
         self.collection_name = collection_name
 
-        Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
-
-        if embedding_client is None:
-            embedding_client = EmbeddingClient()
-
-        self.embedding_client = embedding_client
-
-        self.chroma_client = chromadb.PersistentClient(
-            path=self.persist_directory,
-            settings=ChromaSettings(
-                anonymized_telemetry=False,
-                allow_reset=True,
-            ),
-        )
-
-        self.vectorstore = Chroma(
-            client=self.chroma_client,
+        self.chroma_client, self.vectorstore, self.embedding_client = init_chroma_store(
             collection_name=self.collection_name,
-            embedding_function=self.embedding_client,
-        )
-
-        logger.info(
-            "ChunkChromaStore initialized",
-            collection=self.collection_name,
-            persist_dir=self.persist_directory,
-            embedding_model=self.embedding_client.model_name,
+            persist_directory=self.persist_directory,
+            embedding_client=embedding_client,
+            log_label="ChunkChromaStore",
         )
 
     def add_chunks(

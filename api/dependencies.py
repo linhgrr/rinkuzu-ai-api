@@ -31,28 +31,27 @@ def get_app_settings() -> Settings:
     return get_settings()
 
 
+def _resolve_state(request: Request, attr: str, label: str) -> object:
+    """Return ``request.app.state.<attr>`` or raise 503 if unavailable."""
+    obj = getattr(request.app.state, attr, None)
+    if obj is None:
+        raise ServiceUnavailableError(label)
+    return obj
+
+
 def get_session_manager(request: Request):
     """Provide SessionManager from app state, raise 503 if not ready."""
-    manager = getattr(request.app.state, "session_manager", None)
-    if manager is None:
-        raise ServiceUnavailableError("SessionManager")
-    return manager
+    return _resolve_state(request, "session_manager", "SessionManager")
 
 
 def get_session_service(request: Request):
     """Provide ExerciseService from app state, raise 503 if not ready."""
-    service = getattr(request.app.state, "exercise_service", None)
-    if service is None:
-        raise ServiceUnavailableError("ExerciseService")
-    return service
+    return _resolve_state(request, "exercise_service", "ExerciseService")
 
 
 def get_content_pipeline_service(request: Request):
     """Provide PipelineService from app state, raise 503 if not ready."""
-    service = getattr(request.app.state, "content_pipeline_service", None)
-    if service is None:
-        raise ServiceUnavailableError("ContentPipelineService")
-    return service
+    return _resolve_state(request, "content_pipeline_service", "ContentPipelineService")
 
 
 def get_chunk_chroma_store(request: Request):

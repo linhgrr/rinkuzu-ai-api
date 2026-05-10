@@ -4,7 +4,6 @@ quiz_tutor.py — Quiz ask-AI generation and streaming via the official OpenAI R
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -14,11 +13,11 @@ from loguru import logger
 
 from api.config import get_settings
 from api.core.shared.llm import (
+    awith_llm_retry,
     extract_llm_text,
     get_llm,
-    resolve_retry_policy,
     serialize_responses_sse_event,
-    sleep_before_retry,
+    with_llm_retry,
 )
 
 from .tutor_chat import (
@@ -98,10 +97,9 @@ async def _open_quiz_tutor_stream(
     input_messages: list[SystemMessage | HumanMessage],
     timeout_sec: float,
 ) -> Any:
-    max_retries, backoff_sec = resolve_retry_policy()
     stream_timeout = httpx.Timeout(timeout_sec, read=None)
 
-    for attempt in range(1, max_retries + 1):
+    async def _try():
         llm = get_llm(
             model=model,
             temperature=0.7,
@@ -109,24 +107,9 @@ async def _open_quiz_tutor_stream(
             streaming=True,
             use_responses_api=True,
         )
-        try:
-            stream = llm.astream(input_messages)
-        except Exception as exc:
-            logger.warning(
-                "[LLM] ⚠ quiz tutor stream attempt {}/{} failed "
-                "(will_retry={}): {}",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-                exc,
-            )
-            if attempt < max_retries:
-                await asyncio.sleep(backoff_sec * attempt)
-                continue
-            raise RuntimeError("Quiz tutor streaming is temporarily unavailable") from exc
-        return stream
+        return llm.astream(input_messages)
 
-    raise RuntimeError("Quiz tutor streaming is temporarily unavailable")
+    return await awith_llm_retry(label="quiz tutor stream", fn=_try)
 
 
 def generate_quiz_tutor_response(
@@ -154,51 +137,27 @@ def generate_quiz_tutor_response(
         option_images=option_images,
     )
 
-    max_retries, backoff_sec = resolve_retry_policy()
-    started_at = datetime.now(UTC).isoformat()
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            explanation = _request_quiz_tutor_text(
-                model=model,
-                input_messages=input_messages,
-                timeout_sec=settings.llm_timeout_sec,
-            )
-        except Exception as exc:
-            logger.warning(
-                "[LLM] ⚠ quiz tutor attempt {}/{} failed "
-                "(will_retry={}): {}",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-                exc,
-            )
-            if attempt < max_retries:
-                sleep_before_retry(attempt, backoff_sec)
-            continue
+    def _try():
+        explanation = _request_quiz_tutor_text(
+            model=model,
+            input_messages=input_messages,
+            timeout_sec=settings.llm_timeout_sec,
+        )
         if len(explanation) < _MIN_EXPLANATION_LENGTH:
-            logger.warning(
-                "[LLM] ⚠ quiz tutor attempt {}/{} failed "
-                "(will_retry={}): explanation too short",
-                attempt,
-                max_retries,
-                attempt < max_retries,
-            )
-            if attempt < max_retries:
-                sleep_before_retry(attempt, backoff_sec)
-            continue
-        logger.info("[LLM] ✓ Quiz tutor chat generated")
-        return {
-            "success": True,
-            "data": {
-                "explanation": explanation,
-                "structured": None,
-                "timestamp": started_at,
-                "turn_count": (len(chat_history or []) // 2) + 1,
-            },
-        }
+            raise ValueError("explanation too short")
+        return explanation
 
-    raise RuntimeError("Quiz tutor service is temporarily unavailable")
+    explanation = with_llm_retry(label="quiz tutor", fn=_try)
+    logger.info("[LLM] ✓ Quiz tutor chat generated")
+    return {
+        "success": True,
+        "data": {
+            "explanation": explanation,
+            "structured": None,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "turn_count": (len(chat_history or []) // 2) + 1,
+        },
+    }
 
 
 async def create_quiz_tutor_stream(
