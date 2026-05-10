@@ -8,6 +8,7 @@ import functools
 import hashlib
 from importlib import import_module
 from pathlib import Path
+from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 import boto3
@@ -70,6 +71,18 @@ class ContentProcessorBindings:
     generate_theory: Callable[[str, str], Any]
 
 
+class LockedSentenceTransformerModel:
+    """Thread-safe wrapper for a shared sentence-transformers model."""
+
+    def __init__(self, model: Any) -> None:
+        self._model = model
+        self._lock = Lock()
+
+    def encode(self, *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return self._model.encode(*args, **kwargs)
+
+
 def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str):
     """Delegate theory generation to exercise_gen module."""
     exercise_gen = import_module("api.core.learning.exercise_gen")
@@ -113,6 +126,14 @@ def _compute_embedding_for_concepts(concepts, embedding_model):
     return compute_embedding_for_concepts(concepts, embedding_model)
 
 
+@functools.lru_cache(maxsize=1)
+def _load_saint_text_model() -> LockedSentenceTransformerModel:
+    if not _SENTENCE_TRANSFORMERS_AVAILABLE or _SentenceTransformerFactory is None:
+        raise ImportError("sentence-transformers is required for SAINT text model")
+    model = _SentenceTransformerFactory("paraphrase-multilingual-mpnet-base-v2")
+    return LockedSentenceTransformerModel(model)
+
+
 def _build_relation_engine(*, extraction_chain):
     if not _PREREQ_RANKING_AVAILABLE:
 
@@ -148,10 +169,7 @@ def _apply_transitive_reduction(graph):
 
 
 def _build_saint_text_model():
-    # sentence_transformers is an optional heavy dependency checked at module load.
-    if not _SENTENCE_TRANSFORMERS_AVAILABLE or _SentenceTransformerFactory is None:
-        raise ImportError("sentence-transformers is required for SAINT text model")
-    return _SentenceTransformerFactory("paraphrase-multilingual-mpnet-base-v2")
+    return _load_saint_text_model()
 
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:

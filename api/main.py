@@ -20,6 +20,8 @@ from slowapi.errors import RateLimitExceeded
 from .config import Settings, get_settings
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
 from .core.content_pipeline.application.pipeline_service import PipelineService
+from .core.content_pipeline.application.stages.execution import shutdown_pipeline_executor
+from .core.content_pipeline.application.stages.model_worker import shutdown_sentence_transformer_worker
 from .core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
 from .core.content_pipeline.infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -208,6 +210,11 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down...")
+    pipeline_service = getattr(app.state, "content_pipeline_service", None)
+    if pipeline_service is not None:
+        await pipeline_service.shutdown(timeout_sec=2.0)
+    await shutdown_sentence_transformer_worker()
+    shutdown_pipeline_executor(wait=False, cancel_futures=True)
     exercise_service = getattr(app.state, "exercise_service", None)
     if exercise_service:
         exercise_service.close()

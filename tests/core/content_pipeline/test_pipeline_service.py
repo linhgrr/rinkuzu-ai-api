@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from api.core.content_pipeline.application.pipeline_service import PipelineService
@@ -80,3 +82,47 @@ async def test_start_job_returns_failed_job_when_content_processor_is_unavailabl
     assert job.error_code == "pipeline_unavailable"
     assert job.retryable is False
     assert "Content pipeline modules not available" in (job.error_message or "")
+
+
+@pytest.mark.anyio
+async def test_shutdown_cancels_inflight_background_tasks():
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def save_job(job):
+        return True
+
+    async def run_pipeline(
+        job,
+        file_path,
+        prs_threshold,
+        min_confidence,
+        *,
+        apply_reduction,
+        page_batch_size,
+    ):
+        del job, file_path, prs_threshold, min_confidence, apply_reduction, page_batch_size
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    service = PipelineService(save_job=save_job, run_pipeline=run_pipeline)
+    await service.start_job(
+        file_path="fixtures/algebra.pdf",
+        subject_id=None,
+        prs_threshold=0.75,
+        min_confidence=0.6,
+        apply_reduction=True,
+        user_id="user-1",
+        content_processor_available=True,
+        content_processor_src="fixtures/content-pipeline-runtime",
+        page_batch_size=10,
+    )
+
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    await service.shutdown(timeout_sec=0.5)
+
+    assert cancelled.is_set()

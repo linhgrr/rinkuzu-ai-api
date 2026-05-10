@@ -12,6 +12,7 @@ from api.config import get_settings
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from ..ports import PersistJobStateFn  # noqa: TC001
+from .execution import resolve_timeout_policy, run_process_stage
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -48,7 +49,7 @@ async def extract_concepts_from_chunks(
     )
 
     settings = get_settings()
-    extraction_timeout = _resolve_extraction_timeout(file_path, job, settings)
+    extraction_timeout = await _resolve_extraction_timeout(file_path, job, settings)
 
     extractions: list[Any] = await asyncio.wait_for(
         extraction_chain.extract_from_document(
@@ -90,21 +91,27 @@ async def extract_concepts_from_chunks(
     return all_concepts
 
 
-def _resolve_extraction_timeout(file_path: str, job: PipelineJob, settings: Any) -> float:
+def _read_pdf_page_count(file_path: str) -> int:
+    with fitz.open(file_path) as doc:
+        return int(doc.page_count)
+
+
+async def _resolve_extraction_timeout(file_path: str, job: PipelineJob, settings: Any) -> float:
     """Calculate extraction timeout based on PDF page count.
 
     Falls back to content_pipeline_stage_timeout_sec if page count cannot be read.
     Formula: max(stage_timeout, n_pages * secs_per_page)
     """
-    from .execution import resolve_timeout_policy  # noqa: PLC0415
-
     _, default_stage_timeout = resolve_timeout_policy()
     fallback = default_stage_timeout or 300.0
 
     secs_per_page = float(getattr(settings, "content_pipeline_extraction_secs_per_page", 20.0))
     try:
-        with fitz.open(file_path) as doc:
-            n_pages = int(doc.page_count)
+        n_pages = await run_process_stage(
+            "api.core.content_pipeline.application.stages.concept_extraction:_read_pdf_page_count",
+            file_path,
+            stage_name="pdf_page_count",
+        )
         job.total_pages = n_pages
     except Exception:
         logger.warning(

@@ -63,9 +63,15 @@ async def try_restore_completed_job_from_s3(
     populate_metrics: PopulateMetricsFn,
 ) -> str | None:
     """Restore a completed job from S3 JSON cache when available."""
-    cache_key = f"cache/{hash_file(file_path)}.json"
     if not s3_client or not bucket_name:
-        return cache_key
+        return None
+
+    file_hash = await run_blocking_stage(
+        hash_file,
+        file_path,
+        stage_name="s3_cache_hash",
+    )
+    cache_key = f"cache/{file_hash}.json"
 
     job.status = PipelineStatus.LOADING
     job.current_step = "Kiểm tra cache trên S3..."
@@ -78,7 +84,11 @@ async def try_restore_completed_job_from_s3(
             Key=cache_key,
             stage_name="s3_cache_restore",
         )
-        cache_content = response["Body"].read().decode("utf-8")
+        cache_bytes = await run_blocking_stage(
+            response["Body"].read,
+            stage_name="s3_cache_body_read",
+        )
+        cache_content = cache_bytes.decode("utf-8")
         job.result = json.loads(cache_content)
         populate_metrics(job)
         job.status = PipelineStatus.COMPLETED

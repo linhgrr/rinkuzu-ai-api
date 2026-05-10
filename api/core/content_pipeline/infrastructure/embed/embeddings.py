@@ -27,6 +27,11 @@ def compute_embedding_for_concepts(concepts: list[Concept], client: EmbeddingCli
         logger.warning("No concepts provided for embedding computation.")
         return
 
+    concepts_with_names: list[Concept] = []
+    name_texts: list[str] = []
+    concepts_with_definitions: list[Concept] = []
+    definition_texts: list[str] = []
+
     for concept in concepts:
         if not concept.name:
             logger.warning(
@@ -34,23 +39,42 @@ def compute_embedding_for_concepts(concepts: list[Concept], client: EmbeddingCli
                 concept.concept_id,
             )
             continue
-        if not concept.definition:
+        concepts_with_names.append(concept)
+        name_texts.append(concept.name)
+        if concept.definition:
+            concepts_with_definitions.append(concept)
+            definition_texts.append(concept.definition)
+        else:
             logger.warning(
-                "Concept with ID {} has no definition. Skipping embedding computation.",
+                "Concept with ID {} has no definition. Skipping definition embedding.",
                 concept.concept_id,
             )
-            continue
 
-        try:
-            logger.info("Computing embeddings for concept ID {}.", concept.concept_id)
+    if not concepts_with_names:
+        return
 
-            # Compute name embedding (for CSR prerequisite ranking)
-            name_embedding = client.embed_query(concept.name)
-            concept.name_embedding = name_embedding
+    try:
+        logger.info("Computing name embeddings for {} concepts.", len(concepts_with_names))
+        name_embeddings = client.embed_documents(name_texts)
+        for concept, embedding in zip(concepts_with_names, name_embeddings, strict=False):
+            concept.name_embedding = embedding
+    except Exception:
+        logger.exception("Failed to compute batched name embeddings")
 
-            # Compute definition embedding (for CSR prerequisite ranking)
-            definition_embedding = client.embed_query(concept.definition)
-            concept.definition_embedding = definition_embedding
+    if not concepts_with_definitions:
+        return
 
-        except Exception:
-            logger.exception("Failed to compute embeddings for concept ID {}", concept.concept_id)
+    try:
+        logger.info(
+            "Computing definition embeddings for {} concepts.",
+            len(concepts_with_definitions),
+        )
+        definition_embeddings = client.embed_documents(definition_texts)
+        for concept, embedding in zip(
+            concepts_with_definitions,
+            definition_embeddings,
+            strict=False,
+        ):
+            concept.definition_embedding = embedding
+    except Exception:
+        logger.exception("Failed to compute batched definition embeddings")

@@ -4,6 +4,7 @@ import fitz
 from pydantic import ValidationError
 import pytest
 
+from api.core.content_pipeline.infrastructure.llm import extract_chain as extract_chain_module
 from api.core.content_pipeline.infrastructure.llm.extract_chain import (
     ExtractionChain,
     ProviderUploadTooLargeError,
@@ -211,21 +212,46 @@ def test_extract_from_document_splits_again_when_provider_rejects_upload_size(tm
         return ConceptExtraction(concepts=[], subject_id=subject_id, notes=None)
 
     monkeypatch.setattr(chain, "_extract_single_batch", fake_extract_single_batch)
-    # Stub _render_batched_pdfs to bypass fitz.open() inside asyncio.to_thread.
-    monkeypatch.setattr(
-        chain,
-        "_render_batched_pdfs",
-        lambda *, document, batch_index, start_page, end_page, max_bytes: [
-            {
-                "batch_index": batch_index,
-                "page_start": start_page,
-                "page_end": end_page,
-                "pdf_bytes": b"x",
-                "sha256": "abc",
-                "size_bytes": 1,
-            }
-        ],
-    )
+
+    async def fake_run_process_stage(target_path, *args, stage_name, timeout_sec=None, **kwargs):
+        del stage_name, timeout_sec
+        if target_path == extract_chain_module._READ_PAGE_COUNT_PROCESS_TARGET:
+            return 2
+        if target_path == extract_chain_module._RENDER_BATCHES_PROCESS_TARGET:
+            return [
+                {
+                    "batch_index": kwargs["batch_index"],
+                    "page_start": kwargs["start_page"],
+                    "page_end": kwargs["end_page"],
+                    "pdf_bytes": b"x",
+                    "sha256": "abc",
+                    "size_bytes": 1,
+                }
+            ]
+        if target_path == extract_chain_module._SPLIT_BATCH_PROCESS_TARGET:
+            _file_path = args[0]
+            batch = kwargs["batch"]
+            return [
+                {
+                    "batch_index": batch["batch_index"],
+                    "page_start": 1,
+                    "page_end": 1,
+                    "pdf_bytes": b"x",
+                    "sha256": "abc",
+                    "size_bytes": 1,
+                },
+                {
+                    "batch_index": batch["batch_index"],
+                    "page_start": 2,
+                    "page_end": 2,
+                    "pdf_bytes": b"x",
+                    "sha256": "abc",
+                    "size_bytes": 1,
+                },
+            ]
+        raise AssertionError(f"unexpected process target: {target_path}")
+
+    monkeypatch.setattr(extract_chain_module, "run_process_stage", fake_run_process_stage)
 
     async def _run():
         return await chain.extract_from_document(str(pdf_path), "math", page_batch_size=10)

@@ -187,8 +187,6 @@ class PipelineRunner:
                 await compute_concept_embeddings(
                     job,
                     concepts=all_concepts,
-                    embedding_client_factory=bindings.embedding_client_factory,
-                    compute_embedding_for_concepts=bindings.compute_embedding_for_concepts,
                     persist_job_state=self._persist_job_state,
                     model_name=model_name,
                     batch_size=batch_size,
@@ -247,7 +245,6 @@ class PipelineRunner:
                     job,
                     concepts_data=concepts_data,
                     concept_map=concept_map,
-                    text_model_factory=bindings.saint_text_model_factory,
                     persist_job_state=self._persist_job_state,
                 )
 

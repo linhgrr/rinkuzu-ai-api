@@ -10,9 +10,11 @@ from loguru import logger
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
-from .execution import run_blocking_stage, safe_run
+from .execution import resolve_timeout_policy, run_blocking_stage, safe_run
+from .model_worker import encode_texts_with_sentence_transformer_worker
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
+SAINT_TEXT_MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"
 
 
 def build_ordered_embedding_texts(
@@ -35,7 +37,6 @@ async def generate_saint_concept_embeddings(
     *,
     concepts_data: dict[str, dict[str, Any]],
     concept_map: dict[str, int],
-    text_model_factory: Callable[[], Any],
     persist_job_state: PersistJobStateFn,
     ) -> list[list[float]] | None:
     """Generate concept embeddings for downstream adaptive-learning models."""
@@ -46,17 +47,21 @@ async def generate_saint_concept_embeddings(
         PipelineProgress.SAINT_EMBEDDINGS,
     )
     async def _generate():
-        text_model = text_model_factory()
+        _, stage_timeout = resolve_timeout_policy()
         ordered_texts = build_ordered_embedding_texts(concepts_data, concept_map)
-        embeddings: Any = await run_blocking_stage(
-            text_model.encode,
-            ordered_texts,
-            show_progress_bar=False,
+        embeddings = await encode_texts_with_sentence_transformer_worker(
+            texts=ordered_texts,
+            model_name=SAINT_TEXT_MODEL_NAME,
             batch_size=32,
+            normalize_embeddings=False,
+            use_vi_tokenizer=False,
+            max_seq_length=None,
+            show_progress_bar=False,
             stage_name="saint_embedding_generation",
+            timeout_sec=stage_timeout,
         )
         logger.info("[Pipeline] ✓ Generated embeddings for {} concepts", len(ordered_texts))
-        return cast("list[list[float]]", embeddings.tolist())
+        return cast("list[list[float]]", embeddings)
 
     return await safe_run(
         _generate,

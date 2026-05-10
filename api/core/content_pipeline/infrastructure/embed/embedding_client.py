@@ -1,5 +1,7 @@
 """Embedding client compatible with LangChain Embeddings interface."""
 
+import functools
+from threading import Lock
 from typing import cast
 
 from langchain_core.embeddings import Embeddings
@@ -11,6 +13,12 @@ import torch
 from api.config import settings
 
 
+class _ModelHandle:
+    def __init__(self, model: SentenceTransformer) -> None:
+        self.model = model
+        self.lock = Lock()
+
+
 class EmbeddingClient(Embeddings):
     """
     Embedding client using SentenceTransformers, compatible with LangChain.
@@ -18,6 +26,21 @@ class EmbeddingClient(Embeddings):
     Kế thừa từ langchain_core.embeddings.Embeddings để tích hợp trực tiếp
     với Langchain Chroma và các components khác của LangChain.
     """
+
+    @staticmethod
+    @functools.lru_cache(maxsize=4)
+    def _load_model_handle(
+        model_name: str,
+        device: str,
+        max_seq_length: int | None,
+    ) -> _ModelHandle:
+        model = SentenceTransformer(model_name, device=device)
+        if max_seq_length:
+            try:
+                model.max_seq_length = max_seq_length
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                logger.warning("Cannot set max_seq_length: {}", exc)
+        return _ModelHandle(model)
 
     def __init__(
         self,
@@ -39,19 +62,18 @@ class EmbeddingClient(Embeddings):
             raise ValueError("Embedding model name must be specified in settings.")
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = SentenceTransformer(self.model_name, device=self.device)
+        self._model_handle = self._load_model_handle(
+            self.model_name,
+            self.device,
+            settings.max_seq_length,
+        )
+        self.model = self._model_handle.model
 
         self.use_vi_tokenizer = (
             use_vi_tokenizer if use_vi_tokenizer is not None else settings.use_vi_tokenizer
         )
 
         self.batch_size = batch_size or settings.embedding_batch_size
-
-        if settings.max_seq_length:
-            try:
-                self.model.max_seq_length = settings.max_seq_length
-            except Exception as e:
-                logger.warning("Cannot set max_seq_length: {}", e)
 
         logger.info(
             "EmbeddingClient initialized: model={}, device={}, batch_size={}, use_vi_tokenizer={}",
@@ -85,12 +107,13 @@ class EmbeddingClient(Embeddings):
 
         text = self._maybe_tokenize(text)
 
-        emb = self.model.encode(
-            text,
-            convert_to_tensor=False,
-            normalize_embeddings=True,
-            batch_size=1,
-        )
+        with self._model_handle.lock:
+            emb = self.model.encode(
+                text,
+                convert_to_tensor=False,
+                normalize_embeddings=True,
+                batch_size=1,
+            )
         return cast("list[float]", emb.astype(float).tolist())
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -110,12 +133,13 @@ class EmbeddingClient(Embeddings):
 
         prepped = [self._maybe_tokenize(t or "") for t in texts]
 
-        embs = self.model.encode(
-            prepped,
-            convert_to_tensor=False,
-            normalize_embeddings=True,
-            batch_size=self.batch_size,
-        )
+        with self._model_handle.lock:
+            embs = self.model.encode(
+                prepped,
+                convert_to_tensor=False,
+                normalize_embeddings=True,
+                batch_size=self.batch_size,
+            )
         return [row.astype(float).tolist() for row in embs]
 
     # Backward compatibility methods (cho các phần khác của dự án)
@@ -128,10 +152,11 @@ class EmbeddingClient(Embeddings):
         if isinstance(texts, str):
             texts = [texts]
 
-        return self.model.encode(
-            [self._maybe_tokenize(t or "") for t in texts],
-            convert_to_tensor=False,
-            normalize_embeddings=True,
-            batch_size=self.batch_size,
-            **kwargs,
-        )
+        with self._model_handle.lock:
+            return self.model.encode(
+                [self._maybe_tokenize(t or "") for t in texts],
+                convert_to_tensor=False,
+                normalize_embeddings=True,
+                batch_size=self.batch_size,
+                **kwargs,
+            )

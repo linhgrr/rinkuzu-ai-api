@@ -1,5 +1,8 @@
 import asyncio
 
+import pytest
+
+from api.core.content_pipeline.application.stages import enrichment as enrichment_stage
 from api.core.content_pipeline.application.stages.enrichment import (
     build_ordered_embedding_texts,
     generate_concept_theories,
@@ -19,27 +22,47 @@ def test_build_ordered_embedding_texts_uses_concept_map_order():
 
     assert texts == ["Alpha: alpha def", "Beta: beta def"]
 
-
-class _TextModelStub:
-    def encode(self, ordered_texts, *, show_progress_bar=False, batch_size=32):
-        return _EmbeddingsStub([[len(text)] for text in ordered_texts])
-
-
-class _EmbeddingsStub:
-    def __init__(self, values):
-        self._values = values
-
-    def tolist(self):
-        return self._values
-
-
-def test_generate_saint_concept_embeddings_updates_progress_and_returns_vectors():
+def test_generate_saint_concept_embeddings_updates_progress_and_returns_vectors(monkeypatch):
     job = PipelineJob(job_id="job-1", filename="lesson.pdf", subject_id="algebra")
     calls = []
+    worker_calls = []
 
     async def persist_job_state(job_arg, status, step, progress):
         assert job_arg is job
         calls.append((status, step, progress))
+
+    async def fake_encode_texts_with_sentence_transformer_worker(
+        *,
+        texts,
+        model_name,
+        batch_size,
+        normalize_embeddings,
+        use_vi_tokenizer,
+        max_seq_length,
+        show_progress_bar,
+        stage_name,
+        timeout_sec,
+    ):
+        worker_calls.append(
+            (
+                texts,
+                model_name,
+                batch_size,
+                normalize_embeddings,
+                use_vi_tokenizer,
+                max_seq_length,
+                show_progress_bar,
+                stage_name,
+                timeout_sec,
+            )
+        )
+        return [[len(text)] for text in texts]
+
+    monkeypatch.setattr(
+        enrichment_stage,
+        "encode_texts_with_sentence_transformer_worker",
+        fake_encode_texts_with_sentence_transformer_worker,
+    )
 
     embeddings = asyncio.run(
         generate_saint_concept_embeddings(
@@ -49,12 +72,13 @@ def test_generate_saint_concept_embeddings_updates_progress_and_returns_vectors(
                 "c2": {"name": "Beta", "definition": ""},
             },
             concept_map={"c1": 0, "c2": 1},
-            text_model_factory=_TextModelStub,
             persist_job_state=persist_job_state,
         )
     )
 
     assert embeddings == [[16], [4]]
+    assert worker_calls[0][0] == ["Alpha: alpha def", "Beta"]
+    assert worker_calls[0][1:4] == ("paraphrase-multilingual-mpnet-base-v2", 32, False)
     assert calls == [
         (PipelineStatus.OPTIMIZING, "Generating concept embeddings for SAINT...", 0.92),
     ]

@@ -14,6 +14,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+from pymongo import UpdateOne
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
@@ -61,24 +62,28 @@ async def persist_document_chunks(
     # ── MongoDB ────────────────────────────────────────────────
     if mongo_collection is not None:
         async def _persist_mongo():
-            docs_to_upsert = [
-                {
+            docs_to_upsert = []
+            operations = []
+            for i, chunk in enumerate(chunks):
+                doc = {
                     "job_id": job.job_id,
                     "subject_id": job.subject_id,
-                    "chunk_index": c.metadata.get("chunk_index", i),
-                    "text": c.page_content,
-                    "start_page": c.metadata.get("start_page", 0),
-                    "end_page": c.metadata.get("end_page", 0),
+                    "chunk_index": chunk.metadata.get("chunk_index", i),
+                    "text": chunk.page_content,
+                    "start_page": chunk.metadata.get("start_page", 0),
+                    "end_page": chunk.metadata.get("end_page", 0),
                     "created_at": time.time(),
                 }
-                for i, c in enumerate(chunks)
-            ]
-            for doc in docs_to_upsert:
-                await mongo_collection.update_one(
-                    {"job_id": doc["job_id"], "chunk_index": doc["chunk_index"]},
-                    {"$set": doc},
-                    upsert=True,
+                docs_to_upsert.append(doc)
+                operations.append(
+                    UpdateOne(
+                        {"job_id": doc["job_id"], "chunk_index": doc["chunk_index"]},
+                        {"$set": doc},
+                        upsert=True,
+                    )
                 )
+            if operations:
+                await mongo_collection.bulk_write(operations, ordered=False)
             logger.info(
                 "[persist_chunks] MongoDB: persisted {} chunks",
                 len(docs_to_upsert),

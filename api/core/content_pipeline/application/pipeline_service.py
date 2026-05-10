@@ -6,6 +6,7 @@ This service owns request-independent job scheduling and persistence.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 import time
 from typing import TYPE_CHECKING, Any, Protocol
@@ -46,6 +47,7 @@ class PipelineService:
         self._run_pipeline = run_pipeline
         self._scheduled_tasks: set[asyncio.Task[None]] = set()
         self._concurrency_semaphore = asyncio.Semaphore(max_concurrent_jobs)
+        self._is_shutting_down = False
 
     async def persist_job_state(
         self,
@@ -81,6 +83,8 @@ class PipelineService:
         content_processor_src: str,
         page_batch_size: int,
     ) -> PipelineJob:
+        if self._is_shutting_down:
+            raise RuntimeError("Content pipeline is shutting down and cannot accept new jobs.")
         job = self._build_job(
             file_path=file_path,
             subject_id=subject_id,
@@ -163,3 +167,26 @@ class PipelineService:
         task: asyncio.Task[None] = asyncio.create_task(_gated_run())
         self._scheduled_tasks.add(task)
         task.add_done_callback(self._scheduled_tasks.discard)
+
+    async def shutdown(
+        self,
+        *,
+        cancel_running: bool = True,
+        timeout_sec: float = 5.0,
+    ) -> None:
+        """Stop accepting new jobs and drain/cancel scheduled background tasks."""
+        self._is_shutting_down = True
+        pending_tasks = list(self._scheduled_tasks)
+        if not pending_tasks:
+            return
+
+        if cancel_running:
+            for task in pending_tasks:
+                task.cancel()
+
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(
+                asyncio.gather(*pending_tasks, return_exceptions=True),
+                timeout=timeout_sec,
+            )
+        self._scheduled_tasks.difference_update(pending_tasks)
