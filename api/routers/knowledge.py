@@ -9,7 +9,7 @@ from api.dependencies import get_current_user, get_session_manager, resolve_user
 from api.exceptions import SessionNotFoundError
 from api.rate_limit import is_admin_request, limiter
 from api.schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
-from api.schemas.common import StandardResponse
+from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
@@ -29,7 +29,7 @@ async def get_knowledge_graph(
     data = manager.get_knowledge_graph(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
-    return {"success": True, "data": KnowledgeGraphResponse(**data).model_dump()}
+    return ok(KnowledgeGraphResponse(**data).model_dump())
 
 
 @router.get("/{session_id}/mastery-matrix", response_model=StandardResponse[MasteryMatrixResponse])
@@ -46,7 +46,7 @@ async def get_mastery_matrix(
     data = manager.get_mastery_matrix(session_id)
     if not data:
         raise SessionNotFoundError(session_id)
-    return {"success": True, "data": MasteryMatrixResponse(**data).model_dump()}
+    return ok(MasteryMatrixResponse(**data).model_dump())
 
 
 @router.get("/{session_id}/concept/{concept_id}", response_model=StandardResponse[ConceptDetailResponse])
@@ -64,4 +64,4 @@ async def get_concept_detail(
     data = manager.get_concept_detail(session_id, concept_id)
     if not data:
         raise SessionNotFoundError(session_id)
-    return {"success": True, "data": ConceptDetailResponse(**data).model_dump()}
+    return ok(ConceptDetailResponse(**data).model_dump())

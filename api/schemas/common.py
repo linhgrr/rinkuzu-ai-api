@@ -7,6 +7,11 @@ from pydantic import BaseModel, ConfigDict
 DataT = TypeVar("DataT")
 
 
+def ok(data: object) -> dict[str, object]:
+    """Construct a standard success response envelope."""
+    return {"success": True, "data": data}
+
+
 class BaseStandardModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

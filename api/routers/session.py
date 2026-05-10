@@ -41,7 +41,7 @@ from api.schemas import (
     TutorChatRequest,
     TutorChatResponse,
 )
-from api.schemas.common import StandardResponse
+from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/session", tags=["session"])
@@ -156,15 +156,12 @@ async def start_session(
     except TypeError as exc:
         logger.warning("[SessionRouter] Failed to schedule eager prefetch: {}", exc)
 
-    return {
-        "success": True,
-        "data": SessionCreateResponse(
-            session_id=session.session_id,
-            n_concepts=len(session.concept_map),
-            concepts=concepts,
-            status="active",
-        ).model_dump()
-    }
+    return ok(SessionCreateResponse(
+        session_id=session.session_id,
+        n_concepts=len(session.concept_map),
+        concepts=concepts,
+        status="active",
+    ).model_dump())
 
 
 @router.post("/{session_id}/next-concept", response_model=StandardResponse[NextConceptResponse])
@@ -186,7 +183,7 @@ async def next_concept(
     if not concept_info:
         raise ExerciseGenerationError("Failed to determine next concept")
 
-    return {"success": True, "data": NextConceptResponse(**concept_info).model_dump()}
+    return ok(NextConceptResponse(**concept_info).model_dump())
 
 
 @router.get("/{session_id}/theory", response_model=StandardResponse[TheoryResponse])
@@ -206,7 +203,7 @@ async def theory(
     if not theory_data:
         raise ExerciseGenerationError("No pending concept to generate theory")
 
-    return {"success": True, "data": TheoryResponse(**theory_data).model_dump()}
+    return ok(TheoryResponse(**theory_data).model_dump())
 
 
 @router.post("/{session_id}/exercise", response_model=StandardResponse[ExerciseResponse])
@@ -231,29 +228,26 @@ async def generate_exercise(
 
     env_stats = session.env.get_session_stats()
 
-    return {
-        "success": True,
-        "data": ExerciseResponse(
-            exercise_id=exercise.exercise_id,
-            concept_name=exercise.concept_name,
-            concept_idx=exercise.concept_idx,
-            bloom_level=exercise.bloom_level,
-            bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
-            exercise_type=exercise.exercise_type,
-            question=exercise.question,
-            sentence=exercise.sentence,
-            options=exercise.options,
-            statement=exercise.statement,
-            hint=exercise.hint,
-            items=exercise.items,
-            pairs=exercise.pairs,
-            right_items=exercise.right_items,
-            step=env_stats["step"],
-            max_steps=env_stats["max_steps"],
-            theory=exercise.theory,
-            recommendation_reason=getattr(session, "_current_recommendation_reason", None),
-        ).model_dump()
-    }
+    return ok(ExerciseResponse(
+        exercise_id=exercise.exercise_id,
+        concept_name=exercise.concept_name,
+        concept_idx=exercise.concept_idx,
+        bloom_level=exercise.bloom_level,
+        bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
+        exercise_type=exercise.exercise_type,
+        question=exercise.question,
+        sentence=exercise.sentence,
+        options=exercise.options,
+        statement=exercise.statement,
+        hint=exercise.hint,
+        items=exercise.items,
+        pairs=exercise.pairs,
+        right_items=exercise.right_items,
+        step=env_stats["step"],
+        max_steps=env_stats["max_steps"],
+        theory=exercise.theory,
+        recommendation_reason=getattr(session, "_current_recommendation_reason", None),
+    ).model_dump())
 
 
 @router.post("/{session_id}/submit", response_model=StandardResponse[SubmitAnswerResponse])
@@ -275,7 +269,7 @@ async def submit_answer(
     if not result:
         raise ExerciseGenerationError("No pending exercise or session not found")
 
-    return {"success": True, "data": SubmitAnswerResponse(**result).model_dump()}
+    return ok(SubmitAnswerResponse(**result).model_dump())
 
 
 def _resolve_exercise_options(exercise) -> list[str]:
@@ -379,7 +373,7 @@ async def chat_about_exercise(
         logger.warning("[SessionRouter] Tutor chat RuntimeError: {}", exc)
         raise AppError("Tutor service temporarily unavailable", status_code=502) from exc
     else:
-        return {"success": True, "data": {"explanation": explanation}}
+        return ok({"explanation": explanation})
     # Unexpected errors fall through to the global unexpected_exception_handler.
 
 
@@ -395,4 +389,4 @@ async def session_status(
     if not status:
         raise SessionNotFoundError(session_id)
 
-    return {"success": True, "data": SessionStatusResponse(**status).model_dump()}
+    return ok(SessionStatusResponse(**status).model_dump())

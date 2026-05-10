@@ -18,7 +18,7 @@ from api.schemas import (
     SubjectHistoryListResponse,
     SubjectProgressListResponse,
 )
-from api.schemas.common import StandardResponse
+from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/history", tags=["history"])
@@ -129,7 +129,7 @@ async def list_subjects(
     )
 
     if not subjects:
-        return {"success": True, "data": {"subjects": [], "count": 0}}
+        return ok({"subjects": [], "count": 0})
 
     job_ids = [s["job_id"] for s in subjects]
     progress_map = await mongo_store.require_subject_progress_repo().load_many_for_user(job_ids, user_id)
@@ -150,7 +150,7 @@ async def list_subjects(
         subj["mastered_concept"] = mastered_c
         subj["progress_percent"] = _to_progress_percent(mastered_c, all_c)
 
-    return {"success": True, "data": {"subjects": subjects, "count": len(subjects)}}
+    return ok({"subjects": subjects, "count": len(subjects)})
 
 
 @router.get("/subjects/progress", response_model=StandardResponse[SubjectProgressListResponse])
@@ -175,7 +175,7 @@ async def list_subject_progress(
         if not job_id:
             continue
         items.append(_build_subject_progress_summary(progress_doc, job_map.get(job_id)))
-    return {"success": True, "data": {"subjects": items, "count": len(items)}}
+    return ok({"subjects": items, "count": len(items)})
 
 
 @router.get("/subjects/{job_id}", response_model=StandardResponse[SubjectHistoryDetailResponse])
@@ -192,7 +192,7 @@ async def get_subject_history(
         raise PipelineNotFoundError(job_id)
 
     progress_doc = await mongo_store.require_subject_progress_repo().load_for_user(job_id, user_id)
-    return {"success": True, "data": _build_subject_progress_detail(job_doc, progress_doc)}
+    return ok(_build_subject_progress_detail(job_doc, progress_doc))
 
 
 @router.get("/pipeline-jobs", response_model=StandardResponse[PipelineJobHistoryListResponse])
@@ -205,7 +205,7 @@ async def list_pipeline_jobs(
     del request
     """List recent pipeline jobs."""
     jobs = await mongo_store.require_pipeline_repo().list_recent(limit=limit, user_id=user_id)
-    return {"success": True, "data": {"jobs": jobs, "count": len(jobs)}}
+    return ok({"jobs": jobs, "count": len(jobs)})
 
 
 @router.get("/pipeline-jobs/{job_id}", response_model=StandardResponse[dict])
@@ -220,7 +220,7 @@ async def get_pipeline_job(
     doc = await mongo_store.require_pipeline_repo().load_for_user(job_id, user_id)
     if not doc:
         raise PipelineNotFoundError(job_id)
-    return {"success": True, "data": doc}
+    return ok(doc)
 
 
 @router.delete("/subjects/{job_id}", response_model=StandardResponse[DeleteSubjectResponse])
@@ -242,12 +242,9 @@ async def delete_subject(
     if result.get("deleted_job", 0) == 0:
         raise PipelineNotFoundError(job_id)
 
-    return {
-        "success": True,
-        "data": {
-            "job_id": job_id,
-            "deleted_job": result.get("deleted_job", 0),
-            "deleted_sessions": result.get("deleted_sessions", 0),
-            "status": "deleted",
-        }
-    }
+    return ok({
+        "job_id": job_id,
+        "deleted_job": result.get("deleted_job", 0),
+        "deleted_sessions": result.get("deleted_sessions", 0),
+        "status": "deleted",
+    })

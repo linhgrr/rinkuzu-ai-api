@@ -14,7 +14,7 @@ from api.core.quiz.draft_service import (
 )
 from api.dependencies import get_current_user
 from api.rate_limit import is_admin_request, limiter
-from api.schemas.common import StandardResponse
+from api.schemas.common import StandardResponse, ok
 from api.schemas.quiz_draft import (
     QuizDraftCreateRequest,
     QuizDraftPatchRequest,
@@ -52,7 +52,7 @@ async def create_quiz_draft(
         raise _service_error_to_http(exc) from exc
 
     background_tasks.add_task(service.process_draft, draft["draft_id"], user_id)
-    return {"success": True, "data": {"draft": public_draft(draft)}}
+    return ok({"draft": public_draft(draft)})
 
 
 @router.get("", response_model=StandardResponse[dict])
@@ -66,7 +66,7 @@ async def list_quiz_drafts(
     del request
     service = QuizDraftService()
     drafts = await service.list_drafts(user_id, limit)
-    return {"success": True, "data": {"drafts": [public_draft(draft) for draft in drafts]}}
+    return ok({"drafts": [public_draft(draft) for draft in drafts]})
 
 
 @router.get("/{draft_id}", response_model=StandardResponse[dict])
@@ -83,7 +83,7 @@ async def get_quiz_draft(
         draft = await service.get_draft(draft_id, user_id)
     except Exception as exc:
         raise _service_error_to_http(exc) from exc
-    return {"success": True, "data": {"draft": public_draft(draft)}}
+    return ok({"draft": public_draft(draft)})
 
 
 @router.patch("/{draft_id}", response_model=StandardResponse[dict])
@@ -101,7 +101,7 @@ async def patch_quiz_draft(
         draft = await service.patch_draft(draft_id, user_id, req)
     except Exception as exc:
         raise _service_error_to_http(exc) from exc
-    return {"success": True, "data": {"draft": public_draft(draft)}}
+    return ok({"draft": public_draft(draft)})
 
 
 @router.delete("/{draft_id}", response_model=StandardResponse[dict])
@@ -118,7 +118,7 @@ async def delete_quiz_draft(
         draft = await service.delete_draft(draft_id, user_id)
     except Exception as exc:
         raise _service_error_to_http(exc) from exc
-    return {"success": True, "data": {"draft": public_draft(draft)}}
+    return ok({"draft": public_draft(draft)})
 
 
 @router.post("/{draft_id}/submit", response_model=StandardResponse[dict])
@@ -136,4 +136,4 @@ async def submit_quiz_draft(
         draft = await service.mark_submitted(draft_id, user_id, req.quiz_id)
     except Exception as exc:
         raise _service_error_to_http(exc) from exc
-    return {"success": True, "data": {"draft": public_draft(draft)}}
+    return ok({"draft": public_draft(draft)})

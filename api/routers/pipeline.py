@@ -32,7 +32,7 @@ from api.schemas import (
     PipelineProcessResponse,
     PipelineSessionCreateResponse,
 )
-from api.schemas.common import StandardResponse
+from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
@@ -52,14 +52,11 @@ async def pipeline_status(
     """Check if content pipeline runtime modules are available."""
     del request
     available = availability["available"]
-    return {
-        "success": True,
-        "data": {
-            "available": available,
-            "service_initialized": availability["service_initialized"],
-            "message": "Content pipeline ready" if available else "Content pipeline unavailable",
-        }
-    }
+    return ok({
+        "available": available,
+        "service_initialized": availability["service_initialized"],
+        "message": "Content pipeline ready" if available else "Content pipeline unavailable",
+    })
 
 
 class ProcessDocumentRequest(BaseModel):
@@ -160,20 +157,17 @@ async def process_document(  # noqa: C901
             logger.warning("[PipelineRouter] Failed to cleanup upload {}", save_path)
         raise HTTPException(status_code=500, detail="Failed to initialize pipeline job.") from None
 
-    return {
-        "success": True,
-        "data": {
-            "job_id": job.job_id,
-            "filename": req.filename,
-            "file_size": save_path.stat().st_size,
-            "subject_id": job.subject_id,
-            "status": job.status.value,
-            "status_url": f"/api/pipeline/jobs/{job.job_id}",
-            "page_batch_size": job.page_batch_size,
-            "retry_after_seconds": get_settings().content_pipeline_default_retry_after_sec,
-            "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
-        }
-    }
+    return ok({
+        "job_id": job.job_id,
+        "filename": req.filename,
+        "file_size": save_path.stat().st_size,
+        "subject_id": job.subject_id,
+        "status": job.status.value,
+        "status_url": f"/api/pipeline/jobs/{job.job_id}",
+        "page_batch_size": job.page_batch_size,
+        "retry_after_seconds": get_settings().content_pipeline_default_retry_after_sec,
+        "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
+    })
 
 
 @router.get("/jobs/{job_id}", response_model=StandardResponse[PipelineJobStatusResponse])
@@ -249,10 +243,7 @@ async def get_job_status(
             "stats": result.get("stats", {}),
             "n_concepts": len(result.get("concept_map", {})),
         }
-    return {
-        "success": True,
-        "data": response
-    }
+    return ok(response)
 
 
 @router.post("/jobs/{job_id}/create-session", response_model=StandardResponse[PipelineSessionCreateResponse])
@@ -321,13 +312,10 @@ async def create_session_from_pipeline(
     except TypeError as exc:
         logger.warning("[PipelineRouter] Failed to schedule eager prefetch: {}", exc)
 
-    return {
-        "success": True,
-        "data": {
-            "session_id": session.session_id,
-            "n_concepts": len(result["concept_map"]),
-            "source": "new_session",
-            "job_id": job_id,
-            "status": "active",
-        }
-    }
+    return ok({
+        "session_id": session.session_id,
+        "n_concepts": len(result["concept_map"]),
+        "source": "new_session",
+        "job_id": job_id,
+        "status": "active",
+    })
