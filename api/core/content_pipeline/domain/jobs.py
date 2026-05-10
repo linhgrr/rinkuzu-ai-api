@@ -8,6 +8,33 @@ import time
 from typing import Any
 
 
+class PipelineProgress:
+    """Named progress checkpoints for the content pipeline (0.0 -> 1.0)."""
+
+    INIT = 0.01
+    CACHE_RESTORE = 0.02
+    PDF_LOADED = 0.05
+    PDF_CHUNKED = 0.10
+    CHUNKS_PERSISTING = 0.11
+    CHUNKS_PERSISTED = 0.12
+    CONCEPT_EXTRACTION_START = 0.15
+    CONCEPT_EXTRACTION_DONE = 0.30
+    EMBEDDING_START = 0.35
+    EMBEDDING_DONE = 0.45
+    MERGING_START = 0.50
+    MERGING_DONE = 0.55
+    RANKING_START = 0.60
+    RANKING_DONE = 0.65
+    RELATION_VERIFICATION_START = 0.70
+    RELATION_VERIFICATION_DONE = 0.80
+    GRAPH_BUILT = 0.85
+    GRAPH_OPTIMIZATION_START = 0.90
+    SAINT_EMBEDDINGS = 0.92
+    THEORIES_GENERATED = 0.93
+    GRAPH_OPTIMIZATION_DONE = 0.95
+    COMPLETE = 1.0
+
+
 class PipelineStatus(StrEnum):
     """Authoritative lifecycle states for content pipeline jobs."""
 
@@ -70,7 +97,7 @@ class PipelineJob:
     def mark_completed(self) -> None:
         now = time.time()
         self.status = PipelineStatus.COMPLETED
-        self.progress = 1.0
+        self.progress = PipelineProgress.COMPLETE
         self.updated_at = now
         self.heartbeat_at = now
         self.completed_at = self.completed_at or now

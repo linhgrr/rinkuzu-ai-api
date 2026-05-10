@@ -9,7 +9,7 @@ from typing import Any
 
 from loguru import logger
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from ..ports import SaveJobFn  # noqa: TC001
 from .execution import run_blocking_stage
@@ -46,7 +46,7 @@ async def try_restore_completed_job_from_mongo(
     populate_metrics(job)
     job.status = PipelineStatus.COMPLETED
     job.current_step = "Loaded from MongoDB"
-    job.progress = 1.0
+    job.progress = PipelineProgress.COMPLETE
     job.completed_at = mongo_doc.get("completed_at", time.time())
     logger.info("[Pipeline] Job {} restored from MongoDB", job.job_id)
     return True
@@ -69,7 +69,7 @@ async def try_restore_completed_job_from_s3(
 
     job.status = PipelineStatus.LOADING
     job.current_step = "Kiểm tra cache trên S3..."
-    job.progress = 0.02
+    job.progress = PipelineProgress.CACHE_RESTORE
     saved = False
     try:
         response: dict[str, Any] = await run_blocking_stage(
@@ -83,7 +83,7 @@ async def try_restore_completed_job_from_s3(
         populate_metrics(job)
         job.status = PipelineStatus.COMPLETED
         job.current_step = "Loaded from S3 cache"
-        job.progress = 1.0
+        job.progress = PipelineProgress.COMPLETE
         job.completed_at = time.time()
         logger.info("[Pipeline] Job {} loaded from S3 cache {}", job.job_id, cache_key)
         saved = await save_job(job)

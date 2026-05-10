@@ -7,7 +7,7 @@ from typing import Any
 
 from loguru import logger
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
 
@@ -98,7 +98,7 @@ async def build_knowledge_graph(
         job,
         PipelineStatus.BUILDING_GRAPH,
         "Building knowledge graph...",
-        0.85,
+        PipelineProgress.GRAPH_BUILT,
     )
 
     concept_ids = {

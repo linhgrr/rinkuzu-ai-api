@@ -9,7 +9,7 @@ import fitz
 from loguru import logger
 
 from api.config import get_settings
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from ..ports import PersistJobStateFn  # noqa: TC001
 from .execution import run_blocking_stage
@@ -42,7 +42,7 @@ async def extract_concepts_from_chunks(
         job,
         PipelineStatus.EXTRACTING,
         "Extracting concepts with LLM...",
-        0.15,
+        PipelineProgress.CONCEPT_EXTRACTION_START,
     )
 
     settings = get_settings()
@@ -83,7 +83,7 @@ async def extract_concepts_from_chunks(
         job,
         PipelineStatus.EXTRACTING,
         "Extracting concepts with LLM...",
-        0.30,
+        PipelineProgress.CONCEPT_EXTRACTION_DONE,
     )
     return all_concepts
 

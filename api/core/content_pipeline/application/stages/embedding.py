@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from api.config import get_settings
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
 
@@ -30,7 +30,7 @@ async def compute_concept_embeddings(
     batch_size: int,
 ) -> None:
     """Compute embeddings for extracted concepts and persist stage progress."""
-    await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.35)
+    await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", PipelineProgress.EMBEDDING_START)
 
     embed_client = embedding_client_factory(model_name, batch_size)
     await run_blocking_stage(
@@ -40,4 +40,4 @@ async def compute_concept_embeddings(
         stage_name="embedding",
     )
 
-    await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", 0.45)
+    await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", PipelineProgress.EMBEDDING_DONE)

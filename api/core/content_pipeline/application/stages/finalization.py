@@ -10,7 +10,7 @@ import time
 from loguru import logger
 
 from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from ..ports import PersistJobStateFn, SaveJobFn  # noqa: TC001
 from .execution import run_blocking_stage, safe_run
@@ -38,7 +38,7 @@ async def complete_pipeline_job(
     job.completed_at = now
     job.updated_at = now
     job.heartbeat_at = now
-    await persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", 1.0)
+    await persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", PipelineProgress.COMPLETE)
     logger.info("[Pipeline] Job {} completed: {} concepts", job.job_id, job.concepts_after_merge)
 
 

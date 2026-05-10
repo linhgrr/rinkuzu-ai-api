@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
 
@@ -21,7 +21,7 @@ async def load_document_chunks(
     persist_job_state: PersistJobStateFn,
 ) -> list[Any]:
     """Load and chunk a source document while persisting job progress."""
-    await persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.05)
+    await persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", PipelineProgress.PDF_LOADED)
 
     chunks: list[Any] = await run_blocking_stage(
         load_and_chunk,
@@ -31,5 +31,5 @@ async def load_document_chunks(
     )
     job.total_chunks = len(chunks)
 
-    await persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", 0.10)
+    await persist_job_state(job, PipelineStatus.LOADING, "Loading PDF...", PipelineProgress.PDF_CHUNKED)
     return chunks

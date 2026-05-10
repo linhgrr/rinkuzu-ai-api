@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from loguru import logger
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage, safe_run
 
@@ -43,7 +43,7 @@ async def generate_saint_concept_embeddings(
         job,
         PipelineStatus.OPTIMIZING,
         "Generating concept embeddings for SAINT...",
-        0.92,
+        PipelineProgress.SAINT_EMBEDDINGS,
     )
     async def _generate():
         text_model = text_model_factory()
@@ -77,7 +77,7 @@ async def generate_concept_theories(
         job,
         PipelineStatus.OPTIMIZING,
         "Generating concept theories...",
-        0.93,
+        PipelineProgress.THEORIES_GENERATED,
     )
     async def _generate_theories():
         semaphore = asyncio.Semaphore(concurrency)

@@ -8,7 +8,7 @@ from typing import Any
 import networkx as nx
 
 from api.config import get_settings
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
 from .graph_building import build_partial_graph
@@ -40,7 +40,7 @@ async def optimize_graph(
         job,
         PipelineStatus.OPTIMIZING,
         "Removing cycles, building DAG...",
-        0.90,
+        PipelineProgress.GRAPH_OPTIMIZATION_START,
     )
 
     cycle_stats: dict[str, Any] | None = None
@@ -65,7 +65,7 @@ async def optimize_graph(
         job,
         PipelineStatus.OPTIMIZING,
         "Removing cycles, building DAG...",
-        0.95,
+        PipelineProgress.GRAPH_OPTIMIZATION_DONE,
     )
 
     return graph, {

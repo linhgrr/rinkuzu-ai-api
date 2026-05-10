@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
 
@@ -56,7 +56,7 @@ async def verify_candidate_relations(
         job,
         PipelineStatus.VERIFYING,
         "Verifying relations with LLM...",
-        0.70,
+        PipelineProgress.RELATION_VERIFICATION_START,
     )
 
     pairs_to_verify = build_pairs_to_verify(concepts, candidate_pairs)
@@ -78,6 +78,6 @@ async def verify_candidate_relations(
         job,
         PipelineStatus.VERIFYING,
         "Verifying relations with LLM...",
-        0.80,
+        PipelineProgress.RELATION_VERIFICATION_DONE,
     )
     return verified

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage, safe_run
 
@@ -55,7 +55,7 @@ async def persist_document_chunks(
         job,
         PipelineStatus.LOADING,
         "Persisting document chunks...",
-        0.11,
+        PipelineProgress.CHUNKS_PERSISTING,
     )
 
     # ── MongoDB ────────────────────────────────────────────────
@@ -115,7 +115,7 @@ async def persist_document_chunks(
         job,
         PipelineStatus.LOADING,
         "Document chunks persisted",
-        0.12,
+        PipelineProgress.CHUNKS_PERSISTED,
     )
 
     return len(chunks)

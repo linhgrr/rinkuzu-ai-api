@@ -12,7 +12,7 @@ import time
 from typing import Any, Protocol
 import uuid
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .ports import SaveJobFn  # noqa: TC001
 
@@ -96,7 +96,7 @@ class PipelineService:
             job,
             PipelineStatus.QUEUED,
             "Queued for processing",
-            0.01,
+            PipelineProgress.INIT,
         )
 
         self._schedule_background_run(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .concept_extraction import build_partial_concept_graph
 from .execution import run_blocking_stage
@@ -21,7 +21,7 @@ async def merge_duplicate_concepts(
     persist_job_state: PersistJobStateFn,
 ) -> list[Any]:
     """Merge duplicate concepts and persist stage progress."""
-    await persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.50)
+    await persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", PipelineProgress.MERGING_START)
 
     merged_concepts: list[Any] = await run_blocking_stage(
         merge_by_name,
@@ -31,5 +31,5 @@ async def merge_duplicate_concepts(
     job.concepts_after_merge = len(merged_concepts)
     job.partial_graph = build_partial_concept_graph(merged_concepts)
 
-    await persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", 0.55)
+    await persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", PipelineProgress.MERGING_DONE)
     return merged_concepts

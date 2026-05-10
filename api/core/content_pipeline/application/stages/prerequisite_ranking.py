@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
 
@@ -21,7 +21,7 @@ async def rank_candidate_prerequisites(
     persist_job_state: PersistJobStateFn,
 ) -> list[tuple[str, str]]:
     """Rank candidate prerequisite pairs and persist stage progress."""
-    await persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.60)
+    await persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", PipelineProgress.RANKING_START)
 
     candidate_pairs: list[tuple[str, str]] = await run_blocking_stage(
         rank_prerequisites,
@@ -30,5 +30,5 @@ async def rank_candidate_prerequisites(
         stage_name="prerequisite_ranking",
     )
 
-    await persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", 0.65)
+    await persist_job_state(job, PipelineStatus.RANKING, "Ranking prerequisites...", PipelineProgress.RANKING_DONE)
     return candidate_pairs
