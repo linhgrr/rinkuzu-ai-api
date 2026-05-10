@@ -11,9 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --prefix=/install --no-warn-script-location -r requirements.txt
+COPY pyproject.toml README.md ./
+COPY api ./api
+RUN pip install --upgrade pip "setuptools<82" && \
+    pip install --prefix=/install --no-warn-script-location .
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
