@@ -4,7 +4,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
@@ -55,7 +55,7 @@ def normalize_for_bson(value: Any) -> Any:  # noqa: C901, PLR0911
     if isinstance(value, BaseModel):
         return normalize_for_bson(value.model_dump(by_alias=True))
     if is_dataclass(value):
-        return normalize_for_bson(asdict(value))
+        return normalize_for_bson(asdict(cast("Any", value)))
     if _is_numpy_value(value):
         if hasattr(value, "tolist"):
             return normalize_for_bson(value.tolist())

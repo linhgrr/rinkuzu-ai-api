@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from beanie.odm.enums import SortDirection
 from loguru import logger
 
 from .documents import (
@@ -130,21 +131,24 @@ async def update_quiz_draft_for_user(
 
 async def list_recent_quiz_drafts_for_user(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
     try:
-        docs = await QuizDraftDocument.find(
-            QuizDraftDocument.user_id == user_id,
-            {
-                "status": {
-                    "$nin": [
-                        QuizDraftStatus.EXPIRED.value,
-                        QuizDraftStatus.SUBMITTED.value,
-                        QuizDraftStatus.CANCELLED.value,
-                    ]
-                }
-            },
-            projection_model=QuizDraftListProjection,
-            sort=[("created_at", -1)],
-            limit=limit,
-        ).to_list()
+        docs = await (
+            QuizDraftDocument.find(
+                QuizDraftDocument.user_id == user_id,
+                {
+                    "status": {
+                        "$nin": [
+                            QuizDraftStatus.EXPIRED.value,
+                            QuizDraftStatus.SUBMITTED.value,
+                            QuizDraftStatus.CANCELLED.value,
+                        ]
+                    }
+                },
+                projection_model=QuizDraftListProjection,
+            )
+            .sort(("created_at", SortDirection.DESCENDING))
+            .limit(limit)
+            .to_list()
+        )
     except Exception:
         logger.exception("[QuizDraftStore] list_recent_for_user failed user_id={}", user_id)
         return []

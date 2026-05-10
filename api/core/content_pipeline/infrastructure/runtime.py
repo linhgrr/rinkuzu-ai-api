@@ -100,9 +100,7 @@ def get_s3_client():
         region_name=settings.object_storage_region,
         aws_access_key_id=settings.object_storage_access_key,
         aws_secret_access_key=settings.object_storage_secret_key,
-        config=Config(
-            s3={"addressing_style": settings.object_storage_addressing_style or "path"}
-        ),
+        config=Config(s3={"addressing_style": settings.object_storage_addressing_style or "path"}),
     )
 
 
@@ -115,13 +113,13 @@ def calculate_file_hash(file_path: str) -> str:
 
 
 def _build_embedding_client(model_name: str, batch_size: int):
-    from .embed.embedding_client import EmbeddingClient  # noqa: PLC0415
+    from .embed.embedding_client import EmbeddingClient
 
     return EmbeddingClient(model_name, batch_size=batch_size)
 
 
 def _compute_embedding_for_concepts(concepts, embedding_model):
-    from .embed.embeddings import compute_embedding_for_concepts  # noqa: PLC0415
+    from .embed.embeddings import compute_embedding_for_concepts
 
     return compute_embedding_for_concepts(concepts, embedding_model)
 

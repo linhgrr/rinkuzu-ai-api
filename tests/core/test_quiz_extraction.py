@@ -16,7 +16,6 @@ def test_extracted_quiz_question_requires_single_correct_index():
     assert question.to_public_dict()["correctIndex"] == 2
 
 
-
 def test_extracted_quiz_question_rejects_invalid_multiple_indexes():
     with pytest.raises(ValidationError):
         ExtractedQuizQuestion(

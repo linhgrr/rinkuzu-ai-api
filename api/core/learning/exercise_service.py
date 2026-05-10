@@ -134,9 +134,7 @@ class ExerciseService:
         )
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
 
-    async def _run_llm_call(
-        self, func, *args, timeout_sec: float | None = None
-    ) -> T:
+    async def _run_llm_call(self, func, *args, timeout_sec: float | None = None) -> T:
         loop = asyncio.get_running_loop()
         timeout = self._request_llm_timeout_sec if timeout_sec is None else timeout_sec
         async with self._llm_semaphore:

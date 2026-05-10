@@ -56,7 +56,6 @@ BLOOM_LABELS = {
 }
 
 
-
 async def _get_tutor_chat_history(session, exercise_id: str) -> list[dict[str, str]]:
     async with session._lock:
         if session.tutor_chat_exercise_id != exercise_id:
@@ -156,12 +155,14 @@ async def start_session(
     except TypeError as exc:
         logger.warning("[SessionRouter] Failed to schedule eager prefetch: {}", exc)
 
-    return ok(SessionCreateResponse(
-        session_id=session.session_id,
-        n_concepts=len(session.concept_map),
-        concepts=concepts,
-        status="active",
-    ).model_dump())
+    return ok(
+        SessionCreateResponse(
+            session_id=session.session_id,
+            n_concepts=len(session.concept_map),
+            concepts=concepts,
+            status="active",
+        ).model_dump()
+    )
 
 
 @router.post("/{session_id}/next-concept", response_model=StandardResponse[NextConceptResponse])
@@ -228,26 +229,28 @@ async def generate_exercise(
 
     env_stats = session.env.get_session_stats()
 
-    return ok(ExerciseResponse(
-        exercise_id=exercise.exercise_id,
-        concept_name=exercise.concept_name,
-        concept_idx=exercise.concept_idx,
-        bloom_level=exercise.bloom_level,
-        bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
-        exercise_type=exercise.exercise_type,
-        question=exercise.question,
-        sentence=exercise.sentence,
-        options=exercise.options,
-        statement=exercise.statement,
-        hint=exercise.hint,
-        items=exercise.items,
-        pairs=exercise.pairs,
-        right_items=exercise.right_items,
-        step=env_stats["step"],
-        max_steps=env_stats["max_steps"],
-        theory=exercise.theory,
-        recommendation_reason=getattr(session, "_current_recommendation_reason", None),
-    ).model_dump())
+    return ok(
+        ExerciseResponse(
+            exercise_id=exercise.exercise_id,
+            concept_name=exercise.concept_name,
+            concept_idx=exercise.concept_idx,
+            bloom_level=exercise.bloom_level,
+            bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
+            exercise_type=exercise.exercise_type,
+            question=exercise.question,
+            sentence=exercise.sentence,
+            options=exercise.options,
+            statement=exercise.statement,
+            hint=exercise.hint,
+            items=exercise.items,
+            pairs=exercise.pairs,
+            right_items=exercise.right_items,
+            step=env_stats["step"],
+            max_steps=env_stats["max_steps"],
+            theory=exercise.theory,
+            recommendation_reason=getattr(session, "_current_recommendation_reason", None),
+        ).model_dump()
+    )
 
 
 @router.post("/{session_id}/submit", response_model=StandardResponse[SubmitAnswerResponse])

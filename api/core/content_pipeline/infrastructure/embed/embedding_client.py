@@ -114,7 +114,8 @@ class EmbeddingClient(Embeddings):
                 normalize_embeddings=True,
                 batch_size=1,
             )
-        return cast("list[float]", emb.astype(float).tolist())
+        values = emb.tolist() if hasattr(emb, "tolist") else emb
+        return [float(item) for item in cast("list[float]", values)]
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """
@@ -140,7 +141,8 @@ class EmbeddingClient(Embeddings):
                 normalize_embeddings=True,
                 batch_size=self.batch_size,
             )
-        return [row.astype(float).tolist() for row in embs]
+        values = embs.tolist() if hasattr(embs, "tolist") else embs
+        return [[float(item) for item in row] for row in cast("list[list[float]]", values)]
 
     # Backward compatibility methods (cho các phần khác của dự án)
     def encode(self, texts, **kwargs):

@@ -71,6 +71,7 @@ def _build_error_response(
         },
     }
 
+
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     """Map domain exceptions to JSON error responses."""
     code = exc.__class__.__name__
@@ -108,7 +109,9 @@ async def validation_exception_handler(
     ]
     return JSONResponse(
         status_code=422,
-        content=_build_error_response("ValidationError", "Invalid request body", str(exc), safe_errors),
+        content=_build_error_response(
+            "ValidationError", "Invalid request body", str(exc), safe_errors
+        ),
     )
 
 

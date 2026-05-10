@@ -6,15 +6,21 @@ from pydantic import BaseModel, Field
 
 
 class SessionCreateRequest(BaseModel):
-    max_steps: int = Field(default=9999, ge=5, le=10000, description="Maximum number of exercise steps in the session.")
-    use_default_data: bool = Field(default=True, description="If true, seeds the session with built-in example concepts.")
+    max_steps: int = Field(
+        default=9999, ge=5, le=10000, description="Maximum number of exercise steps in the session."
+    )
+    use_default_data: bool = Field(
+        default=True, description="If true, seeds the session with built-in example concepts."
+    )
 
 
 class SessionCreateResponse(BaseModel):
     session_id: str = Field(description="Unique session identifier.")
     n_concepts: int = Field(description="Number of concepts available in this session.")
     concepts: list[dict[str, object]] = Field(description="Ordered list of concept summaries.")
-    status: str = Field(default="active", description="Session state: active, completed, or cancelled.")
+    status: str = Field(
+        default="active", description="Session state: active, completed, or cancelled."
+    )
 
 
 class SessionStatusResponse(BaseModel):
@@ -25,7 +31,9 @@ class SessionStatusResponse(BaseModel):
     concepts_visited: int = Field(description="Number of distinct concepts encountered.")
     total_concepts: int = Field(description="Total concepts in the session curriculum.")
     avg_mastery: float = Field(description="Average BKT mastery across all concepts.")
-    coverage: float = Field(description="Fraction of concepts that have been visited at least once.")
+    coverage: float = Field(
+        description="Fraction of concepts that have been visited at least once."
+    )
     total_correct: int = Field(description="Cumulative count of correct answers.")
     total_answered: int = Field(description="Cumulative count of answered exercises.")
     accuracy: float = Field(description="Ratio of correct answers to total answered.")

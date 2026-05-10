@@ -1,3 +1,5 @@
+minimum_pre_commit_version: "3.7.0"
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.7
@@ -6,18 +8,62 @@ repos:
         args: [--fix]
       - id: ruff-format
 
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.9
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--exclude-files, "^(.coverage|skills-lock.json)$"]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      - id: check-ast
+      - id: debug-statements
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+      - id: check-json
       - id: check-toml
+      - id: check-case-conflict
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=2048]
       - id: detect-private-key
       - id: mixed-line-ending
         args: [--fix=lf]
-      - id: no-commit-to-branch
-        args: [--branch=main]
+
+  - repo: local
+    hooks:
+      - id: mypy-api
+        name: mypy api
+        entry: >-
+          bash -lc 'PYTHON=.venv/bin/python; [ -x "$PYTHON" ] || PYTHON=python;
+          exec "$PYTHON" -m mypy api/ --ignore-missing-imports'
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: pytest-smoke
+        name: pytest smoke
+        entry: >-
+          bash -lc 'PYTHON=.venv/bin/python; [ -x "$PYTHON" ] || PYTHON=python;
+          exec "$PYTHON" -m pytest -q
+          tests/core/content_pipeline/test_finalization_stage.py
+          tests/core/content_pipeline/test_enrichment_stage.py
+          tests/core/test_mongo_store.py
+          tests/test_knowledge_router.py'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pip-audit-local
+        name: pip-audit local
+        entry: >-
+          bash -lc 'PYTHON=.venv/bin/python; [ -x "$PYTHON" ] || PYTHON=python;
+          exec "$PYTHON" -m pip_audit --progress-spinner off'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

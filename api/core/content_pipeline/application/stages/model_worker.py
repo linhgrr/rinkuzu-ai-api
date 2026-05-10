@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from dataclasses import dataclass
 import multiprocessing
 import time
@@ -150,10 +151,8 @@ class SentenceTransformerWorkerClient:
         started_at = time.perf_counter()
         state = self._state
         self._state = None
-        try:
+        with suppress(Exception):
             state.conn.close()
-        except Exception:
-            pass
         if state.process.is_alive():
             state.process.kill() if hasattr(state.process, "kill") else state.process.terminate()
         await asyncio.to_thread(state.process.join, 1.0)
@@ -243,7 +242,7 @@ class SentenceTransformerWorkerClient:
                     timeout_sec,
                 )
                 await self._close_locked(reason=f"timeout:{stage_name}")
-                raise PipelineStageTimeoutError(stage_name, timeout_sec) from exc
+                raise PipelineStageTimeoutError(stage_name, float(timeout_sec or 0.0)) from exc
             except EOFError as exc:
                 self._metrics.failures += 1
                 elapsed_ms = (time.perf_counter() - started_at) * 1000
@@ -302,12 +301,12 @@ class SentenceTransformerWorkerClient:
             except Exception:
                 logger.warning("[ModelWorker] Graceful shutdown failed, forcing process stop")
             finally:
-                try:
+                with suppress(Exception):
                     state.conn.close()
-                except Exception:
-                    pass
                 if state.process.is_alive():
-                    state.process.kill() if hasattr(state.process, "kill") else state.process.terminate()
+                    state.process.kill() if hasattr(
+                        state.process, "kill"
+                    ) else state.process.terminate()
                 await asyncio.to_thread(state.process.join, 1.0)
                 shutdown_ms = (time.perf_counter() - started_at) * 1000
                 logger.info(

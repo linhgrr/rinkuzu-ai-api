@@ -46,7 +46,7 @@ async def verify_candidate_relations(
     concepts: list[Any],
     candidate_pairs: list[tuple[str, str]],
     min_confidence: float,
-    verify_relations_batch: Callable[[list[tuple[str, str]]], list[Any]],
+    verify_relations_batch: Callable[[list[tuple[str, str]]], Awaitable[list[Any]]],
     persist_job_state: PersistJobStateFn,
 ) -> list[VerifiedRelation]:
     """Verify prerequisite candidates with the LLM verifier and persist stage progress."""

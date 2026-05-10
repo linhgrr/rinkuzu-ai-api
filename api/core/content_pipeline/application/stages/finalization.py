@@ -39,7 +39,9 @@ async def complete_pipeline_job(
     job.completed_at = now
     job.updated_at = now
     job.heartbeat_at = now
-    await persist_job_state(job, PipelineStatus.COMPLETED, "Processing complete!", PipelineProgress.COMPLETE)
+    await persist_job_state(
+        job, PipelineStatus.COMPLETED, "Processing complete!", PipelineProgress.COMPLETE
+    )
     logger.info("[Pipeline] Job {} completed: {} concepts", job.job_id, job.concepts_after_merge)
 
 
@@ -98,9 +100,7 @@ async def persist_terminal_failure(
         fail_message=f"Failed to persist terminal failure state for job {job.job_id}",
         fallback=False,
     ):
-        logger.error(
-            "[Pipeline] Failed to persist terminal failure state for job {}", job.job_id
-        )
+        logger.error("[Pipeline] Failed to persist terminal failure state for job {}", job.job_id)
 
 
 def classify_terminal_failure(job: PipelineJob, error: BaseException) -> TerminalFailureDetails:

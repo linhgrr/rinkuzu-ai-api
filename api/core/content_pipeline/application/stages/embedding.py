@@ -29,7 +29,9 @@ async def compute_concept_embeddings(
     batch_size: int,
 ) -> None:
     """Compute embeddings for extracted concepts and persist stage progress."""
-    await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", PipelineProgress.EMBEDDING_START)
+    await persist_job_state(
+        job, PipelineStatus.EMBEDDING, "Computing embeddings...", PipelineProgress.EMBEDDING_START
+    )
 
     settings = get_settings()
     _, stage_timeout = resolve_timeout_policy()
@@ -85,4 +87,6 @@ async def compute_concept_embeddings(
         ):
             concept.definition_embedding = embedding
 
-    await persist_job_state(job, PipelineStatus.EMBEDDING, "Computing embeddings...", PipelineProgress.EMBEDDING_DONE)
+    await persist_job_state(
+        job, PipelineStatus.EMBEDDING, "Computing embeddings...", PipelineProgress.EMBEDDING_DONE
+    )

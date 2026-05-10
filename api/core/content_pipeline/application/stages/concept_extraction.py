@@ -160,4 +160,4 @@ async def _resolve_extraction_timeout(file_path: str, job: PipelineJob, settings
         retry_attempts,
         retry_backoff_sec,
     )
-    return timeout
+    return float(timeout)

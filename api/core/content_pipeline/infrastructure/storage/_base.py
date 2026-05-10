@@ -19,7 +19,7 @@ def init_chroma_store(
     persist_directory: str,
     embedding_client: Any | None = None,
     log_label: str,
-) -> tuple[chromadb.PersistentClient, Chroma, EmbeddingClient]:
+) -> tuple[Any, Chroma, EmbeddingClient]:
     """Initialize a ChromaDB persistent client + LangChain vectorstore.
 
     Returns (chroma_client, vectorstore, embedding_client).

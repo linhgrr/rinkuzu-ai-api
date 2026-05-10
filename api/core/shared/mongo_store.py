@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -80,7 +81,9 @@ async def shutdown_mongo() -> None:
     client = _state.get("client")
     if client is None:
         return
-    client.close()
+    close_result = client.close()
+    if inspect.isawaitable(close_result):
+        await close_result
     _state["client"] = None
     _state["available"] = False
 

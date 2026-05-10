@@ -3,8 +3,12 @@ import asyncio
 import pytest
 
 from api.core.content_pipeline.application.stages import embedding as embedding_stage
-from api.core.content_pipeline.application.stages.embedding import compute_concept_embeddings, resolve_embedding_settings
+from api.core.content_pipeline.application.stages.embedding import (
+    compute_concept_embeddings,
+    resolve_embedding_settings,
+)
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+
 
 def test_resolve_embedding_settings_reads_unified_backend_config(monkeypatch):
     class _SettingsStub:

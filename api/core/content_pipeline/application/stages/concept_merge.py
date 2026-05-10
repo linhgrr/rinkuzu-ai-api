@@ -21,7 +21,9 @@ async def merge_duplicate_concepts(
     persist_job_state: PersistJobStateFn,
 ) -> list[Any]:
     """Merge duplicate concepts and persist stage progress."""
-    await persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", PipelineProgress.MERGING_START)
+    await persist_job_state(
+        job, PipelineStatus.MERGING, "Merging duplicate concepts...", PipelineProgress.MERGING_START
+    )
 
     merged_concepts: list[Any] = await run_blocking_stage(
         merge_by_name,
@@ -31,5 +33,7 @@ async def merge_duplicate_concepts(
     job.concepts_after_merge = len(merged_concepts)
     job.partial_graph = build_partial_concept_graph(merged_concepts)
 
-    await persist_job_state(job, PipelineStatus.MERGING, "Merging duplicate concepts...", PipelineProgress.MERGING_DONE)
+    await persist_job_state(
+        job, PipelineStatus.MERGING, "Merging duplicate concepts...", PipelineProgress.MERGING_DONE
+    )
     return merged_concepts

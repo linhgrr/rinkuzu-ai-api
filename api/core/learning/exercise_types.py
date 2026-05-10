@@ -146,7 +146,9 @@ def shuffle_ordering_items(correct_order: Sequence[str], max_attempts: int = 5) 
     return items[1:] + items[:1]
 
 
-def serialize_exercise_result(result: ExerciseBaseOutput) -> dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]]:
+def serialize_exercise_result(
+    result: ExerciseBaseOutput,
+) -> dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]]:
     if isinstance(result, MCQOutput):
         return {
             "exercise_type": result.exercise_type,

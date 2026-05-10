@@ -22,6 +22,7 @@ def test_build_ordered_embedding_texts_uses_concept_map_order():
 
     assert texts == ["Alpha: alpha def", "Beta: beta def"]
 
+
 def test_generate_saint_concept_embeddings_updates_progress_and_returns_vectors(monkeypatch):
     job = PipelineJob(job_id="job-1", filename="lesson.pdf", subject_id="algebra")
     calls = []

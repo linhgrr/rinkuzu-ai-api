@@ -25,7 +25,9 @@ from api.core.content_pipeline.infrastructure.processors.loaders.local_pdf_text_
 
 
 class _ParsedResponse:
-    def __init__(self, parsed: object | None, *, usage: dict[str, int] | None = None, output_text: str = ""):
+    def __init__(
+        self, parsed: object | None, *, usage: dict[str, int] | None = None, output_text: str = ""
+    ):
         self.output_parsed = parsed
         self.usage = usage or {}
         self.output_text = output_text
@@ -46,7 +48,9 @@ class _RetryClient:
                 "notes": None,
             }
         )
-        return _ParsedResponse(payload, usage={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18})
+        return _ParsedResponse(
+            payload, usage={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
+        )
 
 
 async def _noop_upload_pdf_bytes(*, filename, pdf_bytes, sha256, now_ts, job_id=None):
@@ -250,7 +254,9 @@ def test_local_pdf_text_loader_extracts_page_text(tmp_path):
     assert "Xin chao the gioi" in payload["text"]
 
 
-def test_extract_from_document_splits_again_when_provider_rejects_upload_size(tmp_path, monkeypatch):
+def test_extract_from_document_splits_again_when_provider_rejects_upload_size(
+    tmp_path, monkeypatch
+):
     pdf_path = tmp_path / "scan-like.pdf"
     document = fitz.open()
     for index in range(2):

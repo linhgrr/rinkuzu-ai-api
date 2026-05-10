@@ -80,7 +80,11 @@ def with_llm_retry(
             last_exc = exc
             logger.warning(
                 "[LLM] ⚠ {} attempt {}/{} failed (will_retry={}): {}",
-                label, attempt, max_retries, attempt < max_retries, exc,
+                label,
+                attempt,
+                max_retries,
+                attempt < max_retries,
+                exc,
             )
             if attempt < max_retries:
                 sleep_before_retry(attempt, backoff_sec)
@@ -115,7 +119,11 @@ async def awith_llm_retry(
             last_exc = exc
             logger.warning(
                 "[LLM] ⚠ {} attempt {}/{} failed (will_retry={}): {}",
-                label, attempt, max_retries, attempt < max_retries, exc,
+                label,
+                attempt,
+                max_retries,
+                attempt < max_retries,
+                exc,
             )
             if attempt < max_retries:
                 await asyncio.sleep(backoff_sec * attempt)

@@ -28,7 +28,10 @@ class ExercisePromptSpec:
     instruction: str
     negative_constraints: str
     explanation_guidance: str
-    serializer: Callable[[ExerciseBaseOutput], dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]]]
+    serializer: Callable[
+        [ExerciseBaseOutput],
+        dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]],
+    ]
 
 
 PROMPT_REGISTRY: dict[ExerciseType, ExercisePromptSpec] = {

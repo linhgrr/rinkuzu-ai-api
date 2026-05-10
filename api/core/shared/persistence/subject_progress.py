@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from beanie.odm.enums import SortDirection
 from loguru import logger
 
 from .common import epoch_to_utc, normalize_for_bson, utc_to_epoch
@@ -209,12 +210,15 @@ async def list_recent_subject_progress(
     if user_id is not None:
         filters.append(SubjectProgressDocument.user_id == user_id)
     try:
-        rows = await SubjectProgressDocument.find(
-            *filters,
-            projection_model=SubjectProgressSummaryProjection,
-            sort=[("updated_at", -1)],
-            limit=limit,
-        ).to_list()
+        rows = await (
+            SubjectProgressDocument.find(
+                *filters,
+                projection_model=SubjectProgressSummaryProjection,
+            )
+            .sort(("updated_at", SortDirection.DESCENDING))
+            .limit(limit)
+            .to_list()
+        )
     except Exception:
         logger.exception("[SubjectProgressStore] list_recent failed")
         return []

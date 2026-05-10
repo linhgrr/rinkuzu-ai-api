@@ -103,7 +103,10 @@ def generate_exercise(
         label="generate_exercise",
         fn=lambda: _invoke_structured_llm(schema=schema, messages=messages),
     )
-    return cast("dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None", serializer(result))
+    return cast(
+        "dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None",
+        serializer(result),
+    )
 
 
 def evaluate_short_answer(

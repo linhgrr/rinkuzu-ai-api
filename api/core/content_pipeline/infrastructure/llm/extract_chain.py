@@ -477,15 +477,15 @@ class ExtractionChain:
         worker_count = max(1, max_workers or self.settings.llm_max_workers)
         semaphore = asyncio.Semaphore(worker_count)
 
-        async def _verify_one(pair_index: int, concept_a: str, concept_b: str) -> EvidenceVerification:
+        async def _verify_one(
+            pair_index: int, concept_a: str, concept_b: str
+        ) -> EvidenceVerification:
             async with semaphore:
                 try:
                     return await self._verify_single_relation(concept_a, concept_b, pair_index)
                 except Exception as exc:
                     logger.error("Error verifying pair {}: {}", pair_index, exc)
-                    return self._verification_error(
-                        f"Error during verification: {str(exc)[:100]}"
-                    )
+                    return self._verification_error(f"Error during verification: {str(exc)[:100]}")
 
         tasks = [
             _verify_one(i, concept_a, concept_b)
@@ -894,7 +894,9 @@ class ExtractionChain:
             text_format=ConceptExtractionPayload,
             job_id=job_id,
         )
-        return require_parsed_output(response, ConceptExtractionPayload), response_usage_summary(response)
+        return require_parsed_output(response, ConceptExtractionPayload), response_usage_summary(
+            response
+        )
 
     async def _invoke_extraction_response_with_retries(
         self,

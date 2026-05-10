@@ -179,7 +179,9 @@ class CycleRemover:
             logger.exception("Error in LLM cycle removal")
             if cycle_edges:
                 first_edge = cycle_edges[0]
-                logger.warning("Fallback: removing {} → {}", first_edge["source"], first_edge["target"])
+                logger.warning(
+                    "Fallback: removing {} → {}", first_edge["source"], first_edge["target"]
+                )
                 graph.remove_edge(first_edge["source"], first_edge["target"])
                 return 1
             return 0
@@ -244,7 +246,9 @@ class CycleRemover:
         return "\n".join(lines)
 
 
-def make_dag_with_llm(graph: nx.DiGraph, llm: Any | None = None) -> tuple[nx.DiGraph, dict[str, Any]]:
+def make_dag_with_llm(
+    graph: nx.DiGraph, llm: Any | None = None
+) -> tuple[nx.DiGraph, dict[str, Any]]:
     """
     Convert graph to DAG by removing cycles using LLM decisions.
 

@@ -55,7 +55,9 @@ class Concept(StrictSchemaModel):
     examples: list[str] = Field(
         default_factory=list, description="Illustrative examples for the concept."
     )
-    formulas: list[Formula] = Field(default_factory=list, description="List of related formulas (if any).")
+    formulas: list[Formula] = Field(
+        default_factory=list, description="List of related formulas (if any)."
+    )
     relations: list[Relation] = Field(
         default_factory=list, description="Relations to other concepts (prioritize PREREQUISITE)."
     )
@@ -92,7 +94,9 @@ class ExtractionConceptPayload(StrictSchemaModel):
     examples: list[str] = Field(
         default_factory=list, description="Illustrative Vietnamese examples for the concept."
     )
-    formulas: list[Formula] = Field(default_factory=list, description="List of related formulas (if any).")
+    formulas: list[Formula] = Field(
+        default_factory=list, description="List of related formulas (if any)."
+    )
     relations: list[Relation] = Field(
         default_factory=list,
         description="Relations to other concepts. Use target_id for the destination concept id.",
@@ -102,9 +106,7 @@ class ExtractionConceptPayload(StrictSchemaModel):
 class ConceptExtractionPayload(StrictSchemaModel):
     """LLM tool-call payload for one PDF batch."""
 
-    concepts: list[ExtractionConceptPayload] = Field(
-        ..., description="List of extracted concepts."
-    )
+    concepts: list[ExtractionConceptPayload] = Field(..., description="List of extracted concepts.")
     subject_id: str | None = Field(
         None, description="Subject applied to the entire batch (if any)."
     )

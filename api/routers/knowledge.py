@@ -45,7 +45,9 @@ async def get_knowledge_graph(
     """Return the prerequisite knowledge graph for a session."""
     del request
     return await _get_session_resource(
-        manager, session_id, user_id,
+        manager,
+        session_id,
+        user_id,
         fetcher=lambda: manager.get_knowledge_graph(session_id),
         response_cls=KnowledgeGraphResponse,
     )
@@ -62,13 +64,17 @@ async def get_mastery_matrix(
     """Return the concept x Bloom-level mastery matrix for a session."""
     del request
     return await _get_session_resource(
-        manager, session_id, user_id,
+        manager,
+        session_id,
+        user_id,
         fetcher=lambda: manager.get_mastery_matrix(session_id),
         response_cls=MasteryMatrixResponse,
     )
 
 
-@router.get("/{session_id}/concept/{concept_id}", response_model=StandardResponse[ConceptDetailResponse])
+@router.get(
+    "/{session_id}/concept/{concept_id}", response_model=StandardResponse[ConceptDetailResponse]
+)
 @limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
 async def get_concept_detail(
     request: Request,
@@ -80,7 +86,9 @@ async def get_concept_detail(
     """Return detailed information about a specific concept."""
     del request
     return await _get_session_resource(
-        manager, session_id, user_id,
+        manager,
+        session_id,
+        user_id,
         fetcher=lambda: manager.get_concept_detail(session_id, concept_id),
         response_cls=ConceptDetailResponse,
     )

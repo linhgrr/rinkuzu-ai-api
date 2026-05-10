@@ -224,7 +224,7 @@ class QuizDraftService:
             settings = get_settings()
             s3_key = draft.get("pdf", {}).get("s3_key")
             if not s3_key:
-                raise QuizDraftValidationError("PDF is missing.")  # noqa: TRY301
+                raise QuizDraftValidationError("PDF is missing.")
             bucket_name, model = self._require_processing_settings(settings)
             pdf_bytes = await asyncio.to_thread(
                 self._read_pdf_bytes,
@@ -239,9 +239,7 @@ class QuizDraftService:
                 model=model,
             )
             if not questions:
-                raise QuizDraftValidationError(  # noqa: TRY301
-                    "No quiz questions extracted from PDF."
-                )
+                raise QuizDraftValidationError("No quiz questions extracted from PDF.")
 
             latest = await load_quiz_draft_for_user(draft_id, user_id)
             if not latest or latest.get("status") in {"cancelled", "submitted"}:
@@ -300,7 +298,7 @@ class QuizDraftService:
             body = response.get("Body")
             pdf_bytes = body.read() if body else b""
             if not pdf_bytes:
-                raise ValueError("empty PDF body")  # noqa: TRY301
+                raise ValueError("empty PDF body")
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 page_count = int(doc.page_count)
         except Exception as exc:

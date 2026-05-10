@@ -16,7 +16,7 @@ When deciding which edge to remove, consider:
    - General concepts should come before specific applications
    - Theoretical foundations should come before practical applications
 
-2. **Concept Dependency Strength**: 
+2. **Concept Dependency Strength**:
    - Keep edges where the target concept STRONGLY depends on the source
    - Remove edges where the dependency is weaker or can be learned independently
 
@@ -31,7 +31,7 @@ Cycle: "Addition" → "Subtraction" → "Negative Numbers" → "Addition"
 Decision: REMOVE "Negative Numbers" → "Addition"
 Reasoning: Addition can be taught without negative numbers initially. Negative numbers depend on understanding addition and subtraction first.
 
-Example 2: Theory-Practice Cycle  
+Example 2: Theory-Practice Cycle
 Cycle: "Newton's Laws" → "Force Analysis" → "Friction" → "Newton's Laws"
 Decision: REMOVE "Friction" → "Newton's Laws"
 Reasoning: Newton's Laws are fundamental theory and should be taught first. Friction is a specific application that depends on understanding Newton's Laws.
@@ -44,7 +44,7 @@ Reasoning: Both derivatives and integration should be taught before their connec
 # OUTPUT FORMAT
 For each edge in the cycle, you must provide:
 - source_id: The source concept ID
-- target_id: The target concept ID  
+- target_id: The target concept ID
 - should_remove: true/false
 - reasoning: Clear explanation
 - confidence: Your confidence in this decision (0.0 to 1.0)

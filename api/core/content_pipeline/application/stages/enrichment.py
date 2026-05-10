@@ -39,7 +39,7 @@ async def generate_saint_concept_embeddings(
     concepts_data: dict[str, dict[str, Any]],
     concept_map: dict[str, int],
     persist_job_state: PersistJobStateFn,
-    ) -> list[list[float]] | None:
+) -> list[list[float]] | None:
     """Generate concept embeddings for downstream adaptive-learning models."""
     await persist_job_state(
         job,
@@ -47,6 +47,7 @@ async def generate_saint_concept_embeddings(
         "Generating concept embeddings for SAINT...",
         PipelineProgress.SAINT_EMBEDDINGS,
     )
+
     async def _generate():
         _, stage_timeout = resolve_timeout_policy()
         ordered_texts = build_ordered_embedding_texts(concepts_data, concept_map)
@@ -85,6 +86,7 @@ async def generate_concept_theories(
         "Generating concept theories...",
         PipelineProgress.THEORIES_GENERATED,
     )
+
     async def _generate_theories():
         semaphore = asyncio.Semaphore(concurrency)
 

@@ -9,7 +9,7 @@ from .stages.prerequisite_ranking import rank_candidate_prerequisites
 from .stages.relation_verification import verify_candidate_relations
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from api.core.content_pipeline.domain.jobs import PipelineJob
 
@@ -21,7 +21,7 @@ class DefaultRelationEngine:
         self,
         *,
         rank_prerequisites: Callable[[list[Any], float], list[tuple[str, str]]],
-        verify_relations_batch: Callable[[list[tuple[str, str]]], list[Any]],
+        verify_relations_batch: Callable[[list[tuple[str, str]]], Awaitable[list[Any]]],
     ) -> None:
         self._rank_prerequisites = rank_prerequisites
         self._verify_relations_batch = verify_relations_batch

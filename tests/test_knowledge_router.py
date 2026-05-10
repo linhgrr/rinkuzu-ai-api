@@ -14,7 +14,6 @@ async def test_get_session_resource_supports_sync_knowledge_graph_fetcher(monkey
         assert manager is not None
         assert session_id == "session-1"
         assert user_id == "user-1"
-        return None
 
     monkeypatch.setattr(knowledge_router, "resolve_user_session", fake_resolve_user_session)
 
@@ -60,7 +59,6 @@ async def test_get_session_resource_supports_sync_knowledge_graph_fetcher(monkey
 async def test_get_session_resource_supports_sync_mastery_fetcher(monkeypatch):
     async def fake_resolve_user_session(manager, session_id: str, user_id: str):
         del manager, session_id, user_id
-        return None
 
     monkeypatch.setattr(knowledge_router, "resolve_user_session", fake_resolve_user_session)
 
@@ -89,7 +87,6 @@ async def test_get_session_resource_supports_sync_mastery_fetcher(monkeypatch):
 async def test_get_session_resource_supports_sync_concept_detail_fetcher(monkeypatch):
     async def fake_resolve_user_session(manager, session_id: str, user_id: str):
         del manager, session_id, user_id
-        return None
 
     monkeypatch.setattr(knowledge_router, "resolve_user_session", fake_resolve_user_session)
 
@@ -120,7 +117,6 @@ async def test_get_session_resource_supports_sync_concept_detail_fetcher(monkeyp
 async def test_get_session_resource_raises_session_not_found_when_fetcher_returns_none(monkeypatch):
     async def fake_resolve_user_session(manager, session_id: str, user_id: str):
         del manager, session_id, user_id
-        return None
 
     monkeypatch.setattr(knowledge_router, "resolve_user_session", fake_resolve_user_session)
 

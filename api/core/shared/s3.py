@@ -19,7 +19,5 @@ def get_s3_client():
         region_name=settings.object_storage_region,
         aws_access_key_id=settings.object_storage_access_key,
         aws_secret_access_key=settings.object_storage_secret_key,
-        config=Config(
-            s3={"addressing_style": settings.object_storage_addressing_style or "path"}
-        ),
+        config=Config(s3={"addressing_style": settings.object_storage_addressing_style or "path"}),
     )

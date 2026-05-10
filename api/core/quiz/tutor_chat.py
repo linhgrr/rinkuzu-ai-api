@@ -5,7 +5,7 @@ tutor_chat.py — Adaptive tutor-chat prompt and validation logic.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -25,9 +25,7 @@ if TYPE_CHECKING:
 
 _CHAT_HISTORY_SUMMARIZE_THRESHOLD = 6
 _MIN_EXPLANATION_LENGTH = 20
-_SUMMARY_SYSTEM_PROMPT = (
-    "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài."
-)
+_SUMMARY_SYSTEM_PROMPT = "Bạn tóm tắt hội thoại học tập ngắn gọn, chỉ giữ lại nội dung cần thiết để tiếp tục giải thích bài."
 
 TUTOR_SYSTEM_PROMPT = (
     "Bạn là Rin-chan, gia sư giúp học sinh hiểu câu hỏi trắc nghiệm. "
@@ -358,4 +356,4 @@ def generate_tutor_chat_response(
             raise ValueError("Chat explanation too short")
         return explanation
 
-    return with_llm_retry(label="tutor chat", fn=_try)
+    return cast("str", with_llm_retry(label="tutor chat", fn=_try))

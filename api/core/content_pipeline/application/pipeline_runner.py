@@ -126,7 +126,7 @@ class PipelineRunner:
         except OSError as exc:
             logger.warning("[PipelineRunner] Failed to delete upload {}: {}", file_path, exc)
 
-    async def run(  # noqa: PLR0915
+    async def run(
         self,
         job: PipelineJob,
         *,
@@ -200,12 +200,12 @@ class PipelineRunner:
                 if job.batch_count > 0 and (
                     failure_ratio > settings.content_pipeline_batch_failure_ratio_threshold
                 ):
-                    raise RuntimeError(  # noqa: TRY301
+                    raise RuntimeError(
                         "Too many PDF concept-extraction batches failed "
                         f"({job.failed_batch_count}/{job.batch_count})."
                     )
                 if not all_concepts:
-                    raise RuntimeError("No concepts were extracted from the document.")  # noqa: TRY301
+                    raise RuntimeError("No concepts were extracted from the document.")
 
                 model_name, batch_size = resolve_embedding_settings()
                 await compute_concept_embeddings(

@@ -33,6 +33,9 @@ api/core/chroma_db/
 
 # Build artifacts
 .ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 *.egg-info/
 build/
 dist/

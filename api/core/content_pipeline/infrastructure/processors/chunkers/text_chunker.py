@@ -13,11 +13,12 @@ from langchain_text_splitters import (
 )
 
 try:
-    from transformers import AutoTokenizer
+    from transformers import AutoTokenizer as _AutoTokenizer
 
+    AutoTokenizer: Any | None = _AutoTokenizer
     _HAS_TRANSFORMERS = True
 except Exception:
-    AutoTokenizer = None  # type: ignore[assignment,misc]
+    AutoTokenizer = None
     _HAS_TRANSFORMERS = False
 
 from loguru import logger

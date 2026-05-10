@@ -25,7 +25,9 @@ _T = TypeVar("_T")
 # Dedicated thread pool for pipeline CPU/blocking-I/O work.
 # Separate from FastAPI's default executor so long-running pipeline stages
 # (PDF rendering, embedding, ChromaDB, sync S3) never starve other endpoints.
-_PIPELINE_MAX_WORKERS = int(os.environ.get("PIPELINE_THREAD_POOL_SIZE", max(4, (os.cpu_count() or 2))))
+_PIPELINE_MAX_WORKERS = int(
+    os.environ.get("PIPELINE_THREAD_POOL_SIZE", max(4, (os.cpu_count() or 2)))
+)
 _pipeline_executor: ThreadPoolExecutor | None = None
 _inflight_blocking_futures: set[asyncio.Future[Any]] = set()
 
@@ -67,7 +69,7 @@ async def run_blocking_stage(
         raise
     except TimeoutError as exc:
         future.cancel()
-        raise PipelineStageTimeoutError(stage_name, effective_timeout) from exc
+        raise PipelineStageTimeoutError(stage_name, float(effective_timeout or 0.0)) from exc
 
 
 def resolve_timeout_policy() -> tuple[float | None, float | None]:
@@ -175,7 +177,7 @@ async def run_process_stage(
         if process.is_alive():
             process.kill() if hasattr(process, "kill") else process.terminate()
         await asyncio.to_thread(process.join, 1.0)
-        raise PipelineStageTimeoutError(stage_name, effective_timeout) from exc
+        raise PipelineStageTimeoutError(stage_name, float(effective_timeout or 0.0)) from exc
     except EOFError as exc:
         await asyncio.to_thread(process.join, 1.0)
         raise RuntimeError(f"{stage_name} failed in isolated process: no result returned") from exc

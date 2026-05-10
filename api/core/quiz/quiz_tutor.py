@@ -64,9 +64,7 @@ def _build_input_message(
         )
 
     user_content.extend(
-        {"type": "image", "url": image_url}
-        for image_url in (option_images or [])
-        if image_url
+        {"type": "image", "url": image_url} for image_url in (option_images or []) if image_url
     )
 
     return [

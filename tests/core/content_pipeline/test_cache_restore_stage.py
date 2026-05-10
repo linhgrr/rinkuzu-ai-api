@@ -78,9 +78,9 @@ def test_try_restore_completed_job_from_s3_hashes_and_reads_via_blocking_stage(m
             )
 
     class _S3Client:
-        def get_object(self, *, Bucket: str, Key: str):
-            assert Bucket == "bucket-1"
-            assert Key == "cache/hash-123.json"
+        def get_object(self, **kwargs):
+            assert kwargs["Bucket"] == "bucket-1"
+            assert kwargs["Key"] == "cache/hash-123.json"
             return {"Body": _Body()}
 
     async def fake_run_blocking_stage(func, *args, stage_name, timeout_sec=None, **kwargs):

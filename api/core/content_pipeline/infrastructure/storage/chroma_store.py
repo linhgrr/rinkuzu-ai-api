@@ -267,4 +267,3 @@ class ConceptChromaStore:
         except Exception:
             logger.exception("Error resetting collection")
             raise
-

@@ -137,7 +137,7 @@ def _init_pipeline(app: FastAPI) -> None:
 
 
 def _log_llm_config(settings: Settings) -> None:
-    from .core.content_pipeline.infrastructure.llm.openai_responses import (  # noqa: PLC0415
+    from .core.content_pipeline.infrastructure.llm.openai_responses import (
         normalize_openai_base_url,
     )
 

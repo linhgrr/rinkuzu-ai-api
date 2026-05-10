@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from beanie.odm.enums import SortDirection
 from loguru import logger
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
@@ -170,12 +171,15 @@ async def list_recent_pipeline_jobs(
         except ValueError:
             filters.append(PipelineJobDocument.status == status)
     try:
-        rows = await PipelineJobDocument.find(
-            *filters,
-            projection_model=PipelineJobListProjection,
-            sort=[("completed_at", -1)],
-            limit=limit,
-        ).to_list()
+        rows = await (
+            PipelineJobDocument.find(
+                *filters,
+                projection_model=PipelineJobListProjection,
+            )
+            .sort(("completed_at", SortDirection.DESCENDING))
+            .limit(limit)
+            .to_list()
+        )
     except Exception:
         logger.exception("[PipelineStore] list_recent failed")
         return []
@@ -206,7 +210,7 @@ async def delete_pipeline_job_for_user(
     delete_sessions: bool = True,
 ) -> dict[str, Any]:
     try:
-        async with mongo_store.start_session() as session, session.start_transaction():
+        async with mongo_store.start_session() as session, await session.start_transaction():
             job = await PipelineJobDocument.find_one(
                 PipelineJobDocument.job_id == job_id,
                 PipelineJobDocument.user_id == user_id,
