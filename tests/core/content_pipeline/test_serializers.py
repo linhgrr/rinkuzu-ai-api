@@ -1,5 +1,6 @@
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 from api.core.content_pipeline.infrastructure.serializers import pipeline_job_to_document
+from api.core.learning.prompts.grading import TheoryOutput
 
 
 def test_pipeline_job_to_document_matches_repository_shape():
@@ -42,3 +43,37 @@ def test_pipeline_job_to_document_matches_repository_shape():
     assert doc["partial_success"] is True
     assert doc["created_at"] == 123.0
     assert doc["completed_at"] is None
+
+
+def test_pipeline_job_to_document_normalizes_nested_pydantic_models():
+    job = PipelineJob(
+        job_id="job-2",
+        filename="lesson.pdf",
+        subject_id="math",
+        status=PipelineStatus.FAILED,
+        result={
+            "concepts_data": {
+                "c1": {
+                    "name": "Alpha",
+                    "theory": TheoryOutput(content="Lý thuyết", examples=["Ví dụ 1"]),
+                }
+            }
+        },
+        partial_graph={"nodes": [{"id": "c1"}], "meta": TheoryOutput(content="Tóm tắt", examples=[])},
+        completed_at=456.0,
+    )
+
+    doc = pipeline_job_to_document(job)
+
+    assert doc["result"] == {
+        "concepts_data": {
+            "c1": {
+                "name": "Alpha",
+                "theory": {"content": "Lý thuyết", "examples": ["Ví dụ 1"]},
+            }
+        }
+    }
+    assert doc["partial_graph"] == {
+        "nodes": [{"id": "c1"}],
+        "meta": {"content": "Tóm tắt", "examples": []},
+    }

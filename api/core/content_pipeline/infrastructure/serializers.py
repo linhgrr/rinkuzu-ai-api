@@ -2,10 +2,32 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any
+
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from api.core.content_pipeline.domain.jobs import PipelineJob
+
+
+def _to_bson_safe(value: Any) -> Any:
+    """Recursively normalize arbitrary Python objects into BSON-safe values."""
+
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, BaseModel):
+        return _to_bson_safe(value.model_dump())
+    if is_dataclass(value):
+        return _to_bson_safe(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _to_bson_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple | set):
+        return [_to_bson_safe(item) for item in value]
+    return value
 
 
 def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
@@ -31,15 +53,15 @@ def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
         "concepts_extracted": job.concepts_extracted,
         "concepts_after_merge": job.concepts_after_merge,
         "relations_verified": job.relations_verified,
-        "graph_stats": job.graph_stats if isinstance(job.graph_stats, dict) else {},
-        "result": job.result,
+        "graph_stats": _to_bson_safe(job.graph_stats) if isinstance(job.graph_stats, dict) else {},
+        "result": _to_bson_safe(job.result),
         "current_step": job.current_step,
         "progress": job.progress,
         "error_message": job.error_message,
         "error_code": job.error_code,
         "user_message": job.user_message,
         "retryable": job.retryable,
-        "partial_graph": job.partial_graph,
+        "partial_graph": _to_bson_safe(job.partial_graph),
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "heartbeat_at": job.heartbeat_at,
