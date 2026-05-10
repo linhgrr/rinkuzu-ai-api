@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 import fitz
@@ -11,7 +12,6 @@ from api.config import get_settings
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from ..ports import PersistJobStateFn  # noqa: TC001
-from .execution import run_blocking_stage
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -50,14 +50,14 @@ async def extract_concepts_from_chunks(
     settings = get_settings()
     extraction_timeout = _resolve_extraction_timeout(file_path, job, settings)
 
-    extractions: list[Any] = await run_blocking_stage(
-        extraction_chain.extract_from_document,
-        file_path,
-        job.subject_id,
-        job.page_batch_size,
-        job_id=job.job_id,
-        stage_name="concept_extraction",
-        timeout_sec=extraction_timeout,
+    extractions: list[Any] = await asyncio.wait_for(
+        extraction_chain.extract_from_document(
+            file_path,
+            job.subject_id,
+            job.page_batch_size,
+            job_id=job.job_id,
+        ),
+        timeout=extraction_timeout,
     )
 
     all_concepts: list[Any] = []

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import io
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from loguru import logger
-from openai import APIError, BadRequestError, NotFoundError, OpenAI
+from openai import APIError, AsyncOpenAI, BadRequestError, NotFoundError
 from pydantic import BaseModel
 from pymongo import ASCENDING, MongoClient
 
@@ -61,7 +62,7 @@ class UploadedFileRef:
 class StructuredExtractionClient(Protocol):
     """Provider boundary for file-backed structured extraction."""
 
-    def upload_pdf_bytes(
+    async def upload_pdf_bytes(
         self,
         *,
         filename: str,
@@ -73,7 +74,7 @@ class StructuredExtractionClient(Protocol):
 
     def invalidate_cached_file(self, *, sha256: str) -> None: ...
 
-    def parse_response(
+    async def parse_response(
         self,
         *,
         instructions: str,
@@ -113,7 +114,12 @@ def build_provider_config() -> ProviderConfig:
 
 
 class MongoFileCache:
-    """Minimal persistent cache for uploaded OpenAI files."""
+    """Minimal persistent cache for uploaded OpenAI files.
+
+    MongoDB operations are synchronous (pymongo). All public methods are
+    sync — callers must wrap them in ``asyncio.to_thread`` when running
+    from an async context.
+    """
 
     def __init__(self, mongodb_uri: str | None, ttl_hours: int):
         self._mongodb_uri = (mongodb_uri or "").strip()
@@ -190,23 +196,29 @@ class MongoFileCache:
 
 
 class OpenAIResponsesClient:
-    """Thin wrapper around the official OpenAI Files + Responses APIs."""
+    """Thin wrapper around the official OpenAI Files + Responses APIs (async)."""
 
-    def __init__(self, *, config: ProviderConfig | None = None, cache: MongoFileCache | None = None, client: Any | None = None):
+    def __init__(
+        self,
+        *,
+        config: ProviderConfig | None = None,
+        cache: MongoFileCache | None = None,
+        client: Any | None = None,
+    ):
         settings = get_settings()
         self.config = config or build_provider_config()
         self.cache = cache or MongoFileCache(
             settings.mongodb_uri,
             settings.content_pipeline_file_cache_ttl_hours,
         )
-        self._client = client or OpenAI(
+        self._client = client or AsyncOpenAI(
             api_key=self.config.api_key,
             base_url=self.config.base_url,
             timeout=self.config.request_timeout_sec,
             max_retries=self.config.max_retries,
         )
 
-    def upload_pdf_bytes(
+    async def upload_pdf_bytes(
         self,
         *,
         filename: str,
@@ -215,7 +227,8 @@ class OpenAIResponsesClient:
         now_ts: float,
         job_id: str | None = None,
     ) -> UploadedFileRef:
-        cached = self.cache.load(
+        cached = await asyncio.to_thread(
+            self.cache.load,
             provider_fingerprint=self.config.fingerprint,
             sha256=sha256,
             now_ts=now_ts,
@@ -240,7 +253,7 @@ class OpenAIResponsesClient:
             self.config.base_url,
         )
         try:
-            payload = self._client.files.create(
+            payload = await self._client.files.create(
                 file=(filename, io.BytesIO(pdf_bytes), "application/pdf"),
                 purpose=_FILE_PURPOSE,  # type: ignore[arg-type]
             )
@@ -254,7 +267,8 @@ class OpenAIResponsesClient:
         if not file_id:
             raise RuntimeError(f"OpenAI did not return a file id: {payload}")
 
-        self.cache.save(
+        await asyncio.to_thread(
+            self.cache.save,
             provider_fingerprint=self.config.fingerprint,
             sha256=sha256,
             file_id=file_id,
@@ -274,7 +288,7 @@ class OpenAIResponsesClient:
     def invalidate_cached_file(self, *, sha256: str) -> None:
         self.cache.delete(provider_fingerprint=self.config.fingerprint, sha256=sha256)
 
-    def parse_response(
+    async def parse_response(
         self,
         *,
         instructions: str,
@@ -291,7 +305,7 @@ class OpenAIResponsesClient:
             self.config.base_url,
         )
         try:
-            response = self._client.responses.parse(
+            response = await self._client.responses.parse(
                 model=self.config.model,
                 instructions=instructions,
                 input=[{"role": "user", "content": input_blocks}],  # type: ignore[list-item,misc]
@@ -321,6 +335,7 @@ class OpenAIResponsesClient:
             else "none",
         )
         return response
+
 
 def response_usage_summary(payload: Any) -> dict[str, int]:
     usage = payload.get("usage") if isinstance(payload, dict) else getattr(payload, "usage", None)

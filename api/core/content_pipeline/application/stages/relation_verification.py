@@ -7,8 +7,6 @@ from typing import Any
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
-from .execution import run_blocking_stage
-
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 VerifiedRelation = tuple[str, str, Any]
 
@@ -62,11 +60,7 @@ async def verify_candidate_relations(
     pairs_to_verify = build_pairs_to_verify(concepts, candidate_pairs)
     verified: list[VerifiedRelation] = []
     if pairs_to_verify:
-        verifications: list[Any] = await run_blocking_stage(
-            verify_relations_batch,
-            pairs_to_verify,
-            stage_name="relation_verification",
-        )
+        verifications: list[Any] = await verify_relations_batch(pairs_to_verify)
         verified = filter_verified_relations(
             candidate_pairs,
             verifications,

@@ -35,10 +35,17 @@ class RunPipelineFn(Protocol):
 class PipelineService:
     """Owns top-level job lifecycle concerns for the content pipeline."""
 
-    def __init__(self, save_job: SaveJobFn, run_pipeline: RunPipelineFn):
+    def __init__(
+        self,
+        save_job: SaveJobFn,
+        run_pipeline: RunPipelineFn,
+        *,
+        max_concurrent_jobs: int = 2,
+    ):
         self._save_job = save_job
         self._run_pipeline = run_pipeline
         self._scheduled_tasks: set[asyncio.Task[None]] = set()
+        self._concurrency_semaphore = asyncio.Semaphore(max_concurrent_jobs)
 
     async def persist_job_state(
         self,
@@ -140,15 +147,19 @@ class PipelineService:
         apply_reduction: bool,
         page_batch_size: int,
     ) -> None:
-        task: asyncio.Task[None] = asyncio.create_task(
-            self._run_pipeline(
-                job,
-                file_path,
-                prs_threshold,
-                min_confidence,
-                apply_reduction=apply_reduction,
-                page_batch_size=page_batch_size,
-            )
-        )
+        semaphore = self._concurrency_semaphore
+
+        async def _gated_run() -> None:
+            async with semaphore:
+                await self._run_pipeline(
+                    job,
+                    file_path,
+                    prs_threshold,
+                    min_confidence,
+                    apply_reduction=apply_reduction,
+                    page_batch_size=page_batch_size,
+                )
+
+        task: asyncio.Task[None] = asyncio.create_task(_gated_run())
         self._scheduled_tasks.add(task)
         task.add_done_callback(self._scheduled_tasks.discard)

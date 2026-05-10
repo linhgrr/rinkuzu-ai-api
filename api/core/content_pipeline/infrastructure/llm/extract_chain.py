@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
 import hashlib
 from pathlib import Path
 import time
@@ -16,7 +16,7 @@ from api.core.content_pipeline.infrastructure.prompts import (
     EVIDENCE_VERIFICATION_PROMPT,
     EXTRACTION_PROMPT,
 )
-from api.core.content_pipeline.infrastructure.utils.timeit import timeit
+from api.core.content_pipeline.infrastructure.utils.timeit import atimeit
 
 from .openai_responses import (
     FileReferenceError,
@@ -71,7 +71,7 @@ def _format_usage(usage: dict[str, int]) -> str:
 
 
 class ExtractionChain:
-    """OpenAI-backed concept extraction and relation verification."""
+    """OpenAI-backed concept extraction and relation verification (async)."""
 
     def __init__(self, client: StructuredExtractionClient | None = None):
         self.client = client or OpenAIResponsesClient()
@@ -80,8 +80,8 @@ class ExtractionChain:
         self.last_failed_batches: list[dict[str, Any]] = []
         self.last_usage: list[dict[str, int]] = []
 
-    @timeit
-    def extract_from_document(
+    @atimeit
+    async def extract_from_document(
         self,
         file_path: str,
         subject_id: str,
@@ -112,7 +112,8 @@ class ExtractionChain:
             page_ranges = build_page_batches(document.page_count, batch_size)
             for base_batch_index, (start_page, end_page) in enumerate(page_ranges):
                 pending_batches.extend(
-                    self._render_batched_pdfs(
+                    await asyncio.to_thread(
+                        self._render_batched_pdfs,
                         document=document,
                         batch_index=base_batch_index,
                         start_page=start_page,
@@ -134,7 +135,7 @@ class ExtractionChain:
             while pending_batches:
                 rendered_batch = pending_batches.pop(0)
                 try:
-                    extraction = self._extract_single_batch(
+                    extraction = await self._extract_single_batch(
                         job_id=job_id,
                         subject_id=subject_id,
                         batch=rendered_batch,
@@ -142,7 +143,8 @@ class ExtractionChain:
                         source_name=Path(file_path).name,
                     )
                 except ProviderUploadTooLargeError as exc:
-                    split_batches = self._split_rendered_batch(
+                    split_batches = await asyncio.to_thread(
+                        self._split_rendered_batch,
                         document=document,
                         batch=rendered_batch,
                         max_bytes=max_batch_bytes,
@@ -222,28 +224,30 @@ class ExtractionChain:
         )
         return results
 
-    @timeit
-    def verify_relations_batch(
+    @atimeit
+    async def verify_relations_batch(
         self,
         concept_pairs: list[tuple[str, str]],
         max_workers: int | None = None,
     ) -> list[EvidenceVerification]:
         worker_count = max(1, max_workers or self.settings.llm_max_workers)
-        results: list[EvidenceVerification | None] = [None] * len(concept_pairs)
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            future_to_index = {
-                executor.submit(self._verify_single_relation, concept_a, concept_b, pair_index): pair_index
-                for pair_index, (concept_a, concept_b) in enumerate(concept_pairs)
-            }
-            for future in as_completed(future_to_index):
-                pair_index = future_to_index[future]
+        semaphore = asyncio.Semaphore(worker_count)
+
+        async def _verify_one(pair_index: int, concept_a: str, concept_b: str) -> EvidenceVerification:
+            async with semaphore:
                 try:
-                    results[pair_index] = future.result()
+                    return await self._verify_single_relation(concept_a, concept_b, pair_index)
                 except Exception as exc:
                     logger.error("Error verifying pair {}: {}", pair_index, exc)
-                    results[pair_index] = self._verification_error(
+                    return self._verification_error(
                         f"Error during verification: {str(exc)[:100]}"
                     )
+
+        tasks = [
+            _verify_one(i, concept_a, concept_b)
+            for i, (concept_a, concept_b) in enumerate(concept_pairs)
+        ]
+        results = await asyncio.gather(*tasks)
         return [
             result
             if result is not None
@@ -423,7 +427,7 @@ class ExtractionChain:
             ),
         ]
 
-    def _extract_single_batch(
+    async def _extract_single_batch(
         self,
         *,
         job_id: str | None,
@@ -443,7 +447,7 @@ class ExtractionChain:
             len(previous_concepts),
         )
         try:
-            uploaded_file = self.client.upload_pdf_bytes(
+            uploaded_file = await self.client.upload_pdf_bytes(
                 filename=batch_label,
                 pdf_bytes=batch["pdf_bytes"],
                 sha256=str(batch["sha256"]),
@@ -463,7 +467,7 @@ class ExtractionChain:
                 uploaded_file.purpose,
             )
             try:
-                payload, usage = self._invoke_extraction_response_with_retries(
+                payload, usage = await self._invoke_extraction_response_with_retries(
                     job_id=job_id,
                     subject_id=subject_id,
                     file_id=uploaded_file.file_id,
@@ -479,7 +483,7 @@ class ExtractionChain:
                     str(batch["sha256"])[:12],
                 )
                 self.client.invalidate_cached_file(sha256=str(batch["sha256"]))
-                uploaded_file = self.client.upload_pdf_bytes(
+                uploaded_file = await self.client.upload_pdf_bytes(
                     filename=batch_label,
                     pdf_bytes=batch["pdf_bytes"],
                     sha256=str(batch["sha256"]),
@@ -498,7 +502,7 @@ class ExtractionChain:
                     "reupload",
                     uploaded_file.purpose,
                 )
-                payload, usage = self._invoke_extraction_response_with_retries(
+                payload, usage = await self._invoke_extraction_response_with_retries(
                     job_id=job_id,
                     subject_id=subject_id,
                     file_id=uploaded_file.file_id,
@@ -555,7 +559,7 @@ class ExtractionChain:
         else:
             return materialized
 
-    def _invoke_extraction_response(
+    async def _invoke_extraction_response(
         self,
         *,
         job_id: str | None,
@@ -591,7 +595,7 @@ class ExtractionChain:
             subject_id,
             len(previous_concepts),
         )
-        response = self.client.parse_response(
+        response = await self.client.parse_response(
             instructions=EXTRACTION_PROMPT,
             input_blocks=[
                 {"type": "input_text", "text": user_message},
@@ -602,7 +606,7 @@ class ExtractionChain:
         )
         return require_parsed_output(response, ConceptExtractionPayload), response_usage_summary(response)
 
-    def _invoke_extraction_response_with_retries(
+    async def _invoke_extraction_response_with_retries(
         self,
         *,
         job_id: str | None,
@@ -615,7 +619,7 @@ class ExtractionChain:
         last_error: BaseException | None = None
         for attempt in range(retry_count):
             try:
-                return self._invoke_extraction_response(
+                return await self._invoke_extraction_response(
                     job_id=job_id,
                     subject_id=subject_id,
                     file_id=file_id,
@@ -633,9 +637,10 @@ class ExtractionChain:
                     retry_count,
                     str(exc)[:200],
                 )
+                await asyncio.sleep(1.0 * (attempt + 1))
         raise RuntimeError(str(last_error or "Extraction response failed."))
 
-    def _verify_single_relation(
+    async def _verify_single_relation(
         self,
         concept_a: str,
         concept_b: str,
@@ -651,7 +656,7 @@ class ExtractionChain:
         last_error: BaseException | None = None
         for attempt in range(max_retries):
             try:
-                response_payload = self.client.parse_response(
+                response_payload = await self.client.parse_response(
                     instructions=EVIDENCE_VERIFICATION_PROMPT,
                     input_blocks=[{"type": "input_text", "text": user_message}],
                     text_format=EvidenceVerification,
@@ -666,6 +671,7 @@ class ExtractionChain:
                     pair_idx,
                     exc,
                 )
+                await asyncio.sleep(0.5 * (attempt + 1))
         return self._verification_error(
             f"Failed to generate structured output after {max_retries} attempts. Last error: {str(last_error)[:100]}"
         )

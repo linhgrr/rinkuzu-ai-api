@@ -121,9 +121,11 @@ def _init_pipeline(app: FastAPI) -> None:
             page_batch_size=page_batch_size,
         )
 
+    settings = get_settings()
     pipeline_service = PipelineService(
         save_job=mongo_store.require_pipeline_repo().save,
         run_pipeline=run_content_pipeline,
+        max_concurrent_jobs=settings.content_pipeline_max_concurrent_jobs,
     )
     # Rebind so the closure in persist_pipeline_job_state sees the real service.
     pipeline_service_ref = pipeline_service

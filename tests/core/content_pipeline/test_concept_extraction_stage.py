@@ -15,7 +15,7 @@ class _FakeExtractionChain:
         self.last_batches = [{"batch_index": 0}, {"batch_index": 1}, {"batch_index": 2}]
         self.last_failed_batches = [{"batch_index": 2, "reason": "Error: boom"}]
 
-    def extract_from_document(self, file_path, subject_id, page_batch_size, *, job_id=None):
+    async def extract_from_document(self, file_path, subject_id, page_batch_size, *, job_id=None):
         self.calls.append((file_path, subject_id, page_batch_size, job_id))
         return self._response
 

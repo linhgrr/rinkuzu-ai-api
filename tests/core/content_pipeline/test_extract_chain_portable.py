@@ -1,3 +1,5 @@
+import asyncio
+
 import fitz
 from pydantic import ValidationError
 import pytest
@@ -28,7 +30,7 @@ class _RetryClient:
     def __init__(self):
         self.calls = 0
 
-    def parse_response(self, **_: object) -> _ParsedResponse:
+    async def parse_response(self, **_: object) -> _ParsedResponse:
         self.calls += 1
         if self.calls == 1:
             return _ParsedResponse(None, output_text="temporary malformed output")
@@ -40,6 +42,11 @@ class _RetryClient:
             }
         )
         return _ParsedResponse(payload, usage={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18})
+
+
+async def _noop_upload_pdf_bytes(*, filename, pdf_bytes, sha256, now_ts, job_id=None):
+    from api.core.content_pipeline.infrastructure.llm.openai_responses import UploadedFileRef
+    return UploadedFileRef(file_id="file-123", purpose="user_data", cache_hit=False)
 
 
 def test_build_page_batches_uses_fixed_windows():
@@ -87,13 +94,17 @@ def test_extraction_response_retries_on_invalid_structured_output():
     client = _RetryClient()
     chain = ExtractionChain(client=client)
 
-    payload, usage = chain._invoke_extraction_response_with_retries(
-        job_id="job-1",
-        subject_id="math",
-        file_id="file-123",
-        previous_concepts=[],
-        max_retries=2,
-    )
+    async def _run():
+        payload, usage = await chain._invoke_extraction_response_with_retries(
+            job_id="job-1",
+            subject_id="math",
+            file_id="file-123",
+            previous_concepts=[],
+            max_retries=2,
+        )
+        return payload, usage
+
+    payload, usage = asyncio.run(_run())
 
     assert client.calls == 2
     assert payload.subject_id == "math"
@@ -105,7 +116,7 @@ def test_invoke_extraction_response_uses_pydantic_structured_output():
     captured: dict[str, object] = {}
 
     class _Client:
-        def parse_response(self, **kwargs: object) -> _ParsedResponse:
+        async def parse_response(self, **kwargs: object) -> _ParsedResponse:
             captured.update(kwargs)
             payload = ConceptExtractionPayload.model_validate(
                 {"concepts": [], "subject_id": "math", "notes": None}
@@ -114,12 +125,16 @@ def test_invoke_extraction_response_uses_pydantic_structured_output():
 
     chain = ExtractionChain(client=_Client())  # type: ignore[arg-type]
 
-    payload, _usage = chain._invoke_extraction_response(
-        job_id="job-structured",
-        subject_id="math",
-        file_id="file-structured",
-        previous_concepts=[("c1", "Khái niệm cũ")],
-    )
+    async def _run():
+        payload, _usage = await chain._invoke_extraction_response(
+            job_id="job-structured",
+            subject_id="math",
+            file_id="file-structured",
+            previous_concepts=[("c1", "Khái niệm cũ")],
+        )
+        return payload
+
+    payload = asyncio.run(_run())
 
     assert payload.subject_id == "math"
     assert captured["text_format"] is ConceptExtractionPayload
@@ -186,7 +201,7 @@ def test_extract_from_document_splits_again_when_provider_rejects_upload_size(tm
     chain = ExtractionChain(client=_RetryClient())
     seen_ranges: list[tuple[int, int]] = []
 
-    def fake_extract_single_batch(
+    async def fake_extract_single_batch(
         *, job_id, subject_id, batch, previous_concepts, source_name
     ):
         del job_id, previous_concepts, source_name
@@ -196,8 +211,26 @@ def test_extract_from_document_splits_again_when_provider_rejects_upload_size(tm
         return ConceptExtraction(concepts=[], subject_id=subject_id, notes=None)
 
     monkeypatch.setattr(chain, "_extract_single_batch", fake_extract_single_batch)
+    # Stub _render_batched_pdfs to bypass fitz.open() inside asyncio.to_thread.
+    monkeypatch.setattr(
+        chain,
+        "_render_batched_pdfs",
+        lambda *, document, batch_index, start_page, end_page, max_bytes: [
+            {
+                "batch_index": batch_index,
+                "page_start": start_page,
+                "page_end": end_page,
+                "pdf_bytes": b"x",
+                "sha256": "abc",
+                "size_bytes": 1,
+            }
+        ],
+    )
 
-    results = chain.extract_from_document(str(pdf_path), "math", page_batch_size=10)
+    async def _run():
+        return await chain.extract_from_document(str(pdf_path), "math", page_batch_size=10)
+
+    results = asyncio.run(_run())
 
     assert len(results) == 2
     assert seen_ranges == [(1, 2), (1, 1), (2, 2)]

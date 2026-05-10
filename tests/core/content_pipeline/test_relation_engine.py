@@ -22,7 +22,7 @@ def test_default_relation_engine_combines_ranking_and_verification():
         assert threshold == 0.75
         return [("c1", "c2")]
 
-    def verify_relations_batch(pairs):
+    async def verify_relations_batch(pairs):
         assert pairs == [("Alpha", "Beta")]
         return [SimpleNamespace(has_relation=True, confidence=0.9, direction="A_to_B")]
 

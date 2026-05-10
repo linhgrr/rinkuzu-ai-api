@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     )
 
     # ── Content Pipeline ───────────────────────────────────
+    content_pipeline_max_concurrent_jobs: int = 2
     embedding_model: str = "keepitreal/vietnamese-sbert"
     embedding_batch_size: int = 32
     use_vi_tokenizer: bool = False

@@ -1,5 +1,6 @@
 """Timing utilities."""
 
+import asyncio
 from collections.abc import Callable
 from functools import wraps
 import time
@@ -15,6 +16,34 @@ def timeit(func: Callable) -> Callable:
 
         try:
             result = func(*args, **kwargs)
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(
+                "Function {} failed",
+                func.__name__,
+                elapsed_seconds=round(elapsed, 2),
+                error=str(e),
+            )
+            raise
+        else:
+            elapsed = time.time() - start_time
+            logger.info(
+                "Function {} completed",
+                func.__name__,
+                elapsed_seconds=round(elapsed, 2),
+            )
+            return result
+
+    return wrapper
+
+
+def atimeit(func: Callable) -> Callable:
+    @wraps(func)
+    async def wrapper(*args, **kwargs) -> Any:
+        start_time = time.time()
+
+        try:
+            result = await func(*args, **kwargs)
         except Exception as e:
             elapsed = time.time() - start_time
             logger.error(

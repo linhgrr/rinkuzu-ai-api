@@ -50,7 +50,7 @@ def test_verify_candidate_relations_updates_progress_and_job_metrics():
         assert job_arg is job
         calls.append((status, step, progress))
 
-    def verify_relations_batch(pairs):
+    async def verify_relations_batch(pairs):
         verifier_calls.append(pairs)
         return [SimpleNamespace(has_relation=True, confidence=0.8, direction="A_to_B")]
 
