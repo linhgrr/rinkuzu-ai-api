@@ -178,6 +178,13 @@ def get_structured_llm(
     return llm.with_structured_output(schema, method=method, strict=strict)
 
 
+SSE_STREAM_HEADERS: dict[str, str] = {
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
 def serialize_responses_sse_event(event: object) -> bytes:
     if hasattr(event, "model_dump_json"):
         payload = event.model_dump_json(exclude_none=True)

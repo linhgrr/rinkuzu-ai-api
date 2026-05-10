@@ -14,6 +14,7 @@ from api.core.quiz.tutor_chat import (
     generate_tutor_chat_response,
     sanitize_chat_input,
 )
+from api.core.shared.llm import SSE_STREAM_HEADERS
 from api.dependencies import (
     get_chunk_chroma_store,
     get_current_user,
@@ -352,11 +353,7 @@ async def chat_about_exercise(
             return StreamingResponse(
                 stream,
                 media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache, no-transform",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",
-                },
+                headers=SSE_STREAM_HEADERS,
             )
 
         explanation = await asyncio.to_thread(

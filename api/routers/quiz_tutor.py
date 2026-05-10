@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from api.config import get_settings
 from api.core.quiz.quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
+from api.core.shared.llm import SSE_STREAM_HEADERS
 from api.dependencies import get_current_user
 from api.exceptions import AppError
 from api.rate_limit import is_admin_request, limiter
@@ -43,11 +44,7 @@ async def ask_ai_about_quiz(
             return StreamingResponse(
                 stream,
                 media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache, no-transform",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",
-                },
+                headers=SSE_STREAM_HEADERS,
             )
 
         payload = await asyncio.to_thread(
