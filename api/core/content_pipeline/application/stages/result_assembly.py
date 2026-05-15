@@ -35,7 +35,7 @@ def serialize_concepts(concepts: list[Any]) -> tuple[dict[str, dict[str, Any]], 
     return concepts_data, concept_map
 
 
-def serialize_prerequisite_edges(graph, concept_map: dict[str, int]) -> list[dict[str, str]]:
+def serialize_prerequisite_edges(graph: Any, concept_map: dict[str, int]) -> list[dict[str, str]]:
     """Extract prerequisite edges from the final graph payload."""
     prereq_edges = []
     for source_id, target_id, data in graph.edges(data=True):

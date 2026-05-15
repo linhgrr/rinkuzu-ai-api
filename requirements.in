@@ -6,6 +6,7 @@ python-dotenv>=1.0.0
 pydantic>=2.9.2
 pydantic-settings>=2.6.0
 aiofiles>=24.1.0
+orjson>=3.10
 
 # ML / Deep Learning / RL
 torch>=2.0.0
@@ -20,6 +21,8 @@ langchain-openai>=0.1.0
 langchain-chroma>=0.1.0
 langchain-text-splitters>=0.1.0
 pypdf>=6.10.2
+tenacity>=8.2
+aiocache>=0.12
 sentence-transformers>=2.2.0
 transformers>=4.30.0
 chromadb>=0.5.0

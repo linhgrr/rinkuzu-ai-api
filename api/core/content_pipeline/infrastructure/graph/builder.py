@@ -20,7 +20,7 @@ class RelationType(StrEnum):
 class KnowledgeGraphBuilder:
     """Builder for knowledge graphs (DiGraph)."""
 
-    def __init__(self, subject_id: str):
+    def __init__(self, subject_id: str) -> None:
         """
         Initialize builder.
 
@@ -41,7 +41,7 @@ class KnowledgeGraphBuilder:
     def _title_from_id(self, node_id: str) -> str:
         return " ".join(w.capitalize() for w in (node_id or "").split("_")).strip() or node_id
 
-    def _ensure_node(self, node_id: str, *, placeholder: bool = True):
+    def _ensure_node(self, node_id: str, *, placeholder: bool = True) -> Any:
         """Đảm bảo node tồn tại trong graph. Nếu chưa có thì tạo node placeholder."""
         if node_id not in self.graph:
             self.graph.add_node(
@@ -51,7 +51,7 @@ class KnowledgeGraphBuilder:
                 is_placeholder=placeholder,
             )
 
-    def _set_non_placeholder(self, node_id: str, **attrs):
+    def _set_non_placeholder(self, node_id: str, **attrs: Any) -> Any:
         """Khi add_concept thật, gỡ cờ placeholder và cập nhật thuộc tính."""
         self._ensure_node(node_id, placeholder=False)
         attrs = {"is_placeholder": False, **attrs}
@@ -90,12 +90,12 @@ class KnowledgeGraphBuilder:
                 out.append(text)
         return out or None
 
-    def add_concepts(self, concepts: list[Concept]):
+    def add_concepts(self, concepts: list[Concept]) -> Any:
         """Add multiple concepts to graph."""
         for concept in concepts:
             self.add_concept(concept)
 
-    def add_concept(self, concept: Concept):
+    def add_concept(self, concept: Concept) -> Any:
         """Add a single concept (as a real/complete node) and its outgoing relations."""
         self._set_non_placeholder(
             concept.concept_id,
@@ -122,7 +122,7 @@ class KnowledgeGraphBuilder:
         relation_type: str | None = None,
         evidence: str | list[str] | None = None,
         location: str | None = None,
-    ):
+    ) -> Any:
         """
         Add a relation (edge) to graph.
 

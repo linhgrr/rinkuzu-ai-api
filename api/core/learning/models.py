@@ -14,7 +14,7 @@ from torch import nn
 class PositionalEncoding(nn.Module):
     pe: torch.Tensor
 
-    def __init__(self, d_model: int, max_len: int = 512, dropout: float = 0.1):
+    def __init__(self, d_model: int, max_len: int = 512, dropout: float = 0.1) -> None:
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(max_len, d_model)
@@ -38,7 +38,7 @@ class SaintModel(nn.Module):
 
     def __init__(
         self,
-        concept_embeddings,
+        concept_embeddings: Any,
         d_model: int = 128,
         n_heads: int = 4,
         n_encoder_layers: int = 2,
@@ -48,7 +48,7 @@ class SaintModel(nn.Module):
         dropout: float = 0.1,
         bloom_levels: int = 7,
         bloom_emb_dim: int = 32,
-    ):
+    ) -> None:
         super().__init__()
         self.d_model = d_model
         self.max_seq_len = max_seq_len
@@ -91,7 +91,7 @@ class SaintModel(nn.Module):
         self.output_proj = nn.Linear(d_model, 1)
         self._init_weights()
 
-    def _init_weights(self):
+    def _init_weights(self) -> Any:
         for p in self.parameters():
             if p.dim() > 1 and p.requires_grad:
                 nn.init.xavier_uniform_(p)
@@ -223,7 +223,7 @@ class DuelingQNetwork(nn.Module):
     CONCEPT_FEAT_DIM = 8  # bloom_mastery(6) + visited(1) + prereq_ok(1)
     N_BLOOMS = 6
 
-    def __init__(self, global_dim=130, hidden_sizes=(256, 256)):
+    def __init__(self, global_dim: Any = 130, hidden_sizes: Any = (256, 256)) -> None:
         super().__init__()
         self.global_dim = global_dim
         input_dim = global_dim + self.CONCEPT_FEAT_DIM  # e.g. 138
@@ -240,7 +240,7 @@ class DuelingQNetwork(nn.Module):
             nn.Linear(prev, 128), nn.ReLU(), nn.Linear(128, self.N_BLOOMS)
         )
 
-    def forward(self, flat_obs, n_concepts):
+    def forward(self, flat_obs: Any, n_concepts: Any) -> Any:
         """
         Args:
             flat_obs:    (B, global_dim + n_concepts * CONCEPT_FEAT_DIM)
@@ -264,7 +264,7 @@ class DuelingQNetwork(nn.Module):
         return q.view(batch_size, n_concepts * self.N_BLOOMS)
 
 
-def load_saint_model(checkpoint_path: str, device: torch.device):
+def load_saint_model(checkpoint_path: str, device: torch.device) -> Any:
     """Load SAINT model from checkpoint. Returns (model, concept_map, config)."""
     checkpoint = cast(
         "dict[str, Any]",
@@ -296,7 +296,7 @@ def load_saint_model(checkpoint_path: str, device: torch.device):
     return model, concept_map, cfg
 
 
-def load_dqn_model(checkpoint_path: str, device: torch.device):
+def load_dqn_model(checkpoint_path: str, device: torch.device) -> Any:
     """Load concept-agnostic DQN from checkpoint. Returns (model, config_info)."""
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     global_dim = ckpt.get("global_dim", 130)

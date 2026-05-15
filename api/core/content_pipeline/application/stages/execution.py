@@ -98,7 +98,7 @@ def shutdown_pipeline_executor(*, wait: bool = True, cancel_futures: bool = Fals
     _inflight_blocking_futures.clear()
 
 
-def _resolve_target(target_path: str):
+def _resolve_target(target_path: str) -> Any:
     module_name, _, attr_path = target_path.partition(":")
     if not module_name or not attr_path:
         raise ValueError(f"Invalid process target path: {target_path}")

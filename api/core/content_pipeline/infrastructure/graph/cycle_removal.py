@@ -12,7 +12,7 @@ import networkx as nx
 
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision
 from api.core.content_pipeline.infrastructure.prompts import CYCLE_REMOVAL_PROMPT
-from api.core.shared.llm import get_llm
+from api.core.shared.llm import get_llm, make_async_llm_retry
 
 
 class CycleRemover:
@@ -40,7 +40,7 @@ class CycleRemover:
 
         logger.info("CycleRemover initialized with LLM-based decision making")
 
-    def remove_cycles(self, graph: nx.DiGraph) -> tuple[nx.DiGraph, dict[str, Any]]:
+    async def remove_cycles(self, graph: nx.DiGraph) -> tuple[nx.DiGraph, dict[str, Any]]:
         """
         Remove all cycles from graph using LLM decisions.
 
@@ -74,27 +74,32 @@ class CycleRemover:
             iteration += 1
 
             try:
-                cycles = list(nx.simple_cycles(dag_graph))
+                cycle_edges_raw = list(nx.find_cycle(dag_graph, orientation="original"))
+            except nx.NetworkXNoCycle:
+                logger.info("No cycle found during iteration {}", iteration)
+                break
             except Exception:
                 logger.exception("Error finding cycles")
                 break
 
-            if not cycles:
+            if not cycle_edges_raw:
                 break
 
-            logger.info("Iteration {}: Found {} cycle(s)", iteration, len(cycles))
+            logger.info(
+                "Iteration {}: Found cycle with {} edge(s)", iteration, len(cycle_edges_raw)
+            )
 
-            cycle = cycles[0]
+            cycle = [cycle_edges_raw[0][0], *[edge[1] for edge in cycle_edges_raw[:-1]]]
 
             cycle_edges = []
-            for i in range(len(cycle)):
-                source = cycle[i]
-                target = cycle[(i + 1) % len(cycle)]
+            for edge in cycle_edges_raw:
+                source = edge[0]
+                target = edge[1]
                 if dag_graph.has_edge(source, target):
                     edge_data = dag_graph[source][target]
                     cycle_edges.append({"source": source, "target": target, "data": edge_data})
 
-            edges_removed = self._remove_cycle_with_llm(dag_graph, cycle, cycle_edges)
+            edges_removed = await self._remove_cycle_with_llm(dag_graph, cycle, cycle_edges)
 
             total_edges_removed += edges_removed
             cycles_removed += 1
@@ -126,7 +131,7 @@ class CycleRemover:
 
         return dag_graph, stats
 
-    def _remove_cycle_with_llm(
+    async def _remove_cycle_with_llm(
         self, graph: nx.DiGraph, cycle: list[str], cycle_edges: list[dict[str, Any]]
     ) -> int:
         """
@@ -142,11 +147,10 @@ class CycleRemover:
         """
         try:
             cycle_info = self._format_cycle_info(graph, cycle, cycle_edges)
-            logger.debug("Asking LLM to analyze cycle: {}", " → ".join(cycle))
+            logger.debug("Asking LLM to analyze cycle: {}", " → ".join([*cycle, cycle[0]]))
 
             logger.info("Cycle removal LLM Input: {}", cycle_info)
-
-            decision = self.cycle_removal_chain.invoke({"cycle_info": cycle_info})
+            decision = await self._invoke_cycle_removal_decision(cycle_info)
 
             logger.info("Cycle removal LLM Output: {}", decision.model_dump())
 
@@ -187,6 +191,10 @@ class CycleRemover:
             return 0
         else:
             return edges_removed
+
+    @make_async_llm_retry(label="cycle removal")
+    async def _invoke_cycle_removal_decision(self, cycle_info: str) -> Any:
+        return await self.cycle_removal_chain.ainvoke({"cycle_info": cycle_info})
 
     def _format_cycle_info(
         self, graph: nx.DiGraph, cycle: list[str], cycle_edges: list[dict[str, Any]]
@@ -246,7 +254,7 @@ class CycleRemover:
         return "\n".join(lines)
 
 
-def make_dag_with_llm(
+async def make_dag_with_llm(
     graph: nx.DiGraph, llm: Any | None = None
 ) -> tuple[nx.DiGraph, dict[str, Any]]:
     """
@@ -262,4 +270,4 @@ def make_dag_with_llm(
         Tuple of (dag_graph, stats)
     """
     remover = CycleRemover(llm=llm)
-    return remover.remove_cycles(graph)
+    return await remover.remove_cycles(graph)

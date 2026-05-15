@@ -20,7 +20,7 @@ def _normalize_matrix(encoded: Any) -> list[list[float]]:
     return [[float(value) for value in row] for row in encoded]
 
 
-def _model_worker_entrypoint(conn) -> None:
+def _model_worker_entrypoint(conn: Any) -> None:
     from pyvi import ViTokenizer
     from sentence_transformers import SentenceTransformer
     import torch

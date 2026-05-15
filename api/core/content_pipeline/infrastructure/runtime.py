@@ -27,6 +27,8 @@ from .merge.name_merge import merge_by_name
 from .processors.factory import load_and_chunk_pdf
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from api.core.content_pipeline.application.ports import RelationEngine
 
 PrereqRankingFn = Callable[[list[Any], float], list[tuple[str, str]]]
@@ -65,7 +67,7 @@ class ContentProcessorBindings:
     merge_by_name: Callable[[list[Any]], list[Any]]
     relation_engine_factory: Callable[..., RelationEngine]
     knowledge_graph_builder_factory: Callable[[str], Any]
-    make_dag_with_llm: Callable[[Any], tuple[Any, Any]]
+    make_dag_with_llm: Callable[[Any], Awaitable[tuple[Any, Any]]]
     apply_transitive_reduction: Callable[[Any], Any]
     saint_text_model_factory: Callable[[], Any]
     generate_theory: Callable[[str, str], Any]
@@ -83,13 +85,13 @@ class LockedSentenceTransformerModel:
             return self._model.encode(*args, **kwargs)
 
 
-def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str):
+def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str) -> Any:
     """Delegate theory generation to exercise_gen module."""
     exercise_gen = import_module("api.core.learning.exercise_gen")
     return exercise_gen.generate_theory(concept_name, concept_definition)
 
 
-def get_s3_client():
+def get_s3_client() -> Any:
     settings = get_settings()
     if not settings.s3_available:
         return None
@@ -112,13 +114,13 @@ def calculate_file_hash(file_path: str) -> str:
     return hasher.hexdigest()
 
 
-def _build_embedding_client(model_name: str, batch_size: int):
+def _build_embedding_client(model_name: str, batch_size: int) -> Any:
     from .embed.embedding_client import EmbeddingClient
 
     return EmbeddingClient(model_name, batch_size=batch_size)
 
 
-def _compute_embedding_for_concepts(concepts, embedding_model):
+def _compute_embedding_for_concepts(concepts: Any, embedding_model: Any) -> Any:
     from .embed.embeddings import compute_embedding_for_concepts
 
     return compute_embedding_for_concepts(concepts, embedding_model)
@@ -132,16 +134,20 @@ def _load_saint_text_model() -> LockedSentenceTransformerModel:
     return LockedSentenceTransformerModel(model)
 
 
-def _build_relation_engine(*, extraction_chain):
+def _build_relation_engine(*, extraction_chain: Any) -> Any:
     if not _PREREQ_RANKING_AVAILABLE:
 
-        def rank_prerequisites_stub(*_args, **_kwargs):
+        def rank_prerequisites_stub(
+            _items: list[Any],
+            _threshold: float,
+        ) -> list[tuple[str, str]]:
             raise ModuleNotFoundError(
                 "Optional embedding dependencies are required for prerequisite ranking"
             )
 
-        rank_fn = rank_prerequisites_stub
+        rank_fn: PrereqRankingFn = rank_prerequisites_stub
     else:
+        assert _rank_prerequisites is not None
         rank_fn = _rank_prerequisites
 
     return DefaultRelationEngine(
@@ -150,23 +156,23 @@ def _build_relation_engine(*, extraction_chain):
     )
 
 
-def _merge_by_name(concepts):
+def _merge_by_name(concepts: Any) -> Any:
     return merge_by_name(concepts)
 
 
-def _knowledge_graph_builder_factory(subject_id: str):
+def _knowledge_graph_builder_factory(subject_id: str) -> Any:
     return KnowledgeGraphBuilder(subject_id=subject_id)
 
 
-def _make_dag_with_llm(graph):
-    return make_dag_with_llm(graph)
+async def _make_dag_with_llm(graph: Any) -> Any:
+    return await make_dag_with_llm(graph)
 
 
-def _apply_transitive_reduction(graph):
+def _apply_transitive_reduction(graph: Any) -> Any:
     return apply_transitive_reduction(graph)
 
 
-def _build_saint_text_model():
+def _build_saint_text_model() -> Any:
     return _load_saint_text_model()
 
 

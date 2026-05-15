@@ -1,3 +1,5 @@
+from typing import Any
+
 """
 agent.py — D3QN action selection with topic coherence
 """
@@ -80,7 +82,7 @@ def select_topic_coherent_action(
     return int(np.argmax(q_values))
 
 
-def decode_action(action: int, n_blooms: int = 6):
+def decode_action(action: int, n_blooms: int = 6) -> Any:
     """Decode flat action → (concept_idx, bloom_level)."""
     concept_idx = action // n_blooms
     bloom_level = (action % n_blooms) + 1

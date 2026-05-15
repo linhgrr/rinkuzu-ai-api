@@ -74,7 +74,7 @@ class QuizDraftService:
     """Owns the quiz draft lifecycle and background extraction state."""
 
     @staticmethod
-    def _require_processing_settings(settings) -> tuple[str, str]:
+    def _require_processing_settings(settings: Any) -> tuple[str, str]:
         bucket_name = settings.object_storage_bucket
         model = settings.openai_model
         if not bucket_name or not model:
@@ -284,7 +284,7 @@ class QuizDraftService:
         return normalized_key
 
     @staticmethod
-    def _head_pdf_object(s3_client, bucket_name: str, s3_key: str) -> int:
+    def _head_pdf_object(s3_client: Any, bucket_name: str, s3_key: str) -> int:
         try:
             response = s3_client.head_object(Bucket=bucket_name, Key=s3_key)
         except Exception as exc:
@@ -292,7 +292,7 @@ class QuizDraftService:
         return int(response.get("ContentLength", 0))
 
     @staticmethod
-    def _count_pdf_pages(s3_client, bucket_name: str, s3_key: str) -> int:
+    def _count_pdf_pages(s3_client: Any, bucket_name: str, s3_key: str) -> int:
         try:
             response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
             body = response.get("Body")
@@ -306,7 +306,7 @@ class QuizDraftService:
         return max(1, page_count)
 
     @staticmethod
-    def _read_pdf_bytes(s3_client, bucket_name: str, s3_key: str) -> bytes:
+    def _read_pdf_bytes(s3_client: Any, bucket_name: str, s3_key: str) -> bytes:
         try:
             response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
             body = response.get("Body")

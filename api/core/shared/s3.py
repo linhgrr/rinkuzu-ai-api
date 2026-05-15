@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import boto3
 from botocore.client import Config
 
 from api.config import get_settings
 
 
-def get_s3_client():
+def get_s3_client() -> Any:
     settings = get_settings()
     if not settings.s3_available:
         return None

@@ -1,3 +1,5 @@
+from typing import Any
+
 """Unified content pipeline package.
 
 The public package import stays lightweight. Heavy runtime collaborators
@@ -20,7 +22,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name in {
         "CONTENT_PROCESSOR_AVAILABLE",
         "CONTENT_PROCESSOR_ERROR",

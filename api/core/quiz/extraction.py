@@ -12,7 +12,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
 from api.config import Settings, get_settings
-from api.core.shared.llm import get_structured_llm, resolve_llm_api_key
+from api.core.shared.llm import get_structured_llm, resolve_llm_api_key, with_llm_retry
 
 MAX_PDF_BYTES = 50 * 1024 * 1024
 _FILE_PURPOSE = "user_data"
@@ -167,20 +167,23 @@ def _invoke_pdf_extract_llm_sync(
         use_responses_api=True,
     )
     file_payload = base64.b64encode(pdf_bytes).decode("utf-8")
-    response = structured_llm.invoke(
-        [
-            HumanMessage(
-                content=[
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "file",
-                        "base64": file_payload,
-                        "mime_type": "application/pdf",
-                        "filename": filename,
-                    },
-                ]
-            )
-        ]
+    response = with_llm_retry(
+        label="quiz extraction",
+        fn=lambda: structured_llm.invoke(
+            [
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "file",
+                            "base64": file_payload,
+                            "mime_type": "application/pdf",
+                            "filename": filename,
+                        },
+                    ]
+                )
+            ]
+        ),
     )
     if not isinstance(response, ExtractedQuizQuestionList):
         raise TypeError(f"LLM returned invalid quiz extraction type: {type(response)}")

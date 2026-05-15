@@ -127,7 +127,7 @@ async def list_subjects(
     request: Request,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     del request
     """List all completed pipeline jobs (= subjects) enriched with mastery stats."""
     subjects = await list_recent_pipeline_jobs(
@@ -167,7 +167,7 @@ async def list_subject_progress(
     request: Request,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     del request
     """List recent subject-level progress records."""
     progress_docs = await list_recent_subject_progress(limit=limit, user_id=user_id)
@@ -188,7 +188,7 @@ async def get_subject_history(
     request: Request,
     job_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     del request
     """Get subject-level learning history for one pipeline job."""
     job_doc = await load_pipeline_job_for_user(job_id, user_id)
@@ -205,7 +205,7 @@ async def list_pipeline_jobs(
     request: Request,
     limit: Annotated[int, Query(ge=1, le=500)] = 20,
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     del request
     """List recent pipeline jobs."""
     jobs = await list_recent_pipeline_jobs(limit=limit, user_id=user_id)
@@ -218,7 +218,7 @@ async def get_pipeline_job(
     request: Request,
     job_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     del request
     """Get full pipeline job result."""
     doc = await load_pipeline_job_for_user(job_id, user_id)
@@ -235,7 +235,7 @@ async def delete_subject(
     user_id: str = Depends(get_current_user),
     *,
     delete_sessions: bool = True,
-):
+) -> Any:
     del request
     """Delete a subject (pipeline job) and optionally its sessions."""
     result = await delete_pipeline_job_for_user(

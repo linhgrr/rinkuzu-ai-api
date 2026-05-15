@@ -20,12 +20,12 @@ router = APIRouter(prefix="/api/session", tags=["knowledge"])
 
 
 async def _get_session_resource(
-    manager,
+    manager: Any,
     session_id: str,
     user_id: str,
     fetcher: Callable[[], dict[str, Any] | None],
     response_cls: type[BaseModel],
-):
+) -> Any:
     """Resolve session → fetch data → build response, raising 404 on miss."""
     await resolve_user_session(manager, session_id, user_id)
     data = fetcher()
@@ -39,9 +39,9 @@ async def _get_session_resource(
 async def get_knowledge_graph(
     request: Request,
     session_id: PathID,
-    manager=Depends(get_session_manager),
+    manager: Any = Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Return the prerequisite knowledge graph for a session."""
     del request
     return await _get_session_resource(
@@ -58,9 +58,9 @@ async def get_knowledge_graph(
 async def get_mastery_matrix(
     request: Request,
     session_id: PathID,
-    manager=Depends(get_session_manager),
+    manager: Any = Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Return the concept x Bloom-level mastery matrix for a session."""
     del request
     return await _get_session_resource(
@@ -80,9 +80,9 @@ async def get_concept_detail(
     request: Request,
     session_id: PathID,
     concept_id: PathID,
-    manager=Depends(get_session_manager),
+    manager: Any = Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Return detailed information about a specific concept."""
     del request
     return await _get_session_resource(

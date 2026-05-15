@@ -40,3 +40,6 @@ htmlcov/
 build/
 dist/
 .gitnexus
+
+# Performance test artifacts
+perf/

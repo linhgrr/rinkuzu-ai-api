@@ -28,18 +28,30 @@ def compute_embeddings_batch(
     )
 
     if truncate_long_texts:
-        processed_texts = []
-        for text in texts:
-            if not text:
-                processed_texts.append("")
-                continue
-            words = text.split()
-            if len(words) > max_length:
-                truncated = " ".join(words[:max_length])
-                logger.debug("Truncated text from {} to {} words", len(words), max_length)
-                processed_texts.append(truncated)
-            else:
-                processed_texts.append(text)
-        texts = processed_texts
+        tokenizer = getattr(getattr(client, "_model_handle", None), "model", None)
+        tokenizer = getattr(tokenizer, "tokenizer", None)
+
+        if tokenizer is not None:
+            processed_texts = []
+            for text in texts:
+                if not text:
+                    processed_texts.append("")
+                    continue
+
+                token_ids = tokenizer.encode(
+                    text,
+                    max_length=max_length,
+                    truncation=True,
+                    add_special_tokens=False,
+                )
+                truncated_text = tokenizer.decode(token_ids)
+                if truncated_text != text:
+                    logger.debug(
+                        "Truncated text from {} to {} tokens",
+                        len(token_ids),
+                        max_length,
+                    )
+                processed_texts.append(truncated_text)
+            texts = processed_texts
 
     return client.embed_documents(texts)

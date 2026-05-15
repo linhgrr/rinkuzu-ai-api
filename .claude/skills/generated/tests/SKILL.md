@@ -27,9 +27,9 @@ description: "Skill for the Tests area of rinkuzu-ai-api. 14 symbols across 4 fi
 Start here when exploring this area:
 
 - **`test_get_session_resource_supports_sync_knowledge_graph_fetcher`** (Function) — `tests/test_knowledge_router.py:9`
-- **`test_get_session_resource_supports_sync_mastery_fetcher`** (Function) — `tests/test_knowledge_router.py:59`
-- **`test_get_session_resource_supports_sync_concept_detail_fetcher`** (Function) — `tests/test_knowledge_router.py:88`
-- **`test_get_session_resource_raises_session_not_found_when_fetcher_returns_none`** (Function) — `tests/test_knowledge_router.py:119`
+- **`test_get_session_resource_supports_sync_mastery_fetcher`** (Function) — `tests/test_knowledge_router.py:58`
+- **`test_get_session_resource_supports_sync_concept_detail_fetcher`** (Function) — `tests/test_knowledge_router.py:86`
+- **`test_get_session_resource_raises_session_not_found_when_fetcher_returns_none`** (Function) — `tests/test_knowledge_router.py:116`
 - **`get_knowledge_graph`** (Function) — `api/routers/knowledge.py:38`
 
 ## Key Symbols
@@ -37,17 +37,17 @@ Start here when exploring this area:
 | Symbol | Type | File | Line |
 |--------|------|------|------|
 | `test_get_session_resource_supports_sync_knowledge_graph_fetcher` | Function | `tests/test_knowledge_router.py` | 9 |
-| `test_get_session_resource_supports_sync_mastery_fetcher` | Function | `tests/test_knowledge_router.py` | 59 |
-| `test_get_session_resource_supports_sync_concept_detail_fetcher` | Function | `tests/test_knowledge_router.py` | 88 |
-| `test_get_session_resource_raises_session_not_found_when_fetcher_returns_none` | Function | `tests/test_knowledge_router.py` | 119 |
+| `test_get_session_resource_supports_sync_mastery_fetcher` | Function | `tests/test_knowledge_router.py` | 58 |
+| `test_get_session_resource_supports_sync_concept_detail_fetcher` | Function | `tests/test_knowledge_router.py` | 86 |
+| `test_get_session_resource_raises_session_not_found_when_fetcher_returns_none` | Function | `tests/test_knowledge_router.py` | 116 |
 | `get_knowledge_graph` | Function | `api/routers/knowledge.py` | 38 |
-| `get_mastery_matrix` | Function | `api/routers/knowledge.py` | 55 |
-| `get_concept_detail` | Function | `api/routers/knowledge.py` | 72 |
+| `get_mastery_matrix` | Function | `api/routers/knowledge.py` | 57 |
+| `get_concept_detail` | Function | `api/routers/knowledge.py` | 78 |
 | `test_http_exception_is_normalized` | Function | `tests/test_exceptions.py` | 29 |
 | `test_app_error_is_normalized` | Function | `tests/test_exceptions.py` | 42 |
 | `test_validation_error_is_normalized` | Function | `tests/test_exceptions.py` | 55 |
 | `test_unexpected_error_is_sanitized` | Function | `tests/test_exceptions.py` | 69 |
-| `register_exception_handlers` | Function | `api/exceptions.py` | 128 |
+| `register_exception_handlers` | Function | `api/exceptions.py` | 131 |
 | `_get_session_resource` | Function | `api/routers/knowledge.py` | 21 |
 | `_build_app` | Function | `tests/test_exceptions.py` | 6 |
 

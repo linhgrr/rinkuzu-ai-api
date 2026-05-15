@@ -3,7 +3,7 @@ routers/quiz_tutor.py — Quiz ask-AI endpoints backed by shared LLM runtime.
 """
 
 import asyncio
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -26,7 +26,7 @@ async def ask_ai_about_quiz(
     request: Request,
     req: QuizTutorRequest,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     """Ask an AI tutor for help understanding a quiz question (stream or single response)."""
     del request
     del user_id

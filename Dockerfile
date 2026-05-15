@@ -16,6 +16,25 @@ COPY api ./api
 RUN pip install --upgrade pip "setuptools<82" && \
     pip install --prefix=/install --no-warn-script-location .
 
+FROM python:3.11-slim AS perf
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY pyproject.toml README.md ./
+COPY api ./api
+COPY tests ./tests
+COPY scripts ./scripts
+RUN pip install --upgrade pip "setuptools<82" && \
+    pip install --no-warn-script-location .[dev,otel]
+
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
 

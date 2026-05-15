@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 
 
-def build_subject_progress_snapshot(session) -> dict[str, Any]:
+def build_subject_progress_snapshot(session: Any) -> dict[str, Any]:
     env_stats = session.env.get_session_stats()
     concept_mastery = session.env.get_concept_mastery()
     bloom_mastery = session.env.get_mastery_matrix()

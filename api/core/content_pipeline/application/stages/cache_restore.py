@@ -56,7 +56,7 @@ async def try_restore_completed_job_from_s3(
     job: PipelineJob,
     *,
     file_path: str,
-    s3_client,
+    s3_client: Any,
     bucket_name: str | None,
     hash_file: HashFileFn,
     save_job: SaveJobFn,

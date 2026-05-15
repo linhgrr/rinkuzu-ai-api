@@ -25,6 +25,7 @@ dependencies = [
     "pydantic>=2.9.2",
     "pydantic-settings>=2.6.0",
     "aiofiles>=24.1.0",
+    "orjson>=3.10",
     "torch>=2.0.0",
     "numpy>=1.24.0",
     "networkx>=3.0",
@@ -35,6 +36,8 @@ dependencies = [
     "langchain-chroma>=0.1.0",
     "langchain-text-splitters>=0.1.0",
     "pypdf>=6.10.2",
+    "tenacity>=8.2",
+    "aiocache>=0.12",
     "sentence-transformers>=2.2.0",
     "transformers>=4.30.0",
     "chromadb>=0.5.0",
@@ -58,9 +61,25 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
+    "pytest-benchmark>=4.0",
+    "pyinstrument>=4.6",
+    "py-spy>=0.3",
     "ruff>=0.11.7",
+    "scalene>=1.5",
+    "memray>=1.13",
+    "locust>=2.20",
+    "vulture>=2.10",
+    "radon>=6.0",
+    "xenon>=0.9",
     "bandit>=1.8.0",
     "pip-audit>=2.8.0",
+]
+otel = [
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-instrumentation-fastapi>=0.46b0",
+    "opentelemetry-instrumentation-pymongo>=0.46b0",
+    "opentelemetry-exporter-otlp>=1.25",
 ]
 
 [tool.pytest.ini_options]
@@ -104,6 +123,7 @@ ignore = [
     "S101",
     "S105",
     "S106",
+    "E402",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -113,9 +133,17 @@ ignore = [
     "S106",
     "ARG001",
     "ARG002",
+    "ARG005",
     "N803",
     "PLR2004",
     "RET501",
+]
+"scripts/**/*.py" = [
+    "ARG001",
+    "ARG002",
+    "ARG005",
+    "S603",
+    "S607",
 ]
 "api/main.py" = [
     "E402",
@@ -142,6 +170,10 @@ skip-magic-trailing-comma = false
 python_version = "3.11"
 strict_optional = true
 no_implicit_optional = true
+check_untyped_defs = true
+strict_equality = true
+warn_unreachable = true
+no_implicit_reexport = true
 warn_unused_configs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
@@ -154,13 +186,17 @@ plugins = ["pydantic.mypy"]
 module = [
     "beanie.*",
     "chromadb.*",
+    "fitz",
     "underthesea.*",
     "pyvi.*",
     "sentence_transformers.*",
     "gymnasium.*",
     "aiofiles.*",
+    "aiocache.*",
     "loguru.*",
     "boto3.*",
     "botocore.*",
+    "networkx.*",
+    "sklearn.*",
 ]
 ignore_missing_imports = true

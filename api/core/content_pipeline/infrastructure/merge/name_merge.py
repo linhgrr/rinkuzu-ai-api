@@ -147,7 +147,11 @@ def _merge_embeddings(
             if canonical_embedding is not None
             else cast("list[float]", emb_list[0].tolist())
         )
-    return cast("list[float]", np.mean(emb_list, axis=0).tolist())
+    merged_embedding = np.mean(emb_list, axis=0)
+    norm = np.linalg.norm(merged_embedding)
+    if norm > 0:
+        merged_embedding = merged_embedding / norm
+    return cast("list[float]", merged_embedding.tolist())
 
 
 def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:

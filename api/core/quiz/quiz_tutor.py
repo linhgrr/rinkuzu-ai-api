@@ -97,7 +97,7 @@ async def _open_quiz_tutor_stream(
 ) -> Any:
     stream_timeout = httpx.Timeout(timeout_sec, read=None)
 
-    async def _try():
+    async def _try() -> Any:
         llm = get_llm(
             model=model,
             temperature=0.7,
@@ -135,7 +135,7 @@ def generate_quiz_tutor_response(
         option_images=option_images,
     )
 
-    def _try():
+    def _try() -> Any:
         explanation = _request_quiz_tutor_text(
             model=model,
             input_messages=input_messages,

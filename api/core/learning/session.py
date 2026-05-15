@@ -116,7 +116,7 @@ class SessionManager:
         concepts_data: dict[str, dict[str, object]] | None = None,
         prereq_data: list[dict[str, str]] | None = None,
         device: str | None = None,
-    ):
+    ) -> None:
         self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self._saint_path = saint_path
         self._dqn_path = dqn_path
@@ -140,15 +140,15 @@ class SessionManager:
     # ── Properties ──────────────────────────────────────────
 
     @property
-    def concept_map(self):
+    def concept_map(self) -> Any:
         return self._concept_map
 
     @property
-    def concept_names(self):
+    def concept_names(self) -> Any:
         return self._concept_names
 
     @property
-    def n_concepts(self):
+    def n_concepts(self) -> Any:
         return len(self._concept_map)
 
     # ── Internal helpers ────────────────────────────────────
@@ -185,7 +185,7 @@ class SessionManager:
             )
         return graph
 
-    def _build_concept_info(self):
+    def _build_concept_info(self) -> Any:
         names, defs, _ = self._build_concept_info_from_data(self._concepts_data, self._concept_map)
         return names, defs
 
@@ -194,7 +194,7 @@ class SessionManager:
         cls,
         concepts_data: dict[str, Any],
         concept_map: dict[str, int],
-    ):
+    ) -> Any:
         names: dict[str, str] = {}
         defs: dict[str, str] = {}
         theories: dict[str, dict[str, Any]] = {}
@@ -237,7 +237,7 @@ class SessionManager:
 
     # ── Session Lifecycle ───────────────────────────────────
 
-    def _clean_expired_sessions(self, max_size=500):
+    def _clean_expired_sessions(self, max_size: Any = 500) -> Any:
         """Simple eviction logic: if we exceed max_size, evict oldest 20% by access time."""
         if len(self._sessions) > max_size:
             sorted_keys = sorted(
@@ -327,7 +327,7 @@ class SessionManager:
         names: dict[str, str],
         defs: dict[str, str],
         precomputed_embeddings: list[list[float]] | None,
-    ):
+    ) -> Any:
         n = len(concept_map)
         if precomputed_embeddings is not None:
             logger.info(

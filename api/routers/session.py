@@ -1,3 +1,5 @@
+from typing import Any
+
 """
 Session router — Session lifecycle endpoints.
 """
@@ -56,7 +58,7 @@ BLOOM_LABELS = {
 }
 
 
-async def _get_tutor_chat_history(session, exercise_id: str) -> list[dict[str, str]]:
+async def _get_tutor_chat_history(session: Any, exercise_id: str) -> list[dict[str, str]]:
     async with session._lock:
         if session.tutor_chat_exercise_id != exercise_id:
             session.tutor_chat_exercise_id = exercise_id
@@ -65,7 +67,7 @@ async def _get_tutor_chat_history(session, exercise_id: str) -> list[dict[str, s
 
 
 async def _append_tutor_chat_turn(
-    session,
+    session: Any,
     *,
     exercise_id: str,
     user_question: str,
@@ -94,8 +96,8 @@ async def _append_tutor_chat_turn(
 
 
 async def _build_rag_context(
-    session,
-    chunk_store,
+    session: Any,
+    chunk_store: Any,
     user_question: str,
     k: int = 3,
 ) -> str:
@@ -131,10 +133,10 @@ async def start_session(
     request: Request,
     req: SessionCreateRequest,
     background_tasks: BackgroundTasks,
-    manager=Depends(get_session_manager),
-    exercise_svc=Depends(get_session_service),
+    manager: Any = Depends(get_session_manager),
+    exercise_svc: Any = Depends(get_session_service),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Create a new adaptive learning session."""
     del request
     session = await manager.create_session(max_steps=req.max_steps, user_id=user_id)
@@ -170,10 +172,10 @@ async def start_session(
 async def next_concept(
     request: Request,
     session_id: PathID,
-    manager=Depends(get_session_manager),
-    exercise_svc=Depends(get_session_service),
+    manager: Any = Depends(get_session_manager),
+    exercise_svc: Any = Depends(get_session_service),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Recommend the next concept to study based on mastery and prerequisites."""
     del request
     session = await resolve_user_session(manager, session_id, user_id)
@@ -192,10 +194,10 @@ async def next_concept(
 async def theory(
     request: Request,
     session_id: PathID,
-    manager=Depends(get_session_manager),
-    exercise_svc=Depends(get_session_service),
+    manager: Any = Depends(get_session_manager),
+    exercise_svc: Any = Depends(get_session_service),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Retrieve theory content for the current pending concept."""
     del request
     session = await resolve_user_session(manager, session_id, user_id)
@@ -213,10 +215,10 @@ async def generate_exercise(
     request: Request,
     session_id: PathID,
     background_tasks: BackgroundTasks,
-    manager=Depends(get_session_manager),
-    exercise_svc=Depends(get_session_service),
+    manager: Any = Depends(get_session_manager),
+    exercise_svc: Any = Depends(get_session_service),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Generate an exercise for the current concept at the appropriate Bloom level."""
     del request
     session = await resolve_user_session(manager, session_id, user_id)
@@ -260,10 +262,10 @@ async def submit_answer(
     session_id: PathID,
     req: SubmitAnswerRequest,
     background_tasks: BackgroundTasks,
-    manager=Depends(get_session_manager),
-    exercise_svc=Depends(get_session_service),
+    manager: Any = Depends(get_session_manager),
+    exercise_svc: Any = Depends(get_session_service),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Evaluate the user's answer and update BKT mastery estimates."""
     del request
     session = await resolve_user_session(manager, session_id, user_id)
@@ -275,7 +277,7 @@ async def submit_answer(
     return ok(SubmitAnswerResponse(**result).model_dump())
 
 
-def _resolve_exercise_options(exercise) -> list[str]:
+def _resolve_exercise_options(exercise: Any) -> list[str]:
     """Return the display options list for a given exercise."""
     option_keys = sorted(exercise.options.keys())
     options = [exercise.options[key] for key in option_keys if exercise.options.get(key)]
@@ -301,10 +303,10 @@ async def chat_about_exercise(
     request: Request,
     session_id: PathID,
     req: TutorChatRequest,
-    manager=Depends(get_session_manager),
+    manager: Any = Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
-    chunk_store=Depends(get_chunk_chroma_store),
-):
+    chunk_store: Any = Depends(get_chunk_chroma_store),
+) -> Any:
     """Chat with an AI tutor about the current exercise, with optional RAG context."""
     del request
     session = await resolve_user_session(manager, session_id, user_id)
@@ -383,9 +385,9 @@ async def chat_about_exercise(
 @router.get("/{session_id}/status", response_model=StandardResponse[SessionStatusResponse])
 async def session_status(
     session_id: PathID,
-    manager=Depends(get_session_manager),
+    manager: Any = Depends(get_session_manager),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Return the current status and progress of a learning session."""
     await resolve_user_session(manager, session_id, user_id)
     status = manager.get_session_status(session_id)

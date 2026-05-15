@@ -5,13 +5,22 @@ llm.py — Shared LLM helpers for the API codebase.
 from __future__ import annotations
 
 import asyncio
+from functools import wraps
+from inspect import isawaitable
 import json
 import time
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 
 from langchain_openai import ChatOpenAI
 from loguru import logger
 from pydantic import BaseModel
+from tenacity import (
+    AsyncRetrying,
+    Retrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -58,6 +67,100 @@ def sleep_before_retry(attempt: int, base_delay_sec: float) -> None:
     time.sleep(base_delay_sec * attempt)
 
 
+def _build_retry_hooks(label: str, max_retries: int):
+    def _before(retry_state):
+        logger.debug(
+            "[LLM] ⏳ {} attempt {}/{}",
+            label,
+            retry_state.attempt_number,
+            max_retries,
+        )
+
+    def _before_sleep(retry_state):
+        exc = retry_state.outcome.exception() if retry_state.outcome else None
+        logger.warning(
+            "[LLM] ⚠ {} attempt {}/{} failed (will_retry={}): {}",
+            label,
+            retry_state.attempt_number,
+            max_retries,
+            retry_state.attempt_number < max_retries,
+            exc,
+        )
+
+    return _before, _before_sleep
+
+
+def make_llm_retry(*, label: str):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*args: Any, **kwargs: Any):
+            t0 = time.time()
+            max_retries, backoff_sec = resolve_retry_policy()
+            before, before_sleep = _build_retry_hooks(label, max_retries)
+            retrying = Retrying(
+                stop=stop_after_attempt(max_retries),
+                wait=wait_exponential(multiplier=backoff_sec, max=60),
+                retry=retry_if_exception_type(Exception),
+                reraise=True,
+                before=before,
+                before_sleep=before_sleep,
+                sleep=time.sleep,
+            )
+            try:
+                result = retrying(lambda: fn(*args, **kwargs))
+            except Exception as exc:
+                elapsed = time.time() - t0
+                logger.error("[LLM] ✗ {} failed after {:.2f}s", label, elapsed)
+                raise RuntimeError(f"{label} is temporarily unavailable") from exc
+
+            elapsed = time.time() - t0
+            logger.info("[LLM] ✓ {} in {:.2f}s", label, elapsed)
+            return result
+
+        return wrapped
+
+    return decorator
+
+
+def make_async_llm_retry(*, label: str):
+    def decorator(fn):
+        @wraps(fn)
+        async def wrapped(*args: Any, **kwargs: Any):
+            t0 = time.time()
+            max_retries, backoff_sec = resolve_retry_policy()
+            before, before_sleep = _build_retry_hooks(label, max_retries)
+            retrying = AsyncRetrying(
+                stop=stop_after_attempt(max_retries),
+                wait=wait_exponential(multiplier=backoff_sec, max=60),
+                retry=retry_if_exception_type(Exception),
+                reraise=True,
+                before=before,
+                before_sleep=before_sleep,
+                sleep=asyncio.sleep,
+            )
+
+            async def invoke() -> Any:
+                result = fn(*args, **kwargs)
+                if isawaitable(result):
+                    return await result
+                return result
+
+            try:
+                result: Any = await retrying(invoke)
+            except Exception as exc:
+                elapsed = time.time() - t0
+                logger.error("[LLM] ✗ {} failed after {:.2f}s", label, elapsed)
+                raise RuntimeError(f"{label} is temporarily unavailable") from exc
+
+            elapsed = time.time() - t0
+            logger.info("[LLM] ✓ {} in {:.2f}s", label, elapsed)
+            return result
+
+        return wrapped
+
+    return decorator
+
+
 def with_llm_retry(
     *,
     label: str,
@@ -68,36 +171,14 @@ def with_llm_retry(
 
     Pass *on_exhausted* to return a fallback instead of raising.
     """
-    t0 = time.time()
-    max_retries, backoff_sec = resolve_retry_policy()
-    last_exc: Exception | None = None
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.debug("[LLM] ⏳ {} attempt {}/{}", label, attempt, max_retries)
-            result = fn()
-        except Exception as exc:
-            last_exc = exc
-            logger.warning(
-                "[LLM] ⚠ {} attempt {}/{} failed (will_retry={}): {}",
-                label,
-                attempt,
-                max_retries,
-                attempt < max_retries,
-                exc,
-            )
-            if attempt < max_retries:
-                sleep_before_retry(attempt, backoff_sec)
-            continue
-        elapsed = time.time() - t0
-        logger.info("[LLM] ✓ {} in {:.2f}s", label, elapsed)
-        return result
-
-    elapsed = time.time() - t0
-    logger.error("[LLM] ✗ {} failed after {:.2f}s", label, elapsed)
-    if on_exhausted is not None:
-        return on_exhausted()
-    raise RuntimeError(f"{label} is temporarily unavailable") from last_exc
+    try:
+        wrapped = cast("Callable[[], _T]", make_llm_retry(label=label)(fn))
+        result: _T = wrapped()
+    except Exception:
+        if on_exhausted is not None:
+            return on_exhausted()
+        raise
+    return result
 
 
 async def awith_llm_retry(
@@ -107,36 +188,16 @@ async def awith_llm_retry(
     on_exhausted: Callable[[], Any] | None = None,
 ) -> Any:
     """Async variant of :func:`with_llm_retry`."""
-    t0 = time.time()
-    max_retries, backoff_sec = resolve_retry_policy()
-    last_exc: Exception | None = None
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.debug("[LLM] ⏳ {} attempt {}/{}", label, attempt, max_retries)
-            result = await fn() if asyncio.iscoroutinefunction(fn) else fn()
-        except Exception as exc:
-            last_exc = exc
-            logger.warning(
-                "[LLM] ⚠ {} attempt {}/{} failed (will_retry={}): {}",
-                label,
-                attempt,
-                max_retries,
-                attempt < max_retries,
-                exc,
-            )
-            if attempt < max_retries:
-                await asyncio.sleep(backoff_sec * attempt)
-            continue
-        elapsed = time.time() - t0
-        logger.info("[LLM] ✓ {} in {:.2f}s", label, elapsed)
-        return result
-
-    elapsed = time.time() - t0
-    logger.error("[LLM] ✗ {} failed after {:.2f}s", label, elapsed)
-    if on_exhausted is not None:
-        return await on_exhausted() if asyncio.iscoroutinefunction(on_exhausted) else on_exhausted()
-    raise RuntimeError(f"{label} is temporarily unavailable") from last_exc
+    try:
+        result = await make_async_llm_retry(label=label)(fn)()
+    except Exception:
+        if on_exhausted is not None:
+            fallback = on_exhausted()
+            if isawaitable(fallback):
+                return await fallback
+            return fallback
+        raise
+    return result
 
 
 def _ngrok_headers() -> dict[str, str]:
@@ -161,7 +222,7 @@ def get_llm(temperature: float = 0.0, **kwargs: Any) -> ChatOpenAI:
 
     api_key = kwargs.pop("api_key", None) or resolve_llm_api_key()
     timeout = kwargs.pop("timeout", settings.llm_timeout_sec)
-    max_retries = kwargs.pop("max_retries", settings.llm_max_retries)
+    max_retries = kwargs.pop("max_retries", 0)
 
     return ChatOpenAI(
         model=model,

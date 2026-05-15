@@ -46,7 +46,7 @@ Start here when exploring this area:
 | `build_exercise_messages` | Function | `api/core/learning/prompts/builder.py` | 191 |
 | `test_get_prompt_spec_returns_correct_schema` | Function | `tests/core/test_prompt_registry.py` | 17 |
 | `test_spec_has_negative_constraints` | Function | `tests/core/test_prompt_registry.py` | 27 |
-| `get_prompt_spec` | Function | `api/core/learning/prompts/registry.py` | 118 |
+| `get_prompt_spec` | Function | `api/core/learning/prompts/registry.py` | 121 |
 | `test_build_user_message_contains_concept_and_bloom` | Function | `tests/core/test_prompt_builder.py` | 20 |
 | `test_empty_definition_guard_added_when_short` | Function | `tests/core/test_prompt_builder.py` | 38 |
 | `build_user_message` | Function | `api/core/learning/prompts/builder.py` | 103 |

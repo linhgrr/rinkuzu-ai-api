@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any
 
 from loguru import logger
 
@@ -48,7 +48,7 @@ async def generate_saint_concept_embeddings(
         PipelineProgress.SAINT_EMBEDDINGS,
     )
 
-    async def _generate():
+    async def _generate() -> Any:
         _, stage_timeout = resolve_timeout_policy()
         ordered_texts = build_ordered_embedding_texts(concepts_data, concept_map)
         embeddings = await encode_texts_with_sentence_transformer_worker(
@@ -63,7 +63,7 @@ async def generate_saint_concept_embeddings(
             timeout_sec=stage_timeout,
         )
         logger.info("[Pipeline] ✓ Generated embeddings for {} concepts", len(ordered_texts))
-        return cast("list[list[float]]", embeddings)
+        return embeddings
 
     return await safe_run(
         _generate,
@@ -87,10 +87,10 @@ async def generate_concept_theories(
         PipelineProgress.THEORIES_GENERATED,
     )
 
-    async def _generate_theories():
+    async def _generate_theories() -> Any:
         semaphore = asyncio.Semaphore(concurrency)
 
-        async def generate_one(concept_id: str, name: str, definition: str):
+        async def generate_one(concept_id: str, name: str, definition: str) -> Any:
             async with semaphore:
                 theory: Any = await run_blocking_stage(
                     generate_theory,

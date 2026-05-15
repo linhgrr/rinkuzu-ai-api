@@ -1,3 +1,5 @@
+from typing import Any
+
 """
 dependencies.py — FastAPI dependency injection functions.
 """
@@ -11,7 +13,7 @@ from .exceptions import ServiceUnavailableError, SessionNotFoundError
 def get_current_user(
     x_user_id: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
-):
+) -> Any:
     """Extract user ID from headers."""
     settings = get_settings()
     required_service_token = settings.internal_service_token
@@ -39,22 +41,22 @@ def _resolve_state(request: Request, attr: str, label: str) -> object:
     return obj
 
 
-def get_session_manager(request: Request):
+def get_session_manager(request: Request) -> Any:
     """Provide SessionManager from app state, raise 503 if not ready."""
     return _resolve_state(request, "session_manager", "SessionManager")
 
 
-def get_session_service(request: Request):
+def get_session_service(request: Request) -> Any:
     """Provide ExerciseService from app state, raise 503 if not ready."""
     return _resolve_state(request, "exercise_service", "ExerciseService")
 
 
-def get_content_pipeline_service(request: Request):
+def get_content_pipeline_service(request: Request) -> Any:
     """Provide PipelineService from app state, raise 503 if not ready."""
     return _resolve_state(request, "content_pipeline_service", "ContentPipelineService")
 
 
-async def resolve_user_session(manager, session_id: str, user_id: str):
+async def resolve_user_session(manager: Any, session_id: str, user_id: str) -> Any:
     """Resolve a session for the authenticated user, raising 404 if not found."""
     session = await manager.get_or_recover_session(session_id, user_id)
     if not session:
@@ -62,7 +64,7 @@ async def resolve_user_session(manager, session_id: str, user_id: str):
     return session
 
 
-def get_chunk_chroma_store(request: Request):
+def get_chunk_chroma_store(request: Request) -> Any:
     """Provide ChunkChromaStore from app state (may be None if unavailable)."""
     return getattr(request.app.state, "chunk_chroma_store", None)
 

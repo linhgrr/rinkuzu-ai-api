@@ -240,7 +240,7 @@ async def _open_tutor_chat_stream(
 ) -> Any:
     stream_timeout = httpx.Timeout(timeout_sec, read=None)
 
-    async def _try():
+    async def _try() -> Any:
         llm = get_llm(
             model=model,
             temperature=0.7,
@@ -344,7 +344,7 @@ def generate_tutor_chat_response(
         rag_context=rag_context,
     )
 
-    def _try():
+    def _try() -> Any:
         explanation = _request_text_response(
             instructions=TUTOR_SYSTEM_PROMPT,
             user_text=prompt,

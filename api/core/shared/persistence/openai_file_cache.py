@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 
+from aiocache import SimpleMemoryCache, cached
 from loguru import logger
 
 from api.config import get_settings
@@ -17,6 +18,20 @@ class FileCacheEntry:
     purpose: str
 
 
+def _memory_cache_key(provider_fingerprint: str, sha256: str) -> str:
+    return f"{provider_fingerprint}:{sha256}"
+
+
+def _cache_key_builder(
+    _func,
+    *,
+    provider_fingerprint: str,
+    sha256: str,
+) -> str:
+    return _memory_cache_key(provider_fingerprint, sha256)
+
+
+@cached(ttl=300, cache=SimpleMemoryCache, key_builder=_cache_key_builder)
 async def load_cached_openai_file(
     *,
     provider_fingerprint: str,
@@ -50,6 +65,7 @@ async def save_cached_openai_file(
     now = utc_now()
     expires_at = now + timedelta(hours=ttl_hours)
     try:
+        await load_cached_openai_file.cache.delete(_memory_cache_key(provider_fingerprint, sha256))
         existing = await OpenAIFileCacheDocument.find_one(
             OpenAIFileCacheDocument.provider_fingerprint == provider_fingerprint,
             OpenAIFileCacheDocument.sha256 == sha256,
@@ -79,6 +95,7 @@ async def save_cached_openai_file(
 
 async def delete_cached_openai_file(*, provider_fingerprint: str, sha256: str) -> None:
     try:
+        await load_cached_openai_file.cache.delete(_memory_cache_key(provider_fingerprint, sha256))
         await OpenAIFileCacheDocument.find(
             OpenAIFileCacheDocument.provider_fingerprint == provider_fingerprint,
             OpenAIFileCacheDocument.sha256 == sha256,

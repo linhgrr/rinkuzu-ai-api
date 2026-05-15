@@ -21,7 +21,7 @@ class ConceptChromaStore:
         collection_name: str = "concepts",
         persist_directory: str | None = None,
         embedding_client: EmbeddingClient | None = None,
-    ):
+    ) -> None:
         self.collection_name = collection_name
 
         if persist_directory is None:
@@ -249,7 +249,7 @@ class ConceptChromaStore:
         else:
             return stats
 
-    def reset_collection(self):
+    def reset_collection(self) -> Any:
         """Xóa và tạo lại collection (sử dụng cẩn thận!)."""
         try:
             self.chroma_client.delete_collection(self.collection_name)

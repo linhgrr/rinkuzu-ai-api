@@ -3,14 +3,15 @@
 from collections.abc import Callable
 from functools import wraps
 import time
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 from loguru import logger
 
 
 def timeit(func: Callable) -> Callable:
     @wraps(func)
-    def wrapper(*args, **kwargs) -> Any:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         start_time = time.time()
 
         try:
@@ -38,7 +39,7 @@ def timeit(func: Callable) -> Callable:
 
 def atimeit(func: Callable) -> Callable:
     @wraps(func)
-    async def wrapper(*args, **kwargs) -> Any:
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
         start_time = time.time()
 
         try:
@@ -67,17 +68,23 @@ def atimeit(func: Callable) -> Callable:
 class Timer:
     """Context manager for timing code blocks."""
 
-    def __init__(self, name: str = "block"):
+    def __init__(self, name: str = "block") -> None:
         self.name = name
-        self.start_time = None
-        self.elapsed = None
+        self.start_time: float | None = None
+        self.elapsed: float | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         self.start_time = time.time()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.elapsed = time.time() - self.start_time
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        start_time = self.start_time if self.start_time is not None else time.time()
+        self.elapsed = time.time() - start_time
 
         if exc_type is None:
             logger.info(

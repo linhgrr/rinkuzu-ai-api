@@ -9,10 +9,12 @@ import sys
 import time
 from typing import Any, cast
 
+from bson import ObjectId
 from fastapi import FastAPI
+from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, ORJSONResponse
 from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -37,6 +39,7 @@ from .core.shared import mongo_store
 from .core.shared.persistence import load_pipeline_job, save_pipeline_job
 from .exceptions import register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
+from .observability import setup_otel, shutdown_otel
 from .rate_limit import limiter
 from .routers import history as history_router
 from .routers import knowledge as knowledge_router
@@ -47,6 +50,8 @@ from .routers import session as session_router
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 _UPLOAD_MAX_AGE_SECS = 86400
+
+ENCODERS_BY_TYPE.setdefault(ObjectId, str)
 
 
 def _configure_logging() -> None:
@@ -93,7 +98,7 @@ def _init_rag_stores(app: FastAPI) -> None:
 def _init_pipeline(app: FastAPI) -> None:
     pipeline_service_ref: PipelineService | None = None
 
-    async def persist_pipeline_job_state(job, status, step, progress) -> None:
+    async def persist_pipeline_job_state(job: Any, status: Any, step: Any, progress: Any) -> None:
         if pipeline_service_ref is None:
             raise RuntimeError("PipelineService is not initialized")
         await pipeline_service_ref.persist_job_state(job, status, step, progress)
@@ -106,13 +111,13 @@ def _init_pipeline(app: FastAPI) -> None:
     )
 
     async def run_content_pipeline(
-        job,
-        file_path,
-        prs_threshold,
-        min_confidence,
+        job: Any,
+        file_path: Any,
+        prs_threshold: Any,
+        min_confidence: Any,
         *,
-        apply_reduction,
-        page_batch_size,
+        apply_reduction: Any,
+        page_batch_size: Any,
     ) -> None:
         await pipeline_runner.run(
             job,
@@ -172,7 +177,7 @@ def _purge_stale_uploads() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> Any:
     """Startup: initialize all components, yield, then shut down."""
     _configure_logging()
 
@@ -185,6 +190,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
 
     _log_llm_config(settings)
+    setup_otel(app, settings)
 
     logger.info("[0/2] Connecting to MongoDB...")
     await mongo_store.init_mongo(mongodb_uri=settings.mongodb_uri)
@@ -222,6 +228,7 @@ async def lifespan(app: FastAPI):
     exercise_service = getattr(app.state, "exercise_service", None)
     if exercise_service:
         exercise_service.close()
+    shutdown_otel(app)
     await mongo_store.shutdown_mongo()
 
 
@@ -231,6 +238,7 @@ app = FastAPI(
     title="ALSS-LEPC Adaptive Learning API",
     description="Adaptive Learning System with SAINT KT + D3QN RL",
     version="1.0.0",
+    default_response_class=ORJSONResponse,
     contact={
         "name": "Rinkuzu Team",
         "url": "https://github.com/rinkuzu/rinkuzu-ai-api",
@@ -333,7 +341,7 @@ app.include_router(quiz_tutor_router.router)
 
 
 @app.get("/api/live", include_in_schema=False)
-async def liveness():
+async def liveness() -> Any:
     """Kubernetes liveness probe — always 200 while the process is running."""
     return {"status": "ok"}
 
@@ -359,7 +367,7 @@ def _build_readiness_payload() -> tuple[dict, bool]:
 
 
 @app.get("/api/ready")
-async def readiness():
+async def readiness() -> Any:
     """Kubernetes readiness probe — 503 until all dependencies are up."""
     payload, ready = _build_readiness_payload()
     if not ready:
@@ -368,7 +376,7 @@ async def readiness():
 
 
 @app.get("/api/health")
-async def health():
+async def health() -> Any:
     """Backwards-compat alias for /api/ready."""
     payload, ready = _build_readiness_payload()
     if not ready:
@@ -377,7 +385,7 @@ async def health():
 
 
 @app.get("/api/info")
-async def info():
+async def info() -> Any:
     cfg = get_settings()
     manager = getattr(app.state, "session_manager", None)
     return {

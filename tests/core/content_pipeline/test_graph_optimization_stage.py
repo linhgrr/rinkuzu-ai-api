@@ -25,7 +25,7 @@ def test_optimize_graph_runs_cycle_removal_and_reduction_when_needed():
         assert job_arg is job
         calls.append((status, step, progress))
 
-    def make_dag_with_llm(input_graph):
+    async def make_dag_with_llm(input_graph):
         cycle_calls.append(set(input_graph.edges()))
         dag = nx.DiGraph()
         dag.add_edge("c1", "c2")
@@ -81,7 +81,7 @@ def test_optimize_graph_skips_cycle_removal_for_existing_dag():
     async def persist_job_state(job_arg, status, step, progress):
         pass
 
-    def make_dag_with_llm(_):
+    async def make_dag_with_llm(_):
         raise AssertionError("cycle removal should not run for a DAG")
 
     def apply_transitive_reduction(input_graph):
@@ -118,19 +118,17 @@ def test_optimize_graph_uses_extended_cycle_timeout(monkeypatch):
     async def persist_job_state(*_args, **_kwargs):
         return None
 
-    async def fake_run_blocking_stage(func, *args, stage_name, timeout_sec=None, **kwargs):
-        captured["stage_name"] = stage_name
-        captured["timeout_sec"] = timeout_sec
-        dag = nx.DiGraph()
-        dag.add_edge("c1", "c2")
-        return dag, {"removed_cycles": 1}
-
     monkeypatch.setattr(
         graph_optimization,
         "get_settings",
         lambda: SimpleNamespace(content_pipeline_graph_cycle_timeout_sec=900),
     )
-    monkeypatch.setattr(graph_optimization, "run_blocking_stage", fake_run_blocking_stage)
+
+    async def make_dag_with_llm(_):
+        captured["timeout_sec"] = graph_optimization._resolve_cycle_removal_timeout()
+        dag = nx.DiGraph()
+        dag.add_edge("c1", "c2")
+        return dag, {"removed_cycles": 1}
 
     optimized_graph, stats = asyncio.run(
         optimize_graph(
@@ -138,7 +136,7 @@ def test_optimize_graph_uses_extended_cycle_timeout(monkeypatch):
             graph=graph,
             concepts=concepts,
             apply_reduction=False,
-            make_dag_with_llm=lambda _: (_ for _ in ()).throw(AssertionError("unused")),
+            make_dag_with_llm=make_dag_with_llm,
             apply_transitive_reduction=lambda input_graph: input_graph,
             persist_job_state=persist_job_state,
         )
@@ -147,6 +145,5 @@ def test_optimize_graph_uses_extended_cycle_timeout(monkeypatch):
     assert set(optimized_graph.edges()) == {("c1", "c2")}
     assert stats["cycle_stats"] == {"removed_cycles": 1}
     assert captured == {
-        "stage_name": "graph_cycle_removal",
         "timeout_sec": 900.0,
     }

@@ -4,7 +4,7 @@ Simplified version of env_rl.py that works with in-memory data instead of file p
 """
 
 import copy
-from typing import Optional
+from typing import Any, Optional
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -60,7 +60,7 @@ class AdaptiveLearningEnv(gym.Env):
         max_seq_len: int = 200,
         device: str | None = None,
         external_embeddings: Optional["torch.Tensor"] = None,
-    ):
+    ) -> None:
         super().__init__()
 
         self._model = saint_model
@@ -125,7 +125,7 @@ class AdaptiveLearningEnv(gym.Env):
 
         self._precompute_valid_bloom_mask()
 
-    def _precompute_valid_bloom_mask(self):
+    def _precompute_valid_bloom_mask(self) -> Any:
         self._valid_bloom_mask = np.zeros(self.n_actions, dtype=bool)
         for c in range(self.n_concepts):
             valid_blooms = self._concept_blooms.get(c, list(range(1, _N_BLOOMS + 1)))
@@ -135,7 +135,7 @@ class AdaptiveLearningEnv(gym.Env):
             if not self._valid_bloom_mask[c * self.N_BLOOMS : (c + 1) * self.N_BLOOMS].any():
                 self._valid_bloom_mask[c * self.N_BLOOMS : (c + 1) * self.N_BLOOMS] = True
 
-    def _decode_action(self, action: int):
+    def _decode_action(self, action: int) -> Any:
         concept = action // self.N_BLOOMS
         bloom = (action % self.N_BLOOMS) + 1
         return concept, bloom
@@ -189,7 +189,7 @@ class AdaptiveLearningEnv(gym.Env):
         th = self.mastery_threshold if threshold is None else float(threshold)
         return self._compute_prereq_ok_mask(th, recompute_if_dirty=True).copy()
 
-    def _build_history_tensors(self, seq_len, seq_t, batch_size=1):
+    def _build_history_tensors(self, seq_len: Any, seq_t: Any, batch_size: Any = 1) -> Any:
         concept_hist = self._concept_history[-seq_t:] if seq_t > 0 else []
         bloom_hist = self._bloom_history[-seq_t:] if seq_t > 0 else []
         response_hist = self._response_history[-seq_t:] if seq_t > 0 else []
@@ -214,7 +214,7 @@ class AdaptiveLearningEnv(gym.Env):
         return exercise_ids, bloom_ids, decoder_input
 
     @torch.no_grad()
-    def _compute_hidden_state(self):
+    def _compute_hidden_state(self) -> Any:
         t_full = len(self._concept_history)
         seq_t = min(t_full, self.max_seq_len - 1)
         seq_len = seq_t + 1
@@ -235,7 +235,7 @@ class AdaptiveLearningEnv(gym.Env):
         self._current_hidden = hidden_state[0].cpu().numpy()
 
     @torch.no_grad()
-    def _compute_mastery_vector(self):
+    def _compute_mastery_vector(self) -> Any:
         self._compute_bloom_mastery_vector()
         for c in range(self.n_concepts):
             # Concept mastery = Bloom 3 (Apply) mastery
@@ -246,7 +246,7 @@ class AdaptiveLearningEnv(gym.Env):
         self._mastery_dirty = False
 
     @torch.no_grad()
-    def _compute_bloom_mastery_vector(self):
+    def _compute_bloom_mastery_vector(self) -> Any:
         n_concepts = self.n_concepts
         t_full = len(self._concept_history)
         seq_t = min(t_full, self.max_seq_len - 1)
@@ -288,7 +288,7 @@ class AdaptiveLearningEnv(gym.Env):
                 self._bloom_mastery[c, b - 1] = preds[i]
 
     @torch.no_grad()
-    def _predict_single_concept(self, concept_idx, bloom_level=None):
+    def _predict_single_concept(self, concept_idx: Any, bloom_level: Any = None) -> Any:
         t_full = len(self._concept_history)
         seq_t = min(t_full, self.max_seq_len - 1)
         seq_len = seq_t + 1
@@ -333,7 +333,13 @@ class AdaptiveLearningEnv(gym.Env):
 
         return obs
 
-    def reset(self, seed=None, _options=None):
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[np.ndarray, dict[str, int | float]]:
+        del options
         super().reset(seed=seed)
         self._concept_history = []
         self._bloom_history = []
@@ -357,7 +363,7 @@ class AdaptiveLearningEnv(gym.Env):
         concept_indices: list,
         bloom_levels: list,
         responses: list,
-    ):
+    ) -> Any:
         """Replay saved subject progress into the environment.
 
         This feeds concept/bloom/response triples from persisted subject-level
@@ -390,7 +396,7 @@ class AdaptiveLearningEnv(gym.Env):
             float(np.mean(self._current_mastery)),
         )
 
-    def step(self, action: int, *, human_correct: bool | None = None):
+    def step(self, action: int, *, human_correct: bool | None = None) -> Any:
         assert self.action_space.contains(action)
 
         concept, bloom = self._decode_action(action)

@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 import json
 import time
+from typing import Any
 
 from loguru import logger
 
@@ -48,7 +49,7 @@ async def complete_pipeline_job(
 async def upload_result_cache(
     *,
     result: dict,
-    s3_client,
+    s3_client: Any,
     bucket_name: str | None,
     cache_key: str | None,
 ) -> None:
@@ -56,7 +57,7 @@ async def upload_result_cache(
     if not s3_client or not bucket_name or not cache_key:
         return
 
-    async def _upload():
+    async def _upload() -> Any:
         cache_data = json.dumps(normalize_for_bson(result), ensure_ascii=False)
         await run_blocking_stage(
             s3_client.put_object,

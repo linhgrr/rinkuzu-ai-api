@@ -1,3 +1,5 @@
+from typing import Any
+
 """Prerequisite ranking using embeddings."""
 
 from loguru import logger
@@ -15,7 +17,7 @@ _MIN_CONCEPTS_FOR_RANKING = 2
 def rank_prerequisites(
     concepts: list[Concept],
     prs_threshold: float | None = None,
-):
+) -> Any:
     """
     Rank and add prerequisite edges using embeddings.
 

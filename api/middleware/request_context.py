@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from loguru import logger
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class RequestContextMiddleware(BaseHTTPMiddleware):
     """Attach X-Request-ID to every request and emit a structured access log line."""
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: Any) -> Any:
         request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
         request.state.request_id = request_id
         start = time.perf_counter()

@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, cast
 
 import fitz
 from loguru import logger
@@ -18,6 +18,7 @@ from api.core.content_pipeline.infrastructure.prompts import (
     EXTRACTION_PROMPT,
 )
 from api.core.content_pipeline.infrastructure.utils.timeit import atimeit
+from api.core.shared.llm import make_async_llm_retry
 
 from .openai_responses import (
     FileReferenceError,
@@ -849,6 +850,7 @@ class ExtractionChain:
         else:
             return materialized
 
+    @make_async_llm_retry(label="extract batch")
     async def _invoke_extraction_response(
         self,
         *,
@@ -907,43 +909,16 @@ class ExtractionChain:
         previous_concepts: list[tuple[str, str]],
         max_retries: int | None = None,
     ) -> tuple[ConceptExtractionPayload, dict[str, int]]:
-        retry_count = max(1, int(max_retries or self.settings.content_pipeline_llm_retry_attempts))
-        retry_backoff_sec = max(0.0, float(self.settings.content_pipeline_llm_retry_backoff_sec))
-        last_error: BaseException | None = None
-        for attempt in range(retry_count):
-            attempt_started_at = time.perf_counter()
-            try:
-                payload, usage = await self._invoke_extraction_response(
-                    job_id=job_id,
-                    subject_id=subject_id,
-                    file_id=file_id,
-                    previous_concepts=previous_concepts,
-                )
-                logger.info(
-                    "extract batch llm success job_id={} file_id={} attempt={}/{} duration_ms={}",
-                    job_id or "-",
-                    file_id,
-                    attempt + 1,
-                    retry_count,
-                    int((time.perf_counter() - attempt_started_at) * 1000),
-                )
-            except Exception as exc:
-                last_error = exc
-                if attempt >= retry_count - 1:
-                    raise
-                logger.warning(
-                    "extract batch retry job_id={} file_id={} attempt={}/{} reason={} duration_ms={}",
-                    job_id or "-",
-                    file_id,
-                    attempt + 1,
-                    retry_count,
-                    str(exc)[:200],
-                    int((time.perf_counter() - attempt_started_at) * 1000),
-                )
-                await asyncio.sleep(retry_backoff_sec * (attempt + 1))
-            else:
-                return payload, usage
-        raise RuntimeError(str(last_error or "Extraction response failed."))
+        del max_retries
+        return cast(
+            "tuple[ConceptExtractionPayload, dict[str, int]]",
+            await self._invoke_extraction_response(
+                job_id=job_id,
+                subject_id=subject_id,
+                file_id=file_id,
+                previous_concepts=previous_concepts,
+            ),
+        )
 
     async def _verify_single_relation(
         self,

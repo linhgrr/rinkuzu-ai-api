@@ -1,6 +1,7 @@
 """Text processing utilities."""
 
 import re
+import unicodedata
 
 from loguru import logger
 
@@ -26,6 +27,7 @@ def clean_text(text: str) -> str:
     if not text:
         return ""
 
+    text = unicodedata.normalize("NFKC", text)
     text = re.sub(r"[^0-9A-Za-zÀ-ỹà-ỹ\s.,!?()\"'-]", " ", text)
 
     text = re.sub(r"\s+", " ", text).strip()

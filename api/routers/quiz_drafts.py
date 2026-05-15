@@ -1,6 +1,6 @@
 """FastAPI-owned quiz draft processing endpoints."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 
@@ -42,7 +42,7 @@ async def create_quiz_draft(
     req: QuizDraftCreateRequest,
     background_tasks: BackgroundTasks,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     """Create a new quiz draft and enqueue AI processing."""
     del request
     service = QuizDraftService()
@@ -61,7 +61,7 @@ async def list_quiz_drafts(
     request: Request,
     user_id: Annotated[str, Depends(get_current_user)],
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
-):
+) -> Any:
     """List recent quiz drafts for the authenticated user."""
     del request
     service = QuizDraftService()
@@ -75,7 +75,7 @@ async def get_quiz_draft(
     request: Request,
     draft_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     """Retrieve a single quiz draft by ID."""
     del request
     service = QuizDraftService()
@@ -93,7 +93,7 @@ async def patch_quiz_draft(
     draft_id: PathID,
     req: QuizDraftPatchRequest,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     """Update fields of an existing quiz draft."""
     del request
     service = QuizDraftService()
@@ -110,7 +110,7 @@ async def delete_quiz_draft(
     request: Request,
     draft_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     """Delete a quiz draft owned by the authenticated user."""
     del request
     service = QuizDraftService()
@@ -128,7 +128,7 @@ async def submit_quiz_draft(
     draft_id: PathID,
     req: QuizDraftSubmitRequest,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     """Finalize a quiz draft and persist it as a published quiz."""
     del request
     service = QuizDraftService()

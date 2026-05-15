@@ -4,7 +4,7 @@ exercise_gen.py — LLM-powered exercise generation and answer evaluation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from loguru import logger
 from pydantic import BaseModel
@@ -39,7 +39,7 @@ def _build_generation_spec(
     exercise_type: ExerciseType,
     recent_same_concept_exercises: Sequence[dict[str, object]] | None = None,
     subject_context: str = "",
-):
+) -> Any:
     spec = get_prompt_spec(exercise_type)
     messages = build_exercise_messages(
         concept_name=concept_name,

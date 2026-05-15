@@ -5,7 +5,7 @@ routers/pipeline.py — Content pipeline endpoints.
 from contextlib import suppress
 from pathlib import Path
 import time
-from typing import Annotated
+from typing import Annotated, Any
 import uuid
 
 import aiofiles
@@ -49,7 +49,7 @@ _MAX_FILENAME_LENGTH = 200
 async def pipeline_status(
     request: Request,
     availability: Annotated[dict, Depends(get_content_pipeline_availability)],
-):
+) -> Any:
     """Check if content pipeline runtime modules are available."""
     del request
     available = availability["available"]
@@ -79,8 +79,8 @@ async def process_document(  # noqa: C901
     req: ProcessDocumentRequest,
     user_id: Annotated[str, Depends(get_current_user)],
     availability: Annotated[dict, Depends(get_content_pipeline_availability)],
-    pipeline_service=Depends(get_content_pipeline_service),
-):
+    pipeline_service: Any = Depends(get_content_pipeline_service),
+) -> Any:
     """Run the full content processing pipeline from an S3 uploaded file."""
     _ = request  # SlowAPI requires the Request parameter for rate-limit context.
     if not availability["available"]:
@@ -179,7 +179,7 @@ async def get_job_status(
     request: Request,
     job_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
-):
+) -> Any:
     del request
     """Get pipeline job status and progress."""
     job_doc = await load_pipeline_job_for_user(job_id, user_id)
@@ -258,10 +258,10 @@ async def create_session_from_pipeline(
     job_id: PathID,
     background_tasks: BackgroundTasks,
     max_steps: int = 9999,
-    manager=Depends(get_session_manager),
-    exercise_svc=Depends(get_session_service),
+    manager: Any = Depends(get_session_manager),
+    exercise_svc: Any = Depends(get_session_service),
     user_id: str = Depends(get_current_user),
-):
+) -> Any:
     """Create a learning session from a completed pipeline job."""
     del request
     job_doc = await load_pipeline_job_for_user(job_id, user_id)

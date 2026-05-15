@@ -43,7 +43,7 @@ Start here when exploring this area:
 | `get_dependents` | Function | `api/core/content_pipeline/infrastructure/graph/builder.py` | 196 |
 | `test_cycle_remover_uses_langchain_structured_output` | Function | `tests/core/content_pipeline/test_cycle_removal.py` | 7 |
 | `remove_cycles` | Function | `api/core/content_pipeline/infrastructure/graph/cycle_removal.py` | 42 |
-| `make_dag_with_llm` | Function | `api/core/content_pipeline/infrastructure/graph/cycle_removal.py` | 246 |
+| `make_dag_with_llm` | Function | `api/core/content_pipeline/infrastructure/graph/cycle_removal.py` | 248 |
 | `apply_transitive_reduction` | Function | `api/core/content_pipeline/infrastructure/graph/reduction.py` | 6 |
 | `_norm_rel` | Function | `api/core/content_pipeline/infrastructure/graph/builder.py` | 33 |
 | `_title_from_id` | Function | `api/core/content_pipeline/infrastructure/graph/builder.py` | 40 |
@@ -52,7 +52,7 @@ Start here when exploring this area:
 | `_normalize_evidence` | Function | `api/core/content_pipeline/infrastructure/graph/builder.py` | 59 |
 | `_merge_evidence` | Function | `api/core/content_pipeline/infrastructure/graph/builder.py` | 76 |
 | `_remove_cycle_with_llm` | Function | `api/core/content_pipeline/infrastructure/graph/cycle_removal.py` | 128 |
-| `_format_cycle_info` | Function | `api/core/content_pipeline/infrastructure/graph/cycle_removal.py` | 188 |
+| `_format_cycle_info` | Function | `api/core/content_pipeline/infrastructure/graph/cycle_removal.py` | 190 |
 | `_extract_prerequisite_subgraph` | Function | `api/core/content_pipeline/infrastructure/graph/reduction.py` | 40 |
 | `_find_removed_edges` | Function | `api/core/content_pipeline/infrastructure/graph/reduction.py` | 53 |
 | `_rebuild_graph` | Function | `api/core/content_pipeline/infrastructure/graph/reduction.py` | 64 |

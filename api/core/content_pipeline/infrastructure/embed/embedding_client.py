@@ -2,7 +2,7 @@
 
 import functools
 from threading import Lock
-from typing import cast
+from typing import Any, cast
 
 from langchain_core.embeddings import Embeddings
 from loguru import logger
@@ -48,7 +48,7 @@ class EmbeddingClient(Embeddings):
         *,
         use_vi_tokenizer: bool | None = None,
         batch_size: int | None = None,
-    ):
+    ) -> None:
         """
         Khởi tạo EmbeddingClient.
 
@@ -145,7 +145,7 @@ class EmbeddingClient(Embeddings):
         return [[float(item) for item in row] for row in cast("list[list[float]]", values)]
 
     # Backward compatibility methods (cho các phần khác của dự án)
-    def encode(self, texts, **kwargs):
+    def encode(self, texts: Any, **kwargs: Any) -> Any:
         """
         Backward compatibility method.
 

@@ -28,8 +28,8 @@ Start here when exploring this area:
 
 - **`compute_embedding_for_concepts`** (Function) — `api/core/content_pipeline/infrastructure/embed/embeddings.py:9`
 - **`embed_query`** (Function) — `api/core/content_pipeline/infrastructure/embed/embedding_client.py:91`
-- **`embed_documents`** (Function) — `api/core/content_pipeline/infrastructure/embed/embedding_client.py:118`
-- **`encode`** (Function) — `api/core/content_pipeline/infrastructure/embed/embedding_client.py:145`
+- **`embed_documents`** (Function) — `api/core/content_pipeline/infrastructure/embed/embedding_client.py:119`
+- **`encode`** (Function) — `api/core/content_pipeline/infrastructure/embed/embedding_client.py:147`
 - **`compute_embeddings_batch`** (Function) — `api/core/content_pipeline/infrastructure/embed/__init__.py:17`
 
 ## Key Symbols
@@ -38,12 +38,12 @@ Start here when exploring this area:
 |--------|------|------|------|
 | `compute_embedding_for_concepts` | Function | `api/core/content_pipeline/infrastructure/embed/embeddings.py` | 9 |
 | `embed_query` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 91 |
-| `embed_documents` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 118 |
-| `encode` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 145 |
+| `embed_documents` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 119 |
+| `encode` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 147 |
 | `compute_embeddings_batch` | Function | `api/core/content_pipeline/infrastructure/embed/__init__.py` | 17 |
-| `rank_prerequisites` | Function | `api/core/content_pipeline/infrastructure/embed/prereq_ranking.py` | 14 |
+| `rank_prerequisites` | Function | `api/core/content_pipeline/infrastructure/embed/prereq_ranking.py` | 16 |
 | `_maybe_tokenize` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 85 |
-| `_compute_prerequisite_scores` | Function | `api/core/content_pipeline/infrastructure/embed/prereq_ranking.py` | 66 |
+| `_compute_prerequisite_scores` | Function | `api/core/content_pipeline/infrastructure/embed/prereq_ranking.py` | 68 |
 | `_load_model_handle` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 31 |
 | `__init__` | Function | `api/core/content_pipeline/infrastructure/embed/embedding_client.py` | 44 |
 

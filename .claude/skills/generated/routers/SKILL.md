@@ -33,7 +33,7 @@ description: "Skill for the Routers area of rinkuzu-ai-api. 47 symbols across 10
 Start here when exploring this area:
 
 - **`ok`** (Function) — `api/schemas/common.py:9`
-- **`start_session`** (Function) — `api/routers/session.py:130`
+- **`start_session`** (Function) — `api/routers/session.py:131`
 - **`pipeline_status`** (Function) — `api/routers/pipeline.py:48`
 - **`get_job_status`** (Function) — `api/routers/pipeline.py:177`
 - **`create_session_from_pipeline`** (Function) — `api/routers/pipeline.py:255`
@@ -43,7 +43,7 @@ Start here when exploring this area:
 | Symbol | Type | File | Line |
 |--------|------|------|------|
 | `ok` | Function | `api/schemas/common.py` | 9 |
-| `start_session` | Function | `api/routers/session.py` | 130 |
+| `start_session` | Function | `api/routers/session.py` | 131 |
 | `pipeline_status` | Function | `api/routers/pipeline.py` | 48 |
 | `get_job_status` | Function | `api/routers/pipeline.py` | 177 |
 | `create_session_from_pipeline` | Function | `api/routers/pipeline.py` | 255 |

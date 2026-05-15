@@ -26,22 +26,22 @@ description: "Skill for the Chunkers area of rinkuzu-ai-api. 7 symbols across 4 
 
 Start here when exploring this area:
 
-- **`test_local_pdf_text_loader_extracts_page_text`** (Function) — `tests/core/content_pipeline/test_extract_chain_portable.py:177`
+- **`test_local_pdf_text_loader_extracts_page_text`** (Function) — `tests/core/content_pipeline/test_extract_chain_portable.py:241`
 - **`load_and_chunk_pdf`** (Function) — `api/core/content_pipeline/infrastructure/processors/factory.py:15`
 - **`load_pdf`** (Function) — `api/core/content_pipeline/infrastructure/processors/loaders/local_pdf_text_loader.py:22`
-- **`chunk`** (Function) — `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py:70`
+- **`chunk`** (Function) — `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py:71`
 
 ## Key Symbols
 
 | Symbol | Type | File | Line |
 |--------|------|------|------|
-| `test_local_pdf_text_loader_extracts_page_text` | Function | `tests/core/content_pipeline/test_extract_chain_portable.py` | 177 |
+| `test_local_pdf_text_loader_extracts_page_text` | Function | `tests/core/content_pipeline/test_extract_chain_portable.py` | 241 |
 | `load_and_chunk_pdf` | Function | `api/core/content_pipeline/infrastructure/processors/factory.py` | 15 |
 | `load_pdf` | Function | `api/core/content_pipeline/infrastructure/processors/loaders/local_pdf_text_loader.py` | 22 |
-| `chunk` | Function | `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py` | 70 |
+| `chunk` | Function | `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py` | 71 |
 | `_validate_file` | Function | `api/core/content_pipeline/infrastructure/processors/loaders/local_pdf_text_loader.py` | 11 |
-| `_build_text_splitter` | Function | `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py` | 128 |
-| `_looks_like_markdown_or_headings` | Function | `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py` | 162 |
+| `_build_text_splitter` | Function | `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py` | 129 |
+| `_looks_like_markdown_or_headings` | Function | `api/core/content_pipeline/infrastructure/processors/chunkers/text_chunker.py` | 163 |
 
 ## Execution Flows
 

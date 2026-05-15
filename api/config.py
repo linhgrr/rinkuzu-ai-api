@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     internal_service_token: str | None = None
     log_level: str = "INFO"  # DEBUG | INFO | WARNING | ERROR
     log_format: str = "text"  # text | json
+    otel_enabled: bool = False
+    otel_service_name: str = "rinkuzu-ai-api"
     rate_limit_tutor_chat: str = "30/minute"
     rate_limit_pipeline: str = "5/minute"
     rate_limit_ask_ai: str = "20/minute"
