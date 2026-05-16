@@ -14,7 +14,7 @@ from api.core.shared.llm import SSE_STREAM_HEADERS
 from api.dependencies import get_current_user
 from api.exceptions import AppError
 from api.rate_limit import is_admin_request, limiter
-from api.schemas.common import StandardResponse
+from api.schemas.common import StandardResponse, ok
 from api.schemas.quiz_tutor import QuizTutorRequest, QuizTutorResponseData
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
@@ -56,9 +56,19 @@ async def ask_ai_about_quiz(
             question_image=req.question_image,
             option_images=req.option_images,
         )
-        data = QuizTutorResponseData.model_validate(payload["data"])
-        return StandardResponse(data=data)
+        data = QuizTutorResponseData.model_validate(payload)
+        return ok(data.model_dump())
     except ValueError as exc:
-        raise AppError(str(exc), status_code=400) from exc
+        raise AppError(
+            code="validation_error",
+            message="Invalid tutor request",
+            detail=str(exc),
+            status_code=400,
+        ) from exc
     except RuntimeError as exc:
-        raise AppError(str(exc), status_code=502) from exc
+        raise AppError(
+            code="service_unavailable",
+            message="Tutor service unavailable",
+            detail=str(exc),
+            status_code=502,
+        ) from exc

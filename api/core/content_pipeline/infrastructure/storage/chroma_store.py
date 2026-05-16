@@ -91,7 +91,7 @@ class ConceptChromaStore:
 
         # Thêm vào vectorstore bằng LangChain Chroma
         try:
-            added_ids = self.vectorstore.add_documents(documents=documents, ids=ids)
+            added_ids: list[str] = self.vectorstore.add_documents(documents=documents, ids=ids)
 
             logger.info(
                 "Added {} concepts to ChromaDB via LangChain",

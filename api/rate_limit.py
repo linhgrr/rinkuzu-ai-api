@@ -16,8 +16,22 @@ _current_request: ContextVar[Request | None] = ContextVar("rate_limit_request", 
 
 
 def rate_limit_key(request: Request) -> str:
-    """Prefer authenticated user IDs, then fall back to client IP."""
-    return request.headers.get("x-user-id") or get_remote_address(request)
+    """Pick a rate-limit key per request.
+
+    Trust the forwarded ``x-user-id`` only when the proxy presented a valid
+    ``x-service-token``. Otherwise fall back to the remote IP — without this,
+    any client could rotate the ``x-user-id`` header to evade per-user limits.
+    """
+    settings = get_settings()
+    required_token = settings.internal_service_token
+    forwarded_user = request.headers.get("x-user-id")
+    if (
+        required_token
+        and forwarded_user
+        and request.headers.get("x-service-token") == required_token
+    ):
+        return f"user:{forwarded_user}"
+    return get_remote_address(request)
 
 
 def set_current_rate_limit_request(request: Request) -> Token[Request | None]:

@@ -1,10 +1,9 @@
 from types import SimpleNamespace
 
-from fastapi import HTTPException
 import pytest
 
 from api import dependencies
-from api.exceptions import ServiceUnavailableError
+from api.exceptions import AppError, ServiceUnavailableError
 
 
 def test_get_content_pipeline_service_reads_app_state():
@@ -55,7 +54,7 @@ def test_get_current_user_requires_service_token_in_non_dev(monkeypatch):
         lambda: SimpleNamespace(environment="prod", internal_service_token=None),
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         dependencies.get_current_user(x_user_id="user-1", x_service_token=None)
 
     assert exc_info.value.status_code == 500
@@ -69,3 +68,42 @@ def test_get_current_user_accepts_valid_service_token(monkeypatch):
     )
 
     assert dependencies.get_current_user(x_user_id="user-1", x_service_token="secret") == "user-1"
+
+
+def test_get_current_user_requires_token_even_in_dev(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="dev", internal_service_token="secret"),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        dependencies.get_current_user(x_user_id="user-1", x_service_token=None)
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_rejects_mismatched_token(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="dev", internal_service_token="secret"),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        dependencies.get_current_user(x_user_id="user-1", x_service_token="wrong")
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_requires_user_id_header(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="prod", internal_service_token="secret"),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        dependencies.get_current_user(x_user_id=None, x_service_token="secret")
+
+    assert exc_info.value.status_code == 401

@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse, ORJSONResponse
+from fastapi.responses import ORJSONResponse
 from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -37,7 +37,7 @@ from .core.learning.exercise_service import ExerciseService
 from .core.learning.session import SessionManager
 from .core.shared import mongo_store
 from .core.shared.persistence import load_pipeline_job, save_pipeline_job
-from .exceptions import register_exception_handlers
+from .exceptions import error_json_response, register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
 from .observability import setup_otel, shutdown_otel
 from .rate_limit import limiter
@@ -47,6 +47,7 @@ from .routers import pipeline as pipeline_router
 from .routers import quiz_drafts as quiz_drafts_router
 from .routers import quiz_tutor as quiz_tutor_router
 from .routers import session as session_router
+from .schemas.common import ok
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 _UPLOAD_MAX_AGE_SECS = 86400
@@ -324,10 +325,22 @@ app.add_exception_handler(RateLimitExceeded, cast("Any", _rate_limit_exceeded_ha
 
 # Middleware — outermost first (last added = outermost)
 app.add_middleware(RequestContextMiddleware)
+
+_cors_origins = list(settings.cors_origins)
+_cors_allow_credentials = True
+if "*" in _cors_origins:
+    if settings.environment == "prod":
+        raise RuntimeError(
+            "CORS_ORIGINS cannot be ['*'] in production — set an explicit allowlist."
+        )
+    # Browsers reject `Access-Control-Allow-Origin: *` paired with credentials. Drop
+    # credentials so the dev wildcard does not produce an invalid header combination.
+    _cors_allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -343,7 +356,7 @@ app.include_router(quiz_tutor_router.router)
 @app.get("/api/live", include_in_schema=False)
 async def liveness() -> Any:
     """Kubernetes liveness probe — always 200 while the process is running."""
-    return {"status": "ok"}
+    return ok({"status": "ok"})
 
 
 def _build_readiness_payload() -> tuple[dict, bool]:
@@ -371,8 +384,14 @@ async def readiness() -> Any:
     """Kubernetes readiness probe — 503 until all dependencies are up."""
     payload, ready = _build_readiness_payload()
     if not ready:
-        return JSONResponse(status_code=503, content=payload)
-    return payload
+        return error_json_response(
+            code="service_unavailable",
+            message="Service unavailable",
+            detail="Adaptive API is not ready",
+            status_code=503,
+            meta=payload,
+        )
+    return ok(payload)
 
 
 @app.get("/api/health")
@@ -380,20 +399,28 @@ async def health() -> Any:
     """Backwards-compat alias for /api/ready."""
     payload, ready = _build_readiness_payload()
     if not ready:
-        return JSONResponse(status_code=503, content=payload)
-    return payload
+        return error_json_response(
+            code="service_unavailable",
+            message="Service unavailable",
+            detail="Adaptive API is not ready",
+            status_code=503,
+            meta=payload,
+        )
+    return ok(payload)
 
 
 @app.get("/api/info")
 async def info() -> Any:
     cfg = get_settings()
     manager = getattr(app.state, "session_manager", None)
-    return {
-        "models_enabled": cfg.load_models,
-        "models_loaded": manager is not None,
-        "n_concepts": manager.n_concepts if manager else 0,
-        "mongo_available": mongo_store.is_available(),
-        "content_pipeline_available": bool(
-            getattr(app.state, "content_processor_available", False)
-        ),
-    }
+    return ok(
+        {
+            "models_enabled": cfg.load_models,
+            "models_loaded": manager is not None,
+            "n_concepts": manager.n_concepts if manager else 0,
+            "mongo_available": mongo_store.is_available(),
+            "content_pipeline_available": bool(
+                getattr(app.state, "content_processor_available", False)
+            ),
+        }
+    )

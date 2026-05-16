@@ -118,7 +118,7 @@ def generate_quiz_tutor_response(
     chat_history: list[dict[str, str]] | None = None,
     question_image: str | None = None,
     option_images: list[str | None] | None = None,
-) -> dict[str, bool | dict[str, str | int | None]]:
+) -> dict[str, str | int | None]:
     if user_question:
         validation_error = validate_chat_input(user_question)
         if validation_error:
@@ -148,13 +148,10 @@ def generate_quiz_tutor_response(
     explanation = with_llm_retry(label="quiz tutor", fn=_try)
     logger.info("[LLM] ✓ Quiz tutor chat generated")
     return {
-        "success": True,
-        "data": {
-            "explanation": explanation,
-            "structured": None,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "turn_count": (len(chat_history or []) // 2) + 1,
-        },
+        "explanation": explanation,
+        "structured": None,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "turn_count": (len(chat_history or []) // 2) + 1,
     }
 
 

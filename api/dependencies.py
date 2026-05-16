@@ -4,27 +4,47 @@ from typing import Any
 dependencies.py — FastAPI dependency injection functions.
 """
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Header, Request
 
 from .config import Settings, get_settings
-from .exceptions import ServiceUnavailableError, SessionNotFoundError
+from .exceptions import AppError, ServiceUnavailableError, SessionNotFoundError
 
 
 def get_current_user(
     x_user_id: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
 ) -> Any:
-    """Extract user ID from headers."""
+    """Verify the proxy-issued service token and surface the forwarded user id.
+
+    The Next.js proxy is the only trusted issuer of `x-user-id`. Backend MUST
+    always validate `x-service-token` — including in dev — to prevent a
+    misconfigured deployment from inadvertently exposing the API.
+    """
     settings = get_settings()
     required_service_token = settings.internal_service_token
-    if settings.environment != "dev" and not required_service_token:
-        raise HTTPException(status_code=500, detail="Internal service token is not configured")
+    if not required_service_token:
+        raise AppError(
+            code="service_unavailable",
+            message="Service unavailable",
+            detail="Internal service token is not configured",
+            status_code=500,
+        )
 
-    if required_service_token and x_service_token != required_service_token:
-        raise HTTPException(status_code=401, detail="Invalid service token")
+    if not x_service_token or x_service_token != required_service_token:
+        raise AppError(
+            code="unauthorized",
+            message="Unauthorized",
+            detail="Invalid service token",
+            status_code=401,
+        )
 
     if not x_user_id:
-        raise HTTPException(status_code=401, detail="Missing x-user-id header")
+        raise AppError(
+            code="unauthorized",
+            message="Unauthorized",
+            detail="Missing x-user-id header",
+            status_code=401,
+        )
     return x_user_id
 
 

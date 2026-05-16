@@ -373,10 +373,20 @@ async def chat_about_exercise(
         )
     except ValueError as exc:
         logger.warning("[SessionRouter] Tutor chat ValueError: {}", exc)
-        raise AppError("Invalid tutor chat request", status_code=400) from exc
+        raise AppError(
+            code="validation_error",
+            message="Invalid tutor chat request",
+            detail=str(exc),
+            status_code=400,
+        ) from exc
     except RuntimeError as exc:
         logger.warning("[SessionRouter] Tutor chat RuntimeError: {}", exc)
-        raise AppError("Tutor service temporarily unavailable", status_code=502) from exc
+        raise AppError(
+            code="service_unavailable",
+            message="Tutor service temporarily unavailable",
+            detail=str(exc),
+            status_code=502,
+        ) from exc
     else:
         return ok({"explanation": explanation})
     # Unexpected errors fall through to the global unexpected_exception_handler.

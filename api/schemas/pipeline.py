@@ -18,7 +18,6 @@ class PipelineProcessResponse(BaseModel):
     status_url: str
     page_batch_size: int = 10
     retry_after_seconds: int = 2
-    message: str
 
 
 class PipelineFailedBatchResponse(BaseModel):

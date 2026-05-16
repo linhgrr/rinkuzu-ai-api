@@ -9,7 +9,7 @@ from typing import Annotated, Any
 import uuid
 
 import aiofiles
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 import httpx
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -26,7 +26,12 @@ from api.dependencies import (
     get_session_manager,
     get_session_service,
 )
-from api.exceptions import PipelineNotCompletedError, PipelineNotFoundError, ServiceUnavailableError
+from api.exceptions import (
+    AppError,
+    PipelineNotCompletedError,
+    PipelineNotFoundError,
+    ServiceUnavailableError,
+)
 from api.rate_limit import is_admin_request, limiter
 from api.schemas import (
     PipelineJobStatusResponse,
@@ -44,6 +49,24 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 _MAX_FILENAME_LENGTH = 200
 
 
+def _validation_error(detail: str) -> AppError:
+    return AppError(
+        code="validation_error",
+        message="Invalid request",
+        detail=detail,
+        status_code=400,
+    )
+
+
+def _pipeline_internal_error(detail: str) -> AppError:
+    return AppError(
+        code="internal_error",
+        message="Internal server error",
+        detail=detail,
+        status_code=500,
+    )
+
+
 @router.get("/status", response_model=StandardResponse[dict])
 @limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def pipeline_status(
@@ -57,8 +80,8 @@ async def pipeline_status(
         {
             "available": available,
             "service_initialized": availability["service_initialized"],
-            "message": "Content pipeline ready" if available else "Content pipeline unavailable",
-        }
+        },
+        meta={"message": "Content pipeline ready" if available else "Content pipeline unavailable"},
     )
 
 
@@ -91,9 +114,11 @@ async def process_document(  # noqa: C901
             src=availability["src"],
             service_initialized=availability["service_initialized"],
         )
-        raise HTTPException(
-            status_code=503,
+        raise AppError(
+            code="service_unavailable",
+            message="Service unavailable",
             detail="Content pipeline is unavailable.",
+            status_code=503,
         )
     if not mongo_store.is_available():
         raise ServiceUnavailableError("MongoDB persistence")
@@ -101,14 +126,14 @@ async def process_document(  # noqa: C901
     # Sanitize filename — strip directory components, enforce .pdf, reject NUL / path seps
     raw_name = Path(req.filename or "").name
     if not raw_name or not raw_name.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+        raise _validation_error("Only PDF files are supported.")
     if len(raw_name) > _MAX_FILENAME_LENGTH or any(c in raw_name for c in ("\x00", "/", "\\")):
-        raise HTTPException(status_code=400, detail="Invalid filename.")
+        raise _validation_error("Invalid filename.")
 
     file_id = uuid.uuid4().hex[:8]
     save_path = (UPLOAD_DIR / f"{file_id}_{raw_name}").resolve()
     if not save_path.is_relative_to(UPLOAD_DIR.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid filename.")
+        raise _validation_error("Invalid filename.")
 
     # Safe download — validates scheme, blocks private IPs, enforces size cap
     settings = get_settings()
@@ -121,10 +146,15 @@ async def process_document(  # noqa: C901
         )
     except UnsafeURLError as exc:
         logger.warning("[PipelineRouter] Rejected unsafe URL: {}", exc)
-        raise HTTPException(status_code=400, detail="URL not allowed.") from None
+        raise _validation_error("URL not allowed.") from None
     except (httpx.HTTPError, OSError):
         logger.exception("[PipelineRouter] Failed to download file from {}", req.file_url)
-        raise HTTPException(status_code=502, detail="Failed to download file.") from None
+        raise AppError(
+            code="upstream_error",
+            message="Upstream service error",
+            detail="Failed to download file.",
+            status_code=502,
+        ) from None
 
     # Verify the downloaded file is actually a PDF (magic bytes check).
     try:
@@ -133,9 +163,9 @@ async def process_document(  # noqa: C901
         if not _header.startswith(b"%PDF-"):
             with suppress(OSError):
                 save_path.unlink()
-            raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF.")
+            raise _validation_error("Uploaded file is not a valid PDF.")
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to verify uploaded file.") from None
+        raise _pipeline_internal_error("Failed to verify uploaded file.") from None
 
     try:
         job = await pipeline_service.start_job(
@@ -156,7 +186,7 @@ async def process_document(  # noqa: C901
                 save_path.unlink()
         except OSError:
             logger.warning("[PipelineRouter] Failed to cleanup upload {}", save_path)
-        raise HTTPException(status_code=500, detail="Failed to initialize pipeline job.") from None
+        raise _pipeline_internal_error("Failed to initialize pipeline job.") from None
 
     return ok(
         {
@@ -168,8 +198,8 @@ async def process_document(  # noqa: C901
             "status_url": f"/api/pipeline/jobs/{job.job_id}",
             "page_batch_size": job.page_batch_size,
             "retry_after_seconds": get_settings().content_pipeline_default_retry_after_sec,
-            "message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress.",
-        }
+        },
+        meta={"message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress."},
     )
 
 
@@ -273,7 +303,7 @@ async def create_session_from_pipeline(
 
     result = job_doc.get("result")
     if not result:
-        raise HTTPException(status_code=500, detail="Job found but has no result data.")
+        raise _pipeline_internal_error("Job found but has no result data.")
 
     for required_key in ("concepts_data", "concept_map", "prereq_edges"):
         if required_key not in result:
@@ -282,7 +312,7 @@ async def create_session_from_pipeline(
                 job_id,
                 required_key,
             )
-            raise HTTPException(status_code=500, detail="Pipeline result is incomplete.")
+            raise _pipeline_internal_error("Pipeline result is incomplete.")
 
     concept_ids = set(result["concept_map"].keys())
     invalid_edges = [
@@ -296,9 +326,11 @@ async def create_session_from_pipeline(
             job_id,
             len(invalid_edges),
         )
-        raise HTTPException(
-            status_code=409,
+        raise AppError(
+            code="conflict",
+            message="Conflict",
             detail="Pipeline graph validation failed. Please reprocess.",
+            status_code=409,
         )
 
     session = await manager.create_session_from_pipeline(

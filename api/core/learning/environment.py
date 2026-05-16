@@ -38,7 +38,7 @@ class AdaptiveLearningEnv(gym.Env):
     Action: flat index 0..(N*6-1) -> concept = action // 6, bloom = (action % 6) + 1
     """
 
-    metadata = {"render_modes": []}  # noqa: RUF012
+    metadata: dict[str, list[str]] = {"render_modes": []}  # noqa: RUF012
     N_BLOOMS = _N_BLOOMS
     CONCEPT_FEAT_DIM = _CONCEPT_FEAT_DIM  # bloom_mastery(6) + visited(1) + prereq_ok(1)
 

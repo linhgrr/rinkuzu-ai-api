@@ -7,9 +7,12 @@ from pydantic import BaseModel, ConfigDict
 DataT = TypeVar("DataT")
 
 
-def ok(data: object) -> dict[str, object]:
-    """Construct a standard success response envelope."""
-    return {"success": True, "data": data}
+def ok(data: object, meta: dict[str, object] | None = None) -> dict[str, object]:
+    """Construct the standard success response envelope."""
+    payload: dict[str, object] = {"success": True, "data": data}
+    if meta is not None:
+        payload["meta"] = meta
+    return payload
 
 
 class BaseStandardModel(BaseModel):
