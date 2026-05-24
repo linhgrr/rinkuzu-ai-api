@@ -1,10 +1,5 @@
 from .document_chunks import delete_chunks_for_job, replace_job_chunks
-from .openai_file_cache import (
-    FileCacheEntry,
-    delete_cached_openai_file,
-    load_cached_openai_file,
-    save_cached_openai_file,
-)
+from .document_ocr_records import load_document_ocr_record, save_document_ocr_record
 from .pipeline_jobs import (
     delete_pipeline_job_for_user,
     list_recent_pipeline_jobs,
@@ -31,9 +26,7 @@ from .subject_progress import (
 )
 
 __all__ = [
-    "FileCacheEntry",
     "create_quiz_draft",
-    "delete_cached_openai_file",
     "delete_chunks_for_job",
     "delete_pipeline_job_for_user",
     "delete_quiz_draft_for_user",
@@ -41,7 +34,7 @@ __all__ = [
     "list_recent_pipeline_jobs",
     "list_recent_quiz_drafts_for_user",
     "list_recent_subject_progress",
-    "load_cached_openai_file",
+    "load_document_ocr_record",
     "load_many_pipeline_jobs_for_user",
     "load_many_subject_progress_for_user",
     "load_pipeline_job",
@@ -51,7 +44,7 @@ __all__ = [
     "load_subject_progress_for_user",
     "pipeline_job_to_document",
     "replace_job_chunks",
-    "save_cached_openai_file",
+    "save_document_ocr_record",
     "save_pipeline_job",
     "save_subject_progress_snapshot",
     "update_quiz_draft_for_user",

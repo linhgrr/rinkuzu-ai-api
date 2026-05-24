@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     load_models: bool = True
     saint_path: str = str(BASE_DIR / "models" / "saint_best.pt")
     dqn_path: str = str(BASE_DIR / "models" / "dqn_best.pt")
+    mlp_weights_path: str = str(BASE_DIR / "models" / "prereq_mlp.pth")
 
     # ── App Config ──────────────────────────────────────────
     environment: str = "dev"  # dev | staging | prod — controls docs visibility
@@ -58,9 +59,13 @@ class Settings(BaseSettings):
     mongodb_uri: str | None = None
 
     # ── LLM ─────────────────────────────────────────────────
-    openai_api_key: str | None = None
-    openai_base_url: str | None = None
-    openai_model: str | None = None
+    llm_api_key: str | None = Field(default=None, validation_alias="LLM_API_KEY")
+    llm_base_url: str | None = Field(default=None, validation_alias="LLM_BASE_URL")
+    llm_model: str | None = Field(default=None, validation_alias="LLM_MODEL")
+    llm_custom_provider: str | None = Field(
+        default=None,
+        validation_alias="LLM_CUSTOM_PROVIDER",
+    )
     exercise_llm_model: str | None = Field(
         default=None,
         validation_alias=AliasChoices("EXERCISE_LLM_MODEL", "ADAPTIVE_EXERCISE_LLM_MODEL"),
@@ -103,7 +108,7 @@ class Settings(BaseSettings):
     max_seq_length: int | None = None
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    prs_threshold: float = 0.75
+    prs_threshold: float = 0.5  # MLP probability threshold (0.5 matches LectureBank F1=0.825 evaluation)
     adaptive_mastery_threshold: float = 0.75
     similarity_threshold: float = 0.9
     adaptive_exercise_recent_same_concept_limit: int = Field(
@@ -118,7 +123,6 @@ class Settings(BaseSettings):
     content_pipeline_graph_cycle_timeout_sec: float = 900
     content_pipeline_pdf_page_batch_size: int = 10
     content_pipeline_pdf_batch_max_bytes: int = 4 * 1024 * 1024
-    content_pipeline_file_cache_ttl_hours: int = 24 * 7
     content_pipeline_batch_failure_ratio_threshold: float = 0.5
     content_pipeline_llm_request_timeout_sec: float = Field(
         default=180,
@@ -147,6 +151,18 @@ class Settings(BaseSettings):
     content_pipeline_default_retry_after_sec: int = 2
     content_pipeline_delayed_retry_after_sec: int = 5
     content_pipeline_job_delayed_after_sec: int = 360
+
+    # ── OCR API ────────────────────────────────────────────
+    ocr_base_url: str = Field(
+        default="https://api.va.landing.ai/v1/ade/parse",
+        validation_alias="OCR_BASE_URL",
+    )
+    ocr_model: str = Field(
+        default="dpt-2-mini",
+        validation_alias="OCR_MODEL",
+    )
+    ocr_api_key: str | None = Field(default=None, validation_alias="OCR_API_KEY")
+    ocr_timeout_sec: float = Field(default=120, validation_alias="OCR_TIMEOUT_SEC")
 
     # ── S3 Cache ────────────────────────────────────────────
     object_storage_region: str = "ap-southeast-1"
@@ -207,6 +223,10 @@ class Settings(BaseSettings):
             self.object_storage_endpoint_external,
             default_scheme="https",
         )
+
+    @property
+    def active_exercise_llm_model(self) -> str | None:
+        return self.exercise_llm_model or self.llm_model
 
 
 @lru_cache(maxsize=1)

@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from langchain_core.runnables import RunnableLambda
 import networkx as nx
 
 from api.core.content_pipeline.infrastructure.embed import compute_embeddings_batch
+from api.core.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
 from api.core.content_pipeline.infrastructure.graph.cycle_removal import make_dag_with_llm
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
 import api.core.content_pipeline.infrastructure.utils.text as text_utils
@@ -63,7 +63,7 @@ def test_compute_embeddings_batch_smoke(monkeypatch, benchmark):
     assert result == [[9.0], [9.0]]
 
 
-def test_make_dag_with_llm_smoke(benchmark):
+def test_make_dag_with_llm_smoke(monkeypatch, benchmark):
     graph = nx.DiGraph()
     graph.add_node("a", name="A")
     graph.add_node("b", name="B")
@@ -84,12 +84,18 @@ def test_make_dag_with_llm_smoke(benchmark):
         reasoning="Giữ A -> B.",
     )
 
-    class FakeLLM:
-        def with_structured_output(self, schema, *, method="json_schema", strict=True, **kwargs):
-            return RunnableLambda(lambda _: decision)
+    async def fake_ainvoke_structured_completion(**kwargs):
+        assert kwargs["schema"] is CycleRemovalDecision
+        return decision
+
+    monkeypatch.setattr(
+        cycle_removal_module,
+        "ainvoke_structured_completion",
+        fake_ainvoke_structured_completion,
+    )
 
     def run_once():
-        return asyncio.run(make_dag_with_llm(graph, llm=FakeLLM()))
+        return asyncio.run(make_dag_with_llm(graph))
 
     dag, stats = benchmark(run_once)
 

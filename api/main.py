@@ -143,22 +143,22 @@ def _init_pipeline(app: FastAPI) -> None:
 
 
 def _log_llm_config(settings: Settings) -> None:
-    from .core.content_pipeline.infrastructure.llm.openai_responses import (
-        normalize_openai_base_url,
-    )
+    from .core.shared.llm import normalize_llm_base_url
 
-    base_url = normalize_openai_base_url(settings.openai_base_url)
-    model = settings.openai_model or "(not set)"
-    api_key = settings.openai_api_key or ""
+    base_url = normalize_llm_base_url(settings.llm_base_url)
+    model = settings.llm_model or "(not set)"
+    custom_provider = settings.llm_custom_provider or "(auto)"
+    api_key = settings.llm_api_key or ""
     _key_prefix_len = 6
     key_display = (
         f"{api_key[:_key_prefix_len]}…"
         if len(api_key) > _key_prefix_len
         else (api_key or "(not set)")
     )
-    exercise_model = settings.exercise_llm_model or model
+    exercise_model = settings.active_exercise_llm_model or model
     logger.info("[LLM] base_url    = {}", base_url)
     logger.info("[LLM] model       = {}", model)
+    logger.info("[LLM] provider    = {}", custom_provider)
     logger.info("[LLM] api_key     = {}", key_display)
     logger.info("[LLM] exercise    = {}", exercise_model)
     logger.info("[LLM] max_retries = {}", settings.llm_max_retries)

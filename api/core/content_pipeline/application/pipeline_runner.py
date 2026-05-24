@@ -166,12 +166,32 @@ class PipelineRunner:
                     populate_metrics=populate_job_metrics_from_result,
                 )
                 if job.status == PipelineStatus.COMPLETED:
+                    try:
+                        chunks = await load_document_chunks(
+                            job,
+                            file_path=file_path,
+                            persist_job_state=self._persist_job_state,
+                        )
+                        await persist_document_chunks(
+                            job,
+                            chunks=chunks,
+                            chunk_chroma_store=self._chunk_chroma_store,
+                            persist_job_state=self._persist_job_state,
+                        )
+                        await complete_pipeline_job(
+                            job,
+                            persist_job_state=self._persist_job_state,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "[Pipeline] Failed to rebuild reusable chunks for cached job {}",
+                            job.job_id,
+                        )
                     return
 
                 chunks = await load_document_chunks(
                     job,
                     file_path=file_path,
-                    load_and_chunk=bindings.file_loader_factory,
                     persist_job_state=self._persist_job_state,
                 )
 

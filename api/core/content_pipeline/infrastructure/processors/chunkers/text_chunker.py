@@ -85,7 +85,7 @@ class TextChunker:
 
         if not text.strip():
             logger.warning(
-                "No extractable local text for chunking; likely scan PDF or image-only pages",
+                "No extractable OCR text for chunking",
                 doc_id=doc_id,
                 page_count=len(pages),
                 source=base_meta.get("source"),

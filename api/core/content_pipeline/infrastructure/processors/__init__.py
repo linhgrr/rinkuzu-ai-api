@@ -1,11 +1,11 @@
 """Document processors module."""
 
 from .errors import ChunkingError, LoaderNotFoundError, UnsupportedFormatError
-from .factory import load_and_chunk_pdf
+from .factory import chunk_document_content
 
 __all__ = [
     "ChunkingError",
     "LoaderNotFoundError",
     "UnsupportedFormatError",
-    "load_and_chunk_pdf",
+    "chunk_document_content",
 ]

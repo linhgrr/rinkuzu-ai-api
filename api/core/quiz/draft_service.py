@@ -14,10 +14,16 @@ from api.config import get_settings
 from api.core.quiz.extraction import (
     MAX_PDF_BYTES,
     build_extraction_prompt,
-    invoke_pdf_extract_llm,
+    invoke_document_text_extract_llm,
     validate_quiz_extract_dependencies,
 )
 from api.core.shared import mongo_store
+from api.core.shared.document_text import (
+    ExtractedDocumentText,
+    calculate_pdf_bytes_hash,
+    extract_document_text_from_bytes,
+    load_or_extract_document_text_cached,
+)
 from api.core.shared.persistence import (
     create_quiz_draft,
     delete_quiz_draft_for_user,
@@ -76,7 +82,7 @@ class QuizDraftService:
     @staticmethod
     def _require_processing_settings(settings: Any) -> tuple[str, str]:
         bucket_name = settings.object_storage_bucket
-        model = settings.openai_model
+        model = settings.llm_model
         if not bucket_name or not model:
             raise QuizDraftDependencyError("Quiz extraction dependencies are not configured.")
         return bucket_name, model
@@ -232,9 +238,14 @@ class QuizDraftService:
                 bucket_name,
                 s3_key,
             )
-            questions = await invoke_pdf_extract_llm(
+            filename = draft.get("pdf", {}).get("file_name") or "quiz-source.pdf"
+            document_text = await self._load_or_extract_document_text(
                 pdf_bytes=pdf_bytes,
-                filename=draft.get("pdf", {}).get("file_name") or "quiz-source.pdf",
+                filename=filename,
+            )
+            questions = await invoke_document_text_extract_llm(
+                document_text=document_text,
+                filename=filename,
                 prompt=build_extraction_prompt(draft.get("prompt")),
                 model=model,
             )
@@ -263,6 +274,23 @@ class QuizDraftService:
             logger.exception(
                 "[quiz_draft] processing_failed draft_id={} user_id={}", draft_id, user_id
             )
+
+    async def _load_or_extract_document_text(
+        self,
+        *,
+        pdf_bytes: bytes,
+        filename: str,
+    ) -> ExtractedDocumentText:
+        return await load_or_extract_document_text_cached(
+            file_hash=calculate_pdf_bytes_hash(pdf_bytes),
+            file_name=filename,
+            file_size_bytes=len(pdf_bytes),
+            extract_document_text=lambda: asyncio.to_thread(
+                extract_document_text_from_bytes,
+                pdf_bytes,
+                filename=filename,
+            ),
+        )
 
     async def _mark_failed(self, draft_id: str, user_id: str, message: str) -> None:
         await update_quiz_draft_for_user(

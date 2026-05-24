@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from api.core.shared.llm import (
     _resolve_shared_llm_model,
-    get_structured_llm,
+    invoke_structured_completion,
     with_llm_retry,
 )
 
@@ -59,17 +59,12 @@ def _invoke_structured_llm(
     temperature: float = 0.3,
 ) -> StructuredModelT:
     model = _resolve_shared_llm_model(None)
-    structured_llm = get_structured_llm(
-        schema,
+    return invoke_structured_completion(
+        schema=schema,
+        messages=messages,
         model=model,
         temperature=temperature,
-        method="json_schema",
-        strict=True,
     )
-    result = structured_llm.invoke(messages)
-    if not isinstance(result, schema):
-        raise TypeError(f"LLM returned invalid structured output type: {type(result)}")
-    return result
 
 
 def generate_exercise(

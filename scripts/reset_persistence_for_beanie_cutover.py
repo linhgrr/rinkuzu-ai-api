@@ -18,7 +18,6 @@ MONGO_COLLECTIONS = [
     "al_subject_progress",
     "quiz_drafts",
     "al_document_chunks",
-    "al_openai_file_cache",
 ]
 
 

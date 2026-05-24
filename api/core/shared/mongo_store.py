@@ -13,7 +13,7 @@ from pymongo import AsyncMongoClient
 from api.config import get_settings
 from api.core.shared.persistence.documents import (
     DocumentChunkDocument,
-    OpenAIFileCacheDocument,
+    DocumentOCRRecordDocument,
     PipelineJobDocument,
     QuizDraftDocument,
     SubjectProgressDocument,
@@ -61,7 +61,7 @@ async def init_mongo(mongodb_uri: str | None = None) -> bool:
                 SubjectProgressDocument,
                 QuizDraftDocument,
                 DocumentChunkDocument,
-                OpenAIFileCacheDocument,
+                DocumentOCRRecordDocument,
             ],
             allow_index_dropping=allow_index_dropping,
             skip_indexes=skip_indexes,

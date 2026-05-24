@@ -1,8 +1,9 @@
 import asyncio
 
-from langchain_core.runnables import RunnableLambda
 import networkx as nx
+import pytest
 
+from api.core.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
 from api.core.content_pipeline.infrastructure.graph.cycle_removal import CycleRemover
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
 
@@ -43,15 +44,21 @@ def test_cycle_remover_uses_find_cycle_for_three_node_cycle(monkeypatch):
     monkeypatch.setattr(nx, "find_cycle", wrapped_find_cycle)
     monkeypatch.setattr(nx, "simple_cycles", fail_simple_cycles)
 
-    class FakeLLM:
-        def with_structured_output(self, schema, *, method="json_schema", strict=True, **kwargs):
-            assert schema is CycleRemovalDecision
-            assert method == "json_schema"
-            assert strict is True
-            return RunnableLambda(lambda _: decision)
+    async def fake_ainvoke_structured_completion(**kwargs):
+        assert kwargs["schema"] is CycleRemovalDecision
+        return decision
 
-    remover = CycleRemover(llm=FakeLLM())
-    dag, stats = asyncio.run(remover.remove_cycles(graph))
+    patcher = pytest.MonkeyPatch()
+    patcher.setattr(
+        cycle_removal_module,
+        "ainvoke_structured_completion",
+        fake_ainvoke_structured_completion,
+    )
+    try:
+        remover = CycleRemover()
+        dag, stats = asyncio.run(remover.remove_cycles(graph))
+    finally:
+        patcher.undo()
 
     assert find_cycle_calls["count"] >= 1
     assert nx.is_directed_acyclic_graph(dag)

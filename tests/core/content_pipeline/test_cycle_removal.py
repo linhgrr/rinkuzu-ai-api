@@ -1,8 +1,9 @@
 import asyncio
 
-from langchain_core.runnables import RunnableLambda
 import networkx as nx
+import pytest
 
+from api.core.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
 from api.core.content_pipeline.infrastructure.graph.cycle_removal import CycleRemover
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
 
@@ -28,15 +29,22 @@ def test_cycle_remover_uses_langchain_structured_output():
         reasoning="Giữ hướng A -> B để bảo toàn prerequisite chính.",
     )
 
-    class FakeLLM:
-        def with_structured_output(self, schema, *, method="json_schema", strict=True, **kwargs):
-            assert schema is CycleRemovalDecision
-            assert method == "json_schema"
-            assert strict is True
-            return RunnableLambda(lambda _: decision)
+    async def fake_ainvoke_structured_completion(**kwargs):
+        assert kwargs["schema"] is CycleRemovalDecision
+        return decision
 
-    remover = CycleRemover(llm=FakeLLM())
-    dag, stats = asyncio.run(remover.remove_cycles(graph))
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        cycle_removal_module,
+        "ainvoke_structured_completion",
+        fake_ainvoke_structured_completion,
+    )
+
+    try:
+        remover = CycleRemover()
+        dag, stats = asyncio.run(remover.remove_cycles(graph))
+    finally:
+        monkeypatch.undo()
 
     assert nx.is_directed_acyclic_graph(dag)
     assert dag.has_edge("a", "b")
@@ -65,16 +73,22 @@ def test_make_dag_with_llm_is_async_compatible():
         reasoning="Giữ A -> B.",
     )
 
-    class FakeLLM:
-        def with_structured_output(self, schema, *, method="json_schema", strict=True, **kwargs):
-            assert schema is CycleRemovalDecision
-            assert method == "json_schema"
-            assert strict is True
-            return RunnableLambda(lambda _: decision)
-
     from api.core.content_pipeline.infrastructure.graph.cycle_removal import make_dag_with_llm
 
-    dag, stats = asyncio.run(make_dag_with_llm(graph, llm=FakeLLM()))
+    async def fake_ainvoke_structured_completion(**kwargs):
+        assert kwargs["schema"] is CycleRemovalDecision
+        return decision
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        cycle_removal_module,
+        "ainvoke_structured_completion",
+        fake_ainvoke_structured_completion,
+    )
+    try:
+        dag, stats = asyncio.run(make_dag_with_llm(graph))
+    finally:
+        monkeypatch.undo()
 
     assert nx.is_directed_acyclic_graph(dag)
     assert stats["is_dag"] is True

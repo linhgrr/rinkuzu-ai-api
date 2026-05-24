@@ -17,12 +17,10 @@ gymnasium>=0.29.0
 
 # LLM / LangChain / ChromaDB
 langchain-core>=1.3.3
-langchain-openai>=0.1.0
 langchain-chroma>=0.1.0
 langchain-text-splitters>=0.1.0
 pypdf>=6.10.2
 tenacity>=8.2
-aiocache>=0.12
 sentence-transformers>=2.2.0
 transformers>=4.30.0
 chromadb>=0.5.0
@@ -39,9 +37,10 @@ beanie==2.1.0
 pymongo>=4.6.0
 
 # AI Provider
-openai>=2.24.0
+litellm>=1.85.1
 
 # Utilities
 loguru>=0.7.0
 httpx>=0.27.0
+google-auth>=2.35.0
 slowapi>=0.1.9

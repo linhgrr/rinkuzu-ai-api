@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class StrictSchemaModel(BaseModel):
-    """Base model for OpenAI structured outputs."""
+    """Base model for provider-agnostic structured LLM outputs."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -63,10 +63,20 @@ class Concept(StrictSchemaModel):
     )
 
     name_embedding: list[float] | None = Field(
-        None, description="Vector embedding of concept name only (for CSR prerequisite ranking)."
+        None,
+        description=(
+            "DEPRECATED. Vietnamese-sbert embedding of the concept name. Kept "
+            "optional for backward compatibility with existing MongoDB documents; "
+            "no longer populated by the live pipeline (MLPPrerequisiteRanker "
+            "carries its own XLM-RoBERTa encoder)."
+        ),
     )
     definition_embedding: list[float] | None = Field(
-        None, description="Vector embedding of definition text only (for CSR prerequisite ranking)."
+        None,
+        description=(
+            "DEPRECATED. Vietnamese-sbert embedding of the definition. Kept "
+            "optional for backward compatibility; no longer populated."
+        ),
     )
 
 

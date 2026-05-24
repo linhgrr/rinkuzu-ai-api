@@ -16,8 +16,9 @@ FastAPI backend cho adaptive learning, quiz tutor, quiz extraction, và content 
 - Python `3.11`
 - FastAPI + Uvicorn
 - MongoDB
-- OpenAI-compatible LLM endpoint
-- Optional: S3-compatible object storage cho OCR, quiz extract, và pipeline assets
+- LiteLLM-backed LLM chat/completions endpoint
+- LandingAI ADE Parse API cho scan PDF
+- Optional: S3-compatible object storage cho quiz extract và pipeline assets
 
 ## Core Layout
 
