@@ -180,9 +180,7 @@ class ExtractionChain:
                     return await self._verify_single_relation(concept_a, concept_b, pair_index)
                 except Exception as exc:
                     logger.error("Error verifying pair {}: {}", pair_index, exc)
-                    return self._verification_error(
-                        f"Error during verification: {str(exc)[:100]}"
-                    )
+                    return self._verification_error(f"Error during verification: {str(exc)[:100]}")
 
         tasks = [
             _verify_one(i, concept_a, concept_b)

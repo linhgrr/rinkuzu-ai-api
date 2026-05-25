@@ -159,9 +159,11 @@ def _extract_questions_from_document_text_sync(
         batch_start = int(batch["page_start"])
         batch_end = int(batch["page_end"])
         batch_text = str(batch["text"])
-        payload = with_llm_retry(
-            label="quiz extraction",
-            fn=lambda batch_text=batch_text, batch_start=batch_start, batch_end=batch_end: invoke_structured_completion(
+
+        def _invoke(
+            text: str = batch_text, start: int = batch_start, end: int = batch_end
+        ) -> ExtractedQuizQuestionBatch:
+            return invoke_structured_completion(
                 schema=ExtractedQuizQuestionBatch,
                 model=model,
                 temperature=0.0,
@@ -172,16 +174,17 @@ def _extract_questions_from_document_text_sync(
                         "role": "user",
                         "content": (
                             f"## FILE\nTên file: {filename}\n"
-                            f"Trang: {batch_start}-{batch_end}\n\n"
+                            f"Trang: {start}-{end}\n\n"
                             "<document_text>\n"
-                            f"{batch_text}\n"
+                            f"{text}\n"
                             "</document_text>\n\n"
                             "Hãy trích xuất câu hỏi theo JSON/schema đã chỉ định."
                         ),
                     },
                 ],
-            ),
-        )
+            )
+
+        payload = with_llm_retry(label="quiz extraction", fn=_invoke)
         collected_questions.extend(payload.questions)
 
     return [question.to_public_dict() for question in collected_questions]

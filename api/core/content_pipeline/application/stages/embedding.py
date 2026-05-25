@@ -34,5 +34,8 @@ async def compute_concept_embeddings(
     """No-op. Concept embeddings are computed inside ``MLPPrerequisiteRanker``."""
     _ = (concepts, model_name, batch_size)
     await persist_job_state(
-        job, PipelineStatus.EMBEDDING, "Skipping legacy embeddings...", PipelineProgress.EMBEDDING_DONE
+        job,
+        PipelineStatus.EMBEDDING,
+        "Skipping legacy embeddings...",
+        PipelineProgress.EMBEDDING_DONE,
     )

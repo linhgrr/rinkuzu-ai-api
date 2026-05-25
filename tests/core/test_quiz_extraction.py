@@ -60,7 +60,9 @@ def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypat
             metadata={"file_name": filename or "sample.pdf", "page_count": 2},
         ),
     )
-    monkeypatch.setattr(extraction, "invoke_structured_completion", fake_invoke_structured_completion)
+    monkeypatch.setattr(
+        extraction, "invoke_structured_completion", fake_invoke_structured_completion
+    )
     monkeypatch.setattr(
         extraction,
         "get_settings",

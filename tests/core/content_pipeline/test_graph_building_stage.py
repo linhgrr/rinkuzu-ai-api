@@ -10,6 +10,8 @@ from api.core.content_pipeline.application.stages.graph_building import (
     sanitize_concept_relations,
 )
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.infrastructure.graph.builder import KnowledgeGraphBuilder
+from api.core.content_pipeline.infrastructure.llm.schemas import Concept, Relation
 
 
 def test_sanitize_concept_relations_drops_invalid_and_duplicate_relations():
@@ -65,6 +67,55 @@ def test_build_partial_graph_serializes_nodes_and_edges():
             {"id": "c2", "name": "Beta"},
         ],
         "edges": [{"source": "c1", "target": "c2"}],
+    }
+
+
+def test_build_knowledge_graph_translates_extracted_dependency_relations_to_prereq_edges():
+    concepts = [
+        Concept(
+            concept_id="ohms_law",
+            subject_id="physics",
+            name="Ohm's law",
+            definition="Voltage equals current multiplied by resistance.",
+            relations=[
+                Relation(
+                    type="PREREQUISITE",
+                    target_id="electric_current",
+                    confidence=0.9,
+                    evidence="Ohm's law uses electric current in its formula.",
+                )
+            ],
+        ),
+        Concept(
+            concept_id="electric_current",
+            subject_id="physics",
+            name="Electric current",
+            definition="The rate of flow of electric charge.",
+            relations=[],
+        ),
+    ]
+    job = PipelineJob(job_id="job-1", filename="lesson.pdf", subject_id="physics")
+
+    async def persist_job_state(job_arg, status, step, progress):
+        assert job_arg is job
+
+    graph, _stats = asyncio.run(
+        build_knowledge_graph(
+            job,
+            concepts=concepts,
+            verified_relations=[],
+            knowledge_graph_builder_factory=KnowledgeGraphBuilder,
+            persist_job_state=persist_job_state,
+        )
+    )
+
+    assert set(graph.edges()) == {("electric_current", "ohms_law")}
+    assert job.partial_graph == {
+        "nodes": [
+            {"id": "ohms_law", "name": "Ohm's law"},
+            {"id": "electric_current", "name": "Electric current"},
+        ],
+        "edges": [{"source": "electric_current", "target": "ohms_law"}],
     }
 
 

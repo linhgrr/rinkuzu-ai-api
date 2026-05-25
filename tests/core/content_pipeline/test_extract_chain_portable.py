@@ -211,11 +211,15 @@ def test_extract_from_document_uses_text_batches_and_tracks_failed_batches():
     chain = ExtractionChain(client=_RetryClient(), document_extractor=_Extractor())
     seen_ranges: list[tuple[int, int]] = []
 
-    async def fake_extract_single_batch(*, job_id, subject_id, batch, previous_concepts, source_name):
+    async def fake_extract_single_batch(
+        *, job_id, subject_id, batch, previous_concepts, source_name
+    ):
         del job_id, previous_concepts, source_name
         seen_ranges.append((batch["page_start"], batch["page_end"]))
         if batch["page_start"] == 2:
-            return ConceptExtraction(concepts=[], subject_id=subject_id, notes="Error: missing signal")
+            return ConceptExtraction(
+                concepts=[], subject_id=subject_id, notes="Error: missing signal"
+            )
         return ConceptExtraction(concepts=[], subject_id=subject_id, notes=None)
 
     chain._extract_single_batch = fake_extract_single_batch  # type: ignore[method-assign]

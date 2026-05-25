@@ -96,7 +96,7 @@ class KnowledgeGraphBuilder:
             self.add_concept(concept)
 
     def add_concept(self, concept: Concept) -> Any:
-        """Add a single concept (as a real/complete node) and its outgoing relations."""
+        """Add a concept and translate extracted dependency relations to graph edges."""
         self._set_non_placeholder(
             concept.concept_id,
             name=getattr(concept, "name", None),
@@ -107,10 +107,18 @@ class KnowledgeGraphBuilder:
         self.concept_map[concept.concept_id] = concept
 
         for rel in getattr(concept, "relations", []) or []:
+            rel_type = getattr(rel, "type", None)
+            if self._norm_rel(rel_type) == RelationType.PREREQUISITE:
+                # Extracted relations point to a prerequisite; graph edges point prerequisite -> dependent.
+                source_id = rel.target_id
+                target_id = concept.concept_id
+            else:
+                source_id = concept.concept_id
+                target_id = rel.target_id
             self.add_relation(
-                source_id=concept.concept_id,
-                target_id=rel.target_id,
-                relation_type=getattr(rel, "type", None),
+                source_id=source_id,
+                target_id=target_id,
+                relation_type=rel_type,
                 evidence=getattr(rel, "evidence", None),
                 location=getattr(rel, "location", None),
             )

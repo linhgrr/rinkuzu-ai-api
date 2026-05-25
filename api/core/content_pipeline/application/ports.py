@@ -35,4 +35,5 @@ class RelationEngine(Protocol):
         prs_threshold: float,
         min_confidence: float,
         persist_job_state: PersistJobStateFn,
-    ) -> RelationDiscoveryResult: ...
+    ) -> RelationDiscoveryResult:
+        raise NotImplementedError

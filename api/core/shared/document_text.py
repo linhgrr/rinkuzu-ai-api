@@ -49,14 +49,16 @@ ResolveFileSizeBytesFn = Callable[[], Awaitable[int | None]]
 class DocumentTextExtractor(Protocol):
     """Provider boundary for converting a PDF into page-level text."""
 
-    def extract_file(self, file_path: str) -> ExtractedDocumentText: ...
+    def extract_file(self, file_path: str) -> ExtractedDocumentText:
+        raise NotImplementedError
 
     def extract_bytes(
         self,
         pdf_bytes: bytes,
         *,
         filename: str | None = None,
-    ) -> ExtractedDocumentText: ...
+    ) -> ExtractedDocumentText:
+        raise NotImplementedError
 
 
 class LandingAIDocumentTextExtractor:
@@ -158,7 +160,6 @@ def extract_document_text_from_bytes(
     return build_document_text_extractor().extract_bytes(pdf_bytes, filename=filename)
 
 
-
 def build_page_batches(page_count: int, batch_size: int) -> list[tuple[int, int]]:
     """Return 1-indexed inclusive page windows."""
     if page_count <= 0:
@@ -170,7 +171,6 @@ def build_page_batches(page_count: int, batch_size: int) -> list[tuple[int, int]
     ]
 
 
-
 def build_text_batches(
     pages: list[DocumentPageText],
     *,
@@ -178,7 +178,9 @@ def build_text_batches(
 ) -> list[dict[str, Any]]:
     """Build page-window text batches consumed by LLM extraction steps."""
     batches: list[dict[str, Any]] = []
-    for batch_index, (start_page, end_page) in enumerate(build_page_batches(len(pages), batch_size)):
+    for batch_index, (start_page, end_page) in enumerate(
+        build_page_batches(len(pages), batch_size)
+    ):
         window = pages[start_page - 1 : end_page]
         batch_text = "\n\n".join(
             f"## Trang {page.page_number}\n{page.text}".strip()
@@ -215,10 +217,7 @@ def extracted_document_text_to_content_payload(
     metadata.setdefault("page_count", len(extracted.pages))
     return {
         "text": extracted.text,
-        "pages": [
-            {"page_number": page.page_number, "text": page.text}
-            for page in extracted.pages
-        ],
+        "pages": [{"page_number": page.page_number, "text": page.text} for page in extracted.pages],
         "metadata": metadata,
     }
 
@@ -227,7 +226,9 @@ def ocr_record_to_extracted_document_text(record: dict[str, Any]) -> ExtractedDo
     metadata = dict(record.get("metadata") or {})
     metadata["file_hash"] = record["file_hash"]
     metadata["ocr_cache_hit"] = True
-    metadata.setdefault("page_count", int(record.get("page_count") or len(record.get("pages") or [])))
+    metadata.setdefault(
+        "page_count", int(record.get("page_count") or len(record.get("pages") or []))
+    )
     pages = [
         DocumentPageText(
             page_number=int(page.get("page_number") or 0),
@@ -270,10 +271,8 @@ async def load_or_extract_document_text_cached(
     return document_text
 
 
-
 def build_document_text_extractor(settings: object | None = None) -> DocumentTextExtractor:
     return LandingAIDocumentTextExtractor(config=build_ocr_api_config(settings))
-
 
 
 def build_ocr_api_config(settings: object | None = None) -> OCRApiConfig:
@@ -298,14 +297,12 @@ def build_ocr_api_config(settings: object | None = None) -> OCRApiConfig:
     )
 
 
-
 def _ocr_headers(api_key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {api_key}"}
 
 
 _ANCHOR_RE = re.compile(r"<a\s+id=['\"][^'\"]+['\"]></a>", flags=re.IGNORECASE)
 _BLANKS_RE = re.compile(r"\n{3,}")
-
 
 
 def _landing_ai_to_extracted_text(
@@ -332,9 +329,7 @@ def _landing_ai_to_extracted_text(
         page_payloads = [DocumentPageText(page_number=1, text=markdown)] if markdown else []
 
     rendered_pages = [
-        f"## Trang {page.page_number}\n{page.text}"
-        for page in page_payloads
-        if page.text.strip()
+        f"## Trang {page.page_number}\n{page.text}" for page in page_payloads if page.text.strip()
     ]
 
     return ExtractedDocumentText(
@@ -352,7 +347,6 @@ def _landing_ai_to_extracted_text(
             "failed_pages": metadata.get("failed_pages") or [],
         },
     )
-
 
 
 def _normalize_landing_ai_markdown(markdown: str) -> str:

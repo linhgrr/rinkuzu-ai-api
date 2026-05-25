@@ -12,6 +12,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
+from json_repair import loads as repair_json_loads
 from litellm import acompletion, completion
 from loguru import logger
 from pydantic import BaseModel
@@ -30,6 +31,8 @@ from api.config import get_settings
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 _T = TypeVar("_T")
+
+
 class LLMConfigurationError(ValueError):
     """Raised when required LLM settings are missing."""
 
@@ -56,16 +59,18 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
-    ) -> str: ...
+    ) -> str:
+        raise NotImplementedError
 
-    async def stream_text(
+    def stream_text(
         self,
         *,
         messages: Sequence[object],
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
-    ) -> AsyncIterator[str]: ...
+    ) -> AsyncIterator[str]:
+        raise NotImplementedError
 
     def generate_structured(
         self,
@@ -75,7 +80,8 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
-    ) -> StructuredModelT: ...
+    ) -> StructuredModelT:
+        raise NotImplementedError
 
     async def agenerate_structured(
         self,
@@ -85,7 +91,8 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
-    ) -> StructuredModelT: ...
+    ) -> StructuredModelT:
+        raise NotImplementedError
 
 
 def normalize_llm_base_url(url: str | None) -> str:
@@ -541,7 +548,7 @@ class LiteLLMClient(LLMClient):
         content = extract_llm_text(_extract_response_content(response))
         if not content:
             raise TypeError("LLM returned empty structured output.")
-        return schema.model_validate(json.loads(content))
+        return schema.model_validate(repair_json_loads(content))
 
     async def agenerate_structured(
         self,
@@ -565,7 +572,7 @@ class LiteLLMClient(LLMClient):
         content = extract_llm_text(_extract_response_content(response))
         if not content:
             raise TypeError("LLM returned empty structured output.")
-        return schema.model_validate(json.loads(content))
+        return schema.model_validate(repair_json_loads(content))
 
 
 def get_default_llm_client(

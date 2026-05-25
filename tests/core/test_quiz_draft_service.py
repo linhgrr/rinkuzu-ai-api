@@ -50,6 +50,7 @@ async def test_load_or_extract_document_text_reuses_cached_ocr_record(monkeypatc
     )
 
     monkeypatch.setattr(draft_service_module, "calculate_pdf_bytes_hash", lambda _bytes: "hash-1")
+
     async def fake_load_or_extract_document_text_cached(
         *,
         file_hash: str,
@@ -63,6 +64,7 @@ async def test_load_or_extract_document_text_reuses_cached_ocr_record(monkeypatc
         assert file_size_bytes == len(b"%PDF-demo")
         del extract_document_text, resolve_file_size_bytes
         return cached_text
+
     monkeypatch.setattr(
         draft_service_module,
         "load_or_extract_document_text_cached",
@@ -87,6 +89,7 @@ async def test_load_or_extract_document_text_persists_on_cache_miss(monkeypatch)
     )
 
     monkeypatch.setattr(draft_service_module, "calculate_pdf_bytes_hash", lambda _bytes: "hash-2")
+
     async def fake_load_or_extract_document_text_cached(
         *,
         file_hash: str,
@@ -149,7 +152,9 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
         assert user_id == "user-1"
         return draft
 
-    async def fake_update_quiz_draft_for_user(_draft_id: str, _user_id: str, payload: dict[str, object]):
+    async def fake_update_quiz_draft_for_user(
+        _draft_id: str, _user_id: str, payload: dict[str, object]
+    ):
         updates.append(payload)
         return {"status": payload.get("status")}
 
@@ -170,6 +175,7 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
         lambda: SimpleNamespace(object_storage_bucket="bucket", llm_model="quiz-model"),
     )
     fake_s3_client = object()
+
     def _get_s3_client():
         return fake_s3_client
 

@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from langchain_core.runnables import RunnableLambda
 import networkx as nx
 
 import api.core.content_pipeline.infrastructure.embed as embed_module
 from api.core.content_pipeline.infrastructure.embed import compute_embeddings_batch
-from api.core.content_pipeline.infrastructure.graph.cycle_removal import make_dag_with_llm
+from api.core.content_pipeline.infrastructure.graph import cycle_removal
+from api.core.content_pipeline.infrastructure.graph.cycle_removal import (
+    CycleRemover,
+    make_dag_with_llm,
+)
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
 import api.core.content_pipeline.infrastructure.utils.text as text_utils
 
@@ -31,22 +34,21 @@ class FakeEmbeddingClient:
         return [[float(len(text))] for text in texts]
 
 
-class FakeLLM:
-    def with_structured_output(self, schema, *, method="json_schema", strict=True, **kwargs):
-        decision = CycleRemovalDecision(
-            cycle_nodes=["a", "b"],
-            edges_to_remove=[
-                EdgeDecision(
-                    source_id="b",
-                    target_id="a",
-                    should_remove=True,
-                    reasoning="B depends on A, drop reverse edge.",
-                    confidence=0.9,
-                )
-            ],
-            reasoning="Keep A -> B.",
-        )
-        return RunnableLambda(lambda _: decision)
+async def fake_cycle_removal_decision(self, cycle_info):
+    del self, cycle_info
+    return CycleRemovalDecision(
+        cycle_nodes=["a", "b"],
+        edges_to_remove=[
+            EdgeDecision(
+                source_id="b",
+                target_id="a",
+                should_remove=True,
+                reasoning="B depends on A, drop reverse edge.",
+                confidence=0.9,
+            )
+        ],
+        reasoning="Keep A -> B.",
+    )
 
 
 def build_cycle_graph():
@@ -62,10 +64,16 @@ def main() -> None:
     original_embedding_client = embed_module.EmbeddingClient
     original_settings = embed_module.settings
     original_debug = embed_module.logger.debug
+    original_cycle_logger_info = cycle_removal.logger.info
+    original_cycle_logger_debug = cycle_removal.logger.debug
+    original_invoke_cycle_removal_decision = CycleRemover._invoke_cycle_removal_decision
 
     embed_module.EmbeddingClient = FakeEmbeddingClient
     embed_module.settings = SimpleNamespace(embedding_model="model-x")
     embed_module.logger.debug = lambda *args, **kwargs: None
+    cycle_removal.logger.info = lambda *args, **kwargs: None
+    cycle_removal.logger.debug = lambda *args, **kwargs: None
+    CycleRemover._invoke_cycle_removal_decision = fake_cycle_removal_decision
     text_utils._text_normalize = None
 
     try:
@@ -76,11 +84,14 @@ def main() -> None:
             compute_embeddings_batch(["one two three", "alpha beta"], batch_size=8, max_length=2)
 
         for _ in range(10):
-            asyncio.run(make_dag_with_llm(build_cycle_graph(), llm=FakeLLM()))
+            asyncio.run(make_dag_with_llm(build_cycle_graph()))
     finally:
         embed_module.EmbeddingClient = original_embedding_client
         embed_module.settings = original_settings
         embed_module.logger.debug = original_debug
+        cycle_removal.logger.info = original_cycle_logger_info
+        cycle_removal.logger.debug = original_cycle_logger_debug
+        CycleRemover._invoke_cycle_removal_decision = original_invoke_cycle_removal_decision
 
 
 if __name__ == "__main__":

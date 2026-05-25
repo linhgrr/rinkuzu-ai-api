@@ -44,4 +44,5 @@ class PrerequisiteClassifier(nn.Module):
 
     def forward(self, emb_a: Tensor, emb_b: Tensor) -> Tensor:
         x = torch.cat([emb_a, emb_b], dim=-1)
-        return self.net(x)
+        out: Tensor = self.net(x)
+        return out

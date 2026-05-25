@@ -173,4 +173,7 @@ class MLPPrerequisiteRanker:
                 probs[start:end] = torch.sigmoid(logits).cpu()
 
         keep = probs >= threshold
-        return [(ids[idx_a[k]], ids[idx_b[k]]) for k in torch.nonzero(keep, as_tuple=False).flatten().tolist()]
+        return [
+            (ids[idx_a[k]], ids[idx_b[k]])
+            for k in torch.nonzero(keep, as_tuple=False).flatten().tolist()
+        ]

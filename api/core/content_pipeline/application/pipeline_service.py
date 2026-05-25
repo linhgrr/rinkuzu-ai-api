@@ -30,7 +30,8 @@ class RunPipelineFn(Protocol):
         *,
         apply_reduction: bool,
         page_batch_size: int,
-    ) -> Coroutine[Any, Any, None]: ...
+    ) -> Coroutine[Any, Any, None]:
+        raise NotImplementedError
 
 
 class PipelineService:

@@ -61,7 +61,7 @@ def test_build_document_text_extractor_returns_landing_ai_extractor():
     extractor = build_document_text_extractor(
         SimpleNamespace(
             ocr_base_url="https://api.va.landing.ai/v1/ade/parse",
-            ocr_api_key="secret",
+            ocr_api_key="unit-test-key",  # pragma: allowlist secret
             ocr_model="dpt-2-mini",
             ocr_timeout_sec=90,
         )
@@ -102,13 +102,18 @@ def test_landing_ai_document_text_extractor_posts_pdf_to_api():
         {
             "markdown": "Nội dung OCR",
             "splits": [{"pages": [1], "markdown": "Nội dung OCR"}],
-            "metadata": {"page_count": 1, "credit_usage": 1.5, "job_id": "job-2", "version": "dpt-2-mini"},
+            "metadata": {
+                "page_count": 1,
+                "credit_usage": 1.5,
+                "job_id": "job-2",
+                "version": "dpt-2-mini",
+            },
         }
     )
     extractor = LandingAIDocumentTextExtractor(
         config=OCRApiConfig(
             endpoint="https://api.va.landing.ai/v1/ade/parse",
-            api_key="secret",
+            api_key="unit-test-key",  # pragma: allowlist secret
             model="dpt-2-mini",
             timeout_sec=30,
         ),

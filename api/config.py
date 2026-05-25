@@ -108,7 +108,9 @@ class Settings(BaseSettings):
     max_seq_length: int | None = None
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    prs_threshold: float = 0.5  # MLP probability threshold (0.5 matches LectureBank F1=0.825 evaluation)
+    prs_threshold: float = (
+        0.5  # MLP probability threshold (0.5 matches LectureBank F1=0.825 evaluation)
+    )
     adaptive_mastery_threshold: float = 0.75
     similarity_threshold: float = 0.9
     adaptive_exercise_recent_same_concept_limit: int = Field(

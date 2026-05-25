@@ -139,9 +139,7 @@ def _build_relation_engine(*, extraction_chain: Any) -> Any:
             _items: list[Any],
             _threshold: float,
         ) -> list[tuple[str, str]]:
-            raise ModuleNotFoundError(
-                "torch + transformers required for MLP prerequisite ranking"
-            )
+            raise ModuleNotFoundError("torch + transformers required for MLP prerequisite ranking")
 
         rank_fn: PrereqRankingFn = rank_prerequisites_stub
     else:

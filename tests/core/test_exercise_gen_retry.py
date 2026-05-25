@@ -65,11 +65,7 @@ def test_invoke_structured_completion_uses_json_object_response_format(monkeypat
     def fake_completion(**kwargs):
         captured.update(kwargs)
         return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content='{"message": "ok"}')
-                )
-            ]
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"message": "ok"}'))]
         )
 
     monkeypatch.setattr(llm_module, "completion", fake_completion)

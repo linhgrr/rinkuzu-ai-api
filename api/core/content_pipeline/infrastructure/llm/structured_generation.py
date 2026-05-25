@@ -32,7 +32,8 @@ class StructuredGenerationClient(Protocol):
         user_text: str,
         text_format: type[StructuredModelT],
         job_id: str | None = None,
-    ) -> StructuredModelT: ...
+    ) -> StructuredModelT:
+        raise NotImplementedError
 
 
 def build_provider_config() -> LLMProviderConfig:

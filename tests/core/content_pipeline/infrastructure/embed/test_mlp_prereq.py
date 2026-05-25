@@ -39,8 +39,10 @@ def _make_loaded_ranker(monkeypatch, weights_path: Path, prob_for_pair):
 
     fake_tokenizer = MagicMock(name="tokenizer")
     fake_tokenizer.return_value = MagicMock(
-        to=lambda _device: {"input_ids": torch.zeros(1, 4, dtype=torch.long),
-                            "attention_mask": torch.ones(1, 4, dtype=torch.long)},
+        to=lambda _device: {
+            "input_ids": torch.zeros(1, 4, dtype=torch.long),
+            "attention_mask": torch.ones(1, 4, dtype=torch.long),
+        },
     )
     fake_encoder = MagicMock(name="encoder")
     fake_encoder.eval.return_value = fake_encoder
