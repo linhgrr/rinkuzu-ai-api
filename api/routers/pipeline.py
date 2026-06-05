@@ -345,6 +345,8 @@ async def get_job_status(
         "error_message": job_doc.get("error_message"),
         "error_code": job_doc.get("error_code"),
         "user_message": job_doc.get("user_message"),
+        "eta_seconds": job_doc.get("eta_seconds"),
+        "retry_count": job_doc.get("retry_count", 0),
         "retryable": bool(job_doc.get("retryable", False)),
         "failed_batches": failed_batches if isinstance(failed_batches, list) else [],
         "warnings": warnings if isinstance(warnings, list) else [],
