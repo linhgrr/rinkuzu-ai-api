@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from api.config import get_settings
 from api.core.content_pipeline import PipelineStatus
+from api.core.content_pipeline.application.source_fetch import download_source_to_dir
 from api.core.shared import mongo_store
 from api.core.shared.persistence import (
     find_recent_active_job_by_source,
@@ -406,4 +407,88 @@ async def create_session_from_pipeline(
             "job_id": job_id,
             "status": "active",
         }
+    )
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=StandardResponse[dict], status_code=202)
+@limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
+async def cancel_job(
+    request: Request,
+    job_id: PathID,
+    user_id: Annotated[str, Depends(get_current_user)],
+    pipeline_service: Any = Depends(get_content_pipeline_service),
+) -> Any:
+    """Request cancellation of a pipeline job.
+
+    Works regardless of pipeline runtime availability so a stuck job can always
+    be cancelled. No-ops when the job has already reached a terminal state.
+    """
+    del request
+    job_doc = await load_pipeline_job_for_user(job_id, user_id)
+    if not job_doc:
+        raise PipelineNotFoundError(job_id)
+    status_value = job_doc.get("status")
+    if status_value in {
+        PipelineStatus.COMPLETED.value,
+        PipelineStatus.FAILED.value,
+        PipelineStatus.CANCELLED.value,
+    }:
+        return ok(
+            {"job_id": job_id, "status": status_value},
+            meta={"message": "Job already terminal"},
+        )
+    job = pipeline_service.build_job_from_payload(job_doc)
+    await pipeline_service.request_cancel(job)
+    return ok(
+        {"job_id": job_id, "status": "cancelling"},
+        meta={"message": "Cancellation requested"},
+    )
+
+
+@router.post("/jobs/{job_id}/retry", response_model=StandardResponse[dict], status_code=202)
+@limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
+async def retry_job_endpoint(
+    request: Request,
+    job_id: PathID,
+    user_id: Annotated[str, Depends(get_current_user)],
+    availability: Annotated[dict, Depends(get_content_pipeline_availability)],
+    pipeline_service: Any = Depends(get_content_pipeline_service),
+) -> Any:
+    """Retry a terminal, retryable pipeline job by re-fetching its S3 source."""
+    del request
+    if not availability["available"]:
+        raise ServiceUnavailableError("Content pipeline")
+    job_doc = await load_pipeline_job_for_user(job_id, user_id)
+    if not job_doc:
+        raise PipelineNotFoundError(job_id)
+    if job_doc.get("status") not in {
+        PipelineStatus.FAILED.value,
+        PipelineStatus.CANCELLED.value,
+    }:
+        raise AppError(
+            code="conflict",
+            message="Conflict",
+            detail="Job is not in a retryable state.",
+            status_code=409,
+        )
+    if not job_doc.get("retryable"):
+        raise _validation_error("This job cannot be retried.")
+    settings = get_settings()
+    job = pipeline_service.build_job_from_payload(job_doc)
+    try:
+        await pipeline_service.retry_job(
+            job,
+            download_source=download_source_to_dir,
+            max_retry_count=settings.content_pipeline_max_retry_count,
+        )
+    except RuntimeError as exc:
+        raise _validation_error(str(exc)) from None
+    return ok(
+        {
+            "job_id": job_id,
+            "status": job.status.value,
+            "status_url": f"/api/pipeline/jobs/{job_id}",
+            "retry_count": job.retry_count,
+        },
+        meta={"message": "Retry started."},
     )
