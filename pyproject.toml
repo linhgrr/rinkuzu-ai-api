@@ -188,6 +188,8 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = [
+    "apscheduler.*",
+    "apscheduler",
     "beanie.*",
     "beanie",
     "chromadb.*",
