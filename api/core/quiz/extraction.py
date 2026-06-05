@@ -17,7 +17,8 @@ from api.core.shared.document_text import (
     build_text_batches,
     extract_document_text_from_bytes,
 )
-from api.core.shared.llm import invoke_structured_completion, resolve_llm_api_key, with_llm_retry
+from api.core.shared.llm import invoke_structured_completion, resolve_llm_api_key
+from api.core.shared.retry import llm_retry_call
 
 MAX_PDF_BYTES = 50 * 1024 * 1024
 
@@ -184,7 +185,7 @@ def _extract_questions_from_document_text_sync(
                 ],
             )
 
-        payload = with_llm_retry(label="quiz extraction", fn=_invoke)
+        payload = llm_retry_call(label="quiz extraction", fn=_invoke)
         collected_questions.extend(payload.questions)
 
     return [question.to_public_dict() for question in collected_questions]

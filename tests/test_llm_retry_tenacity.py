@@ -1,22 +1,20 @@
-from types import SimpleNamespace
-
-from api.core.shared import llm as llm_module
+from api.core.shared import retry as retry_module
 
 
-def test_with_llm_retry_uses_tenacity_backoff(monkeypatch):
+def test_llm_retry_call_uses_tenacity_backoff(monkeypatch):
     sleep_calls: list[float] = []
     attempts = 0
 
     monkeypatch.setattr(
-        llm_module,
-        "get_settings",
-        lambda: SimpleNamespace(llm_retry_attempts=3, llm_retry_backoff_sec=2.5),
+        retry_module,
+        "resolve_llm_retry_policy",
+        lambda: (3, 2.5),
     )
 
     def record_sleep(seconds: float):
         sleep_calls.append(seconds)
 
-    monkeypatch.setattr(llm_module.time, "sleep", record_sleep)
+    monkeypatch.setattr(retry_module.time, "sleep", record_sleep)
 
     def fn():
         nonlocal attempts
@@ -25,6 +23,6 @@ def test_with_llm_retry_uses_tenacity_backoff(monkeypatch):
             raise ValueError("try again")
         return "ok"
 
-    assert llm_module.with_llm_retry(label="demo", fn=fn) == "ok"
+    assert retry_module.llm_retry_call(label="demo", fn=fn) == "ok"
     assert attempts == 3
     assert sleep_calls == [2.5, 5.0]

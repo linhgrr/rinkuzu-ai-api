@@ -66,9 +66,9 @@ class _NoopDocumentExtractor:
 def test_verify_single_relation_retries_and_succeeds(monkeypatch):
     """Should retry on failure and return the successful result."""
     # Make retry policy use 4 attempts with zero sleep so the test is fast.
-    import api.core.shared.llm as llm_module
+    import api.core.shared.retry as retry_module
 
-    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (4, 0.0))
+    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (4, 0.0))
 
     client = _SucceedAfterNClient(fail_times=2)
     chain = ExtractionChain(client=client, document_extractor=_NoopDocumentExtractor())
@@ -95,10 +95,10 @@ def test_verify_single_relation_retries_and_succeeds(monkeypatch):
 
 def test_verify_single_relation_returns_error_sentinel_on_exhaustion(monkeypatch):
     """After all retries are used up, must return a _verification_error, not raise."""
-    import api.core.shared.llm as llm_module
+    import api.core.shared.retry as retry_module
 
     # Only 2 attempts so the always-failing client exhausts quickly.
-    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (2, 0.0))
+    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
 
     client = _AlwaysFailClient()
     chain = ExtractionChain(client=client, document_extractor=_NoopDocumentExtractor())

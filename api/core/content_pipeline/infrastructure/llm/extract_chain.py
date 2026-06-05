@@ -21,7 +21,7 @@ from api.core.shared.document_text import (
     build_document_text_extractor,
     build_text_batches,
 )
-from api.core.shared.llm import make_async_llm_retry
+from api.core.shared.retry import llm_async_retry
 
 from .schemas import (
     ConceptExtraction,
@@ -252,7 +252,7 @@ class ExtractionChain:
         )
         return materialized
 
-    @make_async_llm_retry(label="extract batch")
+    @llm_async_retry(label="extract batch")
     async def _invoke_extraction_response(
         self,
         *,
@@ -308,17 +308,14 @@ class ExtractionChain:
         max_retries: int | None = None,
     ) -> ConceptExtractionPayload:
         del max_retries
-        return cast(
-            "ConceptExtractionPayload",
-            await self._invoke_extraction_response(
-                job_id=job_id,
-                subject_id=subject_id,
-                document_text=document_text,
-                previous_concepts=previous_concepts,
-            ),
+        return await self._invoke_extraction_response(
+            job_id=job_id,
+            subject_id=subject_id,
+            document_text=document_text,
+            previous_concepts=previous_concepts,
         )
 
-    @make_async_llm_retry(label="relation verification")
+    @llm_async_retry(label="relation verification")
     async def _parse_verification_response(
         self,
         user_message: str,
@@ -337,7 +334,7 @@ class ExtractionChain:
         concept_a: str,
         concept_b: str,
         pair_idx: int,
-        max_retries: int = 3,  # noqa: ARG002 — kept for API compatibility; effective attempts from resolve_retry_policy()
+        max_retries: int = 3,  # noqa: ARG002 — kept for API compatibility; effective attempts from resolve_llm_retry_policy()
     ) -> EvidenceVerification:
         user_message = (
             "## CONCEPTS TO ANALYZE\n\n"
@@ -346,9 +343,7 @@ class ExtractionChain:
             "Trả về đúng dữ liệu theo schema đã chỉ định. Không thêm văn bản ngoài schema."
         )
         try:
-            return cast(
-                "EvidenceVerification", await self._parse_verification_response(user_message)
-            )
+            return await self._parse_verification_response(user_message)
         except Exception as exc:
             logger.warning(
                 "Verification failed for pair {} after all retries: {}",

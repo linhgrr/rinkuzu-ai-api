@@ -6,7 +6,7 @@ from api.core.learning.exercise_types import (
     ShortAnswerEvaluationOutput,
 )
 from api.core.learning.prompts.grading import TheoryOutput
-from api.core.shared import llm as llm_module
+from api.core.shared import retry as retry_module
 
 
 def test_generate_exercise_retries_and_serializes(monkeypatch):
@@ -16,7 +16,7 @@ def test_generate_exercise_retries_and_serializes(monkeypatch):
         return ExerciseType.MCQ
 
     monkeypatch.setattr(exercise_gen, "select_exercise_type", _select_type)
-    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (2, 0.0))
+    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
 
     def _fake_invoke(*, schema, messages, temperature=0.3):
         attempts["count"] += 1
@@ -55,7 +55,7 @@ def test_evaluate_short_answer_returns_model_dump(monkeypatch):
     def _graded_output(**_kwargs):
         return ShortAnswerEvaluationOutput(is_correct=True, explanation="Đủ ý.", score=9)
 
-    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (1, 0.0))
+    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (1, 0.0))
     monkeypatch.setattr(exercise_gen, "_invoke_structured_llm", _graded_output)
 
     result = exercise_gen.evaluate_short_answer(
@@ -70,7 +70,7 @@ def test_evaluate_short_answer_returns_model_dump(monkeypatch):
 
 
 def test_generate_theory_returns_fallback_after_retries(monkeypatch):
-    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (2, 0.0))
+    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
 
     def _always_fail(**kwargs):
         raise RuntimeError("provider unavailable")
@@ -90,7 +90,7 @@ def test_generate_theory_returns_fallback_after_retries(monkeypatch):
 
 
 def test_generate_theory_returns_model_dump_on_success(monkeypatch):
-    monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (1, 0.0))
+    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (1, 0.0))
 
     def _fake_invoke(**_kwargs):
         return TheoryOutput(content="Nội dung", examples=["Ví dụ 1"])
