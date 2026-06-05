@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import pytest
@@ -205,6 +206,78 @@ async def test_retry_job_rejects_over_limit():
 
     with pytest.raises(RuntimeError):
         await svc.retry_job(job, download_source=download_source, max_retry_count=3)
+
+
+@pytest.mark.asyncio
+async def test_start_job_dedup_hit_returns_existing_without_scheduling():
+    saved = {}
+    run_calls = []
+    svc = _make_service(saved, run_calls)
+
+    existing_payload = {
+        "job_id": "existing1",
+        "filename": "a.pdf",
+        "subject_id": "a",
+        "user_id": "u",
+        "status": "extracting",
+        "source_s3_key": "k1",
+        "page_batch_size": 10,
+    }
+
+    async def find_recent_duplicate(user_id, source_s3_key, window_sec):
+        return existing_payload
+
+    job = await svc.start_job(
+        file_path="/tmp/a.pdf",
+        subject_id="a",
+        prs_threshold=0.5,
+        min_confidence=0.6,
+        apply_reduction=True,
+        user_id="u",
+        content_processor_available=True,
+        content_processor_src="",
+        page_batch_size=10,
+        source_s3_key="k1",
+        dedup_window_sec=30,
+        find_recent_duplicate=find_recent_duplicate,
+    )
+
+    assert job.job_id == "existing1"
+    assert run_calls == []
+    assert "existing1" not in saved  # no new persist/schedule for the duplicate
+
+
+@pytest.mark.asyncio
+async def test_start_job_no_dedup_creates_and_persists_source():
+    saved = {}
+    run_calls = []
+    svc = _make_service(saved, run_calls)
+
+    async def find_recent_duplicate(user_id, source_s3_key, window_sec):
+        return None
+
+    job = await svc.start_job(
+        file_path="/tmp/a.pdf",
+        subject_id="a",
+        prs_threshold=0.5,
+        min_confidence=0.6,
+        apply_reduction=True,
+        user_id="u",
+        content_processor_available=True,
+        content_processor_src="",
+        page_batch_size=10,
+        source_s3_key="k1",
+        dedup_window_sec=30,
+        find_recent_duplicate=find_recent_duplicate,
+    )
+
+    assert job.source_s3_key == "k1"
+    assert job.prs_threshold == 0.5
+    assert job.min_confidence == 0.6
+    assert job.apply_reduction is True
+    assert job.job_id in saved
+    await asyncio.sleep(0)
+    assert job.job_id in run_calls
 
 
 def test_build_job_from_payload_maps_fields():

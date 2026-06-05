@@ -17,7 +17,10 @@ from pydantic import BaseModel, Field
 from api.config import get_settings
 from api.core.content_pipeline import PipelineStatus
 from api.core.shared import mongo_store
-from api.core.shared.persistence import load_pipeline_job_for_user
+from api.core.shared.persistence import (
+    find_recent_active_job_by_source,
+    load_pipeline_job_for_user,
+)
 from api.core.shared.url_fetch import UnsafeURLError, stream_download
 from api.dependencies import (
     get_content_pipeline_availability,
@@ -126,6 +129,7 @@ class ProcessDocumentRequest(BaseModel):
     min_confidence: float = 0.6
     apply_reduction: bool = True
     page_batch_size: int = Field(default=10, ge=1, le=50)
+    source_s3_key: str | None = None
 
 
 @router.post("/process", response_model=StandardResponse[PipelineProcessResponse], status_code=202)
@@ -200,6 +204,13 @@ async def process_document(  # noqa: C901
     except OSError:
         raise _pipeline_internal_error("Failed to verify uploaded file.") from None
 
+    async def _find_recent_duplicate(
+        uid: str, source_s3_key: str, window_sec: int
+    ) -> dict[str, Any] | None:
+        return await find_recent_active_job_by_source(
+            user_id=uid, source_s3_key=source_s3_key, window_sec=window_sec
+        )
+
     try:
         job = await pipeline_service.start_job(
             file_path=str(save_path),
@@ -213,6 +224,9 @@ async def process_document(  # noqa: C901
             content_processor_available=availability["available"],
             content_processor_src=availability["src"] or "",
             page_batch_size=req.page_batch_size,
+            source_s3_key=req.source_s3_key,
+            dedup_window_sec=settings.content_pipeline_dedup_window_sec,
+            find_recent_duplicate=_find_recent_duplicate,
         )
     except (RuntimeError, ValueError, OSError):
         logger.exception("[PipelineRouter] Failed to initialize pipeline job for {}", req.filename)

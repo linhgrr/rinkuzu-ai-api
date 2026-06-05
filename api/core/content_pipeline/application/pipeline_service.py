@@ -20,7 +20,7 @@ from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress,
 from .ports import SaveJobFn  # noqa: TC001
 
 if TYPE_CHECKING:
-    from collections.abc import Coroutine
+    from collections.abc import Awaitable, Callable, Coroutine
 
 logger = logging.getLogger(__name__)
 
@@ -107,15 +107,34 @@ class PipelineService:
         content_processor_available: bool,
         content_processor_src: str,
         page_batch_size: int,
+        source_s3_key: str | None = None,
+        dedup_window_sec: int = 0,
+        find_recent_duplicate: Callable[[str, str, int], Awaitable[dict[str, Any] | None]]
+        | None = None,
     ) -> PipelineJob:
         if self._is_shutting_down:
             raise RuntimeError("Content pipeline is shutting down and cannot accept new jobs.")
+
+        if source_s3_key and find_recent_duplicate is not None and dedup_window_sec > 0:
+            existing = await find_recent_duplicate(user_id or "", source_s3_key, dedup_window_sec)
+            if isinstance(existing, dict):
+                logger.info(
+                    "Dedup hit: reusing existing job %s for source %s",
+                    existing.get("job_id"),
+                    source_s3_key,
+                )
+                return self.build_job_from_payload(existing)
+
         job = self._build_job(
             file_path=file_path,
             subject_id=subject_id,
             user_id=user_id,
             page_batch_size=page_batch_size,
         )
+        job.source_s3_key = source_s3_key
+        job.prs_threshold = prs_threshold
+        job.min_confidence = min_confidence
+        job.apply_reduction = apply_reduction
 
         if not content_processor_available:
             job.error_code = "pipeline_unavailable"

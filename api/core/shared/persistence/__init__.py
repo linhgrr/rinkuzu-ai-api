@@ -2,6 +2,7 @@ from .document_chunks import delete_chunks_for_job, replace_job_chunks
 from .document_ocr_records import load_document_ocr_record, save_document_ocr_record
 from .pipeline_jobs import (
     delete_pipeline_job_for_user,
+    find_recent_active_job_by_source,
     list_recent_pipeline_jobs,
     load_many_pipeline_jobs_for_user,
     load_pipeline_job,
@@ -31,6 +32,7 @@ __all__ = [
     "delete_pipeline_job_for_user",
     "delete_quiz_draft_for_user",
     "delete_subject_progress_for_user",
+    "find_recent_active_job_by_source",
     "list_recent_pipeline_jobs",
     "list_recent_quiz_drafts_for_user",
     "list_recent_subject_progress",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from beanie.odm.enums import SortDirection
@@ -8,7 +9,13 @@ from loguru import logger
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 from api.core.shared import mongo_store
 
-from .common import epoch_to_utc, normalize_for_bson, optional_epoch_to_utc, utc_to_epoch
+from .common import (
+    epoch_to_utc,
+    normalize_for_bson,
+    optional_epoch_to_utc,
+    utc_now,
+    utc_to_epoch,
+)
 from .document_chunks import delete_chunks_for_job
 from .documents import (
     PipelineJobActiveProjection,
@@ -235,6 +242,40 @@ async def list_active_pipeline_jobs(
         logger.exception("[PipelineStore] list_active failed user_id={}", user_id)
         return []
     return [_document_to_runtime_payload(doc) for doc in docs]
+
+
+async def find_recent_active_job_by_source(
+    *,
+    user_id: str,
+    source_s3_key: str,
+    window_sec: int,
+) -> dict[str, Any] | None:
+    """Most recent non-terminal job for this user+source within the window.
+
+    Used to dedup rapid double-submits of the same upload. Returns the
+    runtime payload of the newest match, or ``None`` if none exists.
+    """
+    cutoff = utc_now() - timedelta(seconds=window_sec)
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "source_s3_key": source_s3_key,
+        "status": {"$in": _NON_TERMINAL_STATUSES},
+        "created_at": {"$gte": cutoff},
+    }
+    try:
+        doc = await (
+            PipelineJobDocument.find(query)
+            .sort(("created_at", SortDirection.DESCENDING))
+            .first_or_none()
+        )
+    except Exception:
+        logger.exception(
+            "[PipelineStore] find_recent_active_by_source failed user_id={} source={}",
+            user_id,
+            source_s3_key,
+        )
+        return None
+    return None if doc is None else _document_to_runtime_payload(doc)
 
 
 async def list_recent_pipeline_jobs_all_status(
