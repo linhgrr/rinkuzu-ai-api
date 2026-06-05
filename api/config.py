@@ -156,6 +156,12 @@ class Settings(BaseSettings):
     content_pipeline_long_stage_retry_after_sec: int = 10
     content_pipeline_delayed_retry_after_sec: int = 15
     content_pipeline_job_delayed_after_sec: int = 360
+    # ── Pipeline resilience (reaper / recovery / dedup) ───────
+    content_pipeline_reaper_interval_sec: int = 60
+    content_pipeline_job_stalled_after_sec: int = 900
+    content_pipeline_recovery_max_age_sec: int = 3600
+    content_pipeline_dedup_window_sec: int = 30
+    content_pipeline_max_retry_count: int = 3
 
     # ── OCR API ────────────────────────────────────────────
     ocr_base_url: str = Field(
