@@ -9,7 +9,7 @@ from typing import Annotated, Any
 import uuid
 
 import aiofiles
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 import httpx
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -22,6 +22,7 @@ from api.core.shared.persistence import (
     find_recent_active_job_by_source,
     load_pipeline_job_for_user,
 )
+from api.core.shared.persistence.pipeline_jobs import list_recent_pipeline_jobs_all_status
 from api.core.shared.url_fetch import UnsafeURLError, stream_download
 from api.dependencies import (
     get_content_pipeline_availability,
@@ -251,6 +252,41 @@ async def process_document(  # noqa: C901
         },
         meta={"message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress."},
     )
+
+
+@router.get("/jobs", response_model=StandardResponse[dict])
+@limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
+async def list_jobs(
+    request: Request,
+    user_id: Annotated[str, Depends(get_current_user)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> Any:
+    """List recent pipeline jobs of all statuses for the current user.
+
+    Returns per-job live fields the frontend library needs: progress, retryable,
+    eta_seconds, retry_after_seconds, is_terminal, is_delayed.
+    """
+    del request
+    settings = get_settings()
+    now = time.time()
+    rows = await list_recent_pipeline_jobs_all_status(user_id=user_id, limit=limit)
+    items = []
+    for r in rows:
+        status_value = r["status"]
+        is_terminal = status_value in {"completed", "failed", "cancelled"}
+        heartbeat = float(r.get("heartbeat_at") or r.get("updated_at") or now)
+        is_delayed = (
+            not is_terminal
+            and heartbeat > 0
+            and (now - heartbeat) >= settings.content_pipeline_job_delayed_after_sec
+        )
+        r["is_terminal"] = is_terminal
+        r["is_delayed"] = is_delayed
+        r["retry_after_seconds"] = _resolve_pipeline_retry_after_seconds(
+            status_value=status_value, is_terminal=is_terminal, is_delayed=is_delayed
+        )
+        items.append(r)
+    return ok({"jobs": items, "count": len(items)})
 
 
 @router.get("/jobs/{job_id}", response_model=StandardResponse[PipelineJobStatusResponse])
