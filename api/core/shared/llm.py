@@ -13,7 +13,7 @@ import time
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from json_repair import loads as repair_json_loads
-from litellm import acompletion, completion
+from litellm import acompletion, completion, get_supported_openai_params
 from loguru import logger
 from pydantic import BaseModel
 from tenacity import (
@@ -31,6 +31,9 @@ from api.config import get_settings
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 _T = TypeVar("_T")
+
+_JSON_OBJECT_RESPONSE_FORMAT: dict[str, str] = {"type": "json_object"}
+_DEEPSEEK_PROVIDER = "deepseek"
 
 
 class LLMConfigurationError(ValueError):
@@ -139,9 +142,14 @@ def _resolve_custom_llm_provider(
     base_url: str,
     explicit_provider: str | None = None,
 ) -> str | None:
-    del model, base_url
     provider = (explicit_provider or "").strip()
-    return provider or None
+    if provider:
+        return provider
+    if model.strip().lower().startswith(f"{_DEEPSEEK_PROVIDER}/"):
+        return _DEEPSEEK_PROVIDER
+    if "api.deepseek.com" in base_url.lower():
+        return _DEEPSEEK_PROVIDER
+    return None
 
 
 def build_llm_provider_config(
@@ -474,6 +482,29 @@ def _litellm_kwargs(
     return payload
 
 
+def _supports_openai_param(config: LLMProviderConfig, param: str) -> bool:
+    try:
+        supported = get_supported_openai_params(
+            model=config.model,
+            custom_llm_provider=config.custom_llm_provider,
+        )
+    except Exception as exc:
+        logger.debug(
+            "[LLM] could not resolve supported params for model={} provider={}: {}",
+            config.model,
+            config.custom_llm_provider or "(auto)",
+            exc,
+        )
+        return False
+    return param in (supported or [])
+
+
+def _structured_response_format(config: LLMProviderConfig) -> dict[str, Any] | None:
+    if not _supports_openai_param(config, "response_format"):
+        return None
+    return _JSON_OBJECT_RESPONSE_FORMAT
+
+
 class LiteLLMClient(LLMClient):
     """Project-standard LLM client backed by LiteLLM."""
 
@@ -542,7 +573,7 @@ class LiteLLMClient(LLMClient):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 thinking_enabled=thinking_enabled,
-                response_format={"type": "json_object"},
+                response_format=_structured_response_format(self.config),
             )
         )
         content = extract_llm_text(_extract_response_content(response))
@@ -566,7 +597,7 @@ class LiteLLMClient(LLMClient):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 thinking_enabled=thinking_enabled,
-                response_format={"type": "json_object"},
+                response_format=_structured_response_format(self.config),
             )
         )
         content = extract_llm_text(_extract_response_content(response))

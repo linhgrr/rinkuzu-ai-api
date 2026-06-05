@@ -71,11 +71,17 @@ def test_invoke_structured_completion_uses_json_object_response_format(monkeypat
     monkeypatch.setattr(llm_module, "completion", fake_completion)
     monkeypatch.setattr(
         llm_module,
+        "get_supported_openai_params",
+        lambda *, model, custom_llm_provider: ["response_format"],
+    )
+    monkeypatch.setattr(
+        llm_module,
         "get_settings",
         lambda: SimpleNamespace(
             llm_base_url="https://api.deepseek.com",
             llm_api_key="test-key",  # pragma: allowlist secret
             llm_model="model-x",
+            llm_custom_provider="deepseek",
             llm_timeout_sec=30,
             exercise_llm_model=None,
             llm_retry_attempts=1,
@@ -99,3 +105,45 @@ def test_invoke_structured_completion_uses_json_object_response_format(monkeypat
     assert isinstance(messages, list)
     assert messages[0]["role"] == "system"
     assert "Return valid json only" in messages[0]["content"]
+
+
+def test_invoke_structured_completion_omits_response_format_when_provider_does_not_support_it(
+    monkeypatch,
+):
+    captured: dict[str, object] = {}
+
+    def fake_completion(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"message": "ok"}'))]
+        )
+
+    monkeypatch.setattr(llm_module, "completion", fake_completion)
+    monkeypatch.setattr(
+        llm_module,
+        "get_supported_openai_params",
+        lambda *, model, custom_llm_provider: [],
+    )
+    monkeypatch.setattr(
+        llm_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            llm_base_url="https://api.unsupported.example",
+            llm_api_key="test-key",  # pragma: allowlist secret
+            llm_model="model-x",
+            llm_custom_provider="unsupported",
+            llm_timeout_sec=30,
+            exercise_llm_model=None,
+            llm_retry_attempts=1,
+            llm_retry_backoff_sec=0.0,
+        ),
+    )
+
+    result = invoke_structured_completion(
+        schema=OutputSchema,
+        model="model-x",
+        messages=[{"role": "user", "content": "hello"}],
+    )
+
+    assert result == OutputSchema(message="ok")
+    assert "response_format" not in captured

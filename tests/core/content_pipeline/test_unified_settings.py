@@ -18,7 +18,7 @@ def test_normalize_llm_base_url_requires_explicit_value():
     assert llm_module.normalize_llm_base_url("http://localhost:6969/") == "http://localhost:6969"
 
 
-def test_build_llm_provider_config_passes_model_through(monkeypatch):
+def test_build_llm_provider_config_infers_deepseek_provider(monkeypatch):
     monkeypatch.setattr(
         llm_module,
         "get_settings",
@@ -34,7 +34,7 @@ def test_build_llm_provider_config_passes_model_through(monkeypatch):
     config = llm_module.build_llm_provider_config()
 
     assert config.model == "deepseek-v4-flash"
-    assert config.custom_llm_provider is None
+    assert config.custom_llm_provider == "deepseek"
 
 
 def test_build_llm_provider_config_allows_explicit_custom_provider(monkeypatch):

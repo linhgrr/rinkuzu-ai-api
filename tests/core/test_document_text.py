@@ -127,7 +127,7 @@ def test_landing_ai_document_text_extractor_posts_pdf_to_api():
     assert len(fake_client.calls) == 1
     request = fake_client.calls[0]
     assert request["url"] == "https://api.va.landing.ai/v1/ade/parse"
-    assert request["headers"] == {"Authorization": "Bearer secret"}
+    assert request["headers"] == {"Authorization": "Bearer unit-test-key"}
     assert request["data"] == {"model": "dpt-2-mini", "split": "page"}
     file_payload = request["files"]["document"]
     assert file_payload[0] == "scan.pdf"
