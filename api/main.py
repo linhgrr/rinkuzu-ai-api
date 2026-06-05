@@ -22,6 +22,8 @@ from slowapi.errors import RateLimitExceeded
 from .config import Settings, get_settings
 from .core.content_pipeline.application.pipeline_runner import PipelineRunner
 from .core.content_pipeline.application.pipeline_service import PipelineService
+from .core.content_pipeline.application.recovery import PipelineJanitor
+from .core.content_pipeline.application.source_fetch import download_source_to_dir
 from .core.content_pipeline.application.stages.execution import shutdown_pipeline_executor
 from .core.content_pipeline.application.stages.model_worker import (
     shutdown_sentence_transformer_worker,
@@ -37,6 +39,7 @@ from .core.learning.exercise_service import ExerciseService
 from .core.learning.session import SessionManager
 from .core.shared import mongo_store
 from .core.shared.persistence import load_pipeline_job, save_pipeline_job
+from .core.shared.persistence.pipeline_jobs import list_active_pipeline_jobs
 from .exceptions import error_json_response, register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
 from .observability import setup_otel, shutdown_otel
@@ -140,6 +143,30 @@ def _init_pipeline(app: FastAPI) -> None:
 
     app.state.content_pipeline_runner = pipeline_runner
     app.state.content_pipeline_service = pipeline_service
+    app.state.pipeline_janitor = _build_pipeline_janitor(pipeline_service, settings)
+
+
+def _build_pipeline_janitor(
+    pipeline_service: PipelineService, settings: Settings
+) -> PipelineJanitor:
+    async def _recover() -> None:
+        await pipeline_service.recover_interrupted_jobs(
+            list_active=list_active_pipeline_jobs,
+            download_source=download_source_to_dir,
+            recovery_max_age_sec=settings.content_pipeline_recovery_max_age_sec,
+        )
+
+    async def _reap() -> None:
+        await pipeline_service.reap_stalled_jobs(
+            list_active=list_active_pipeline_jobs,
+            stalled_after_sec=settings.content_pipeline_job_stalled_after_sec,
+        )
+
+    return PipelineJanitor(
+        recover=_recover,
+        reap=_reap,
+        reaper_interval_sec=settings.content_pipeline_reaper_interval_sec,
+    )
 
 
 def _log_llm_config(settings: Settings) -> None:
@@ -215,12 +242,19 @@ async def lifespan(app: FastAPI) -> Any:
     _init_pipeline(app)
     _purge_stale_uploads()
 
+    janitor = getattr(app.state, "pipeline_janitor", None)
+    if janitor is not None and CONTENT_PROCESSOR_AVAILABLE and mongo_store.is_available():
+        await janitor.start()
+
     logger.info("[2/2] Server ready!")
     logger.info("=" * 60)
 
     yield
 
     logger.info("Shutting down...")
+    janitor = getattr(app.state, "pipeline_janitor", None)
+    if janitor is not None:
+        await janitor.stop()
     pipeline_service = getattr(app.state, "content_pipeline_service", None)
     if pipeline_service is not None:
         await pipeline_service.shutdown(timeout_sec=2.0)
