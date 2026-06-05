@@ -17,7 +17,7 @@ class PipelineProcessResponse(BaseModel):
     status: PipelineStatus
     status_url: str
     page_batch_size: int = 10
-    retry_after_seconds: int = 2
+    retry_after_seconds: int = 3
 
 
 class PipelineFailedBatchResponse(BaseModel):
@@ -89,7 +89,7 @@ class PipelineJobStatusResponse(BaseModel):
     created_at: float = 0.0
     updated_at: float = 0.0
     heartbeat_at: float = 0.0
-    retry_after_seconds: int = 2
+    retry_after_seconds: int = 3
     partial_graph: PipelinePartialGraphResponse | None = None
     result: PipelineJobResultResponse | None = None
 

@@ -150,8 +150,10 @@ class Settings(BaseSettings):
         ),
     )
     content_pipeline_extraction_secs_per_page: float = 20.0
-    content_pipeline_default_retry_after_sec: int = 2
-    content_pipeline_delayed_retry_after_sec: int = 5
+    content_pipeline_default_retry_after_sec: int = 3
+    content_pipeline_active_retry_after_sec: int = 5
+    content_pipeline_long_stage_retry_after_sec: int = 10
+    content_pipeline_delayed_retry_after_sec: int = 15
     content_pipeline_job_delayed_after_sec: int = 360
 
     # ── OCR API ────────────────────────────────────────────

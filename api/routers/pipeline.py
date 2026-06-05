@@ -48,6 +48,21 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 _MAX_FILENAME_LENGTH = 200
 
+_LONG_POLL_STATUSES = {
+    PipelineStatus.LOADING.value,
+    PipelineStatus.CHUNKING.value,
+    PipelineStatus.EXTRACTING.value,
+    PipelineStatus.RANKING.value,
+    PipelineStatus.VERIFYING.value,
+    PipelineStatus.BUILDING_GRAPH.value,
+    PipelineStatus.OPTIMIZING.value,
+}
+
+_ACTIVE_POLL_STATUSES = {
+    PipelineStatus.EMBEDDING.value,
+    PipelineStatus.MERGING.value,
+}
+
 
 def _validation_error(detail: str) -> AppError:
     return AppError(
@@ -65,6 +80,24 @@ def _pipeline_internal_error(detail: str) -> AppError:
         detail=detail,
         status_code=500,
     )
+
+
+def _resolve_pipeline_retry_after_seconds(
+    *,
+    status_value: str,
+    is_terminal: bool,
+    is_delayed: bool,
+) -> int:
+    settings = get_settings()
+    if is_terminal:
+        return 0
+    if is_delayed:
+        return settings.content_pipeline_delayed_retry_after_sec
+    if status_value in _LONG_POLL_STATUSES:
+        return settings.content_pipeline_long_stage_retry_after_sec
+    if status_value in _ACTIVE_POLL_STATUSES:
+        return settings.content_pipeline_active_retry_after_sec
+    return settings.content_pipeline_default_retry_after_sec
 
 
 @router.get("/status", response_model=StandardResponse[dict])
@@ -234,10 +267,10 @@ async def get_job_status(
         and heartbeat_at > 0
         and (now - heartbeat_at) >= settings.content_pipeline_job_delayed_after_sec
     )
-    retry_after_seconds = (
-        settings.content_pipeline_delayed_retry_after_sec
-        if is_delayed
-        else settings.content_pipeline_default_retry_after_sec
+    retry_after_seconds = _resolve_pipeline_retry_after_seconds(
+        status_value=status_value,
+        is_terminal=is_terminal,
+        is_delayed=is_delayed,
     )
     result = job_doc.get("result") or {}
     failed_batches = result.get("failed_batches")

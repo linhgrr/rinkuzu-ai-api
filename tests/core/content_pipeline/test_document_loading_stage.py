@@ -77,7 +77,9 @@ def test_load_document_chunks_updates_progress_and_total_chunks():
     assert job.total_pages == 1
     assert calls == [
         (PipelineStatus.LOADING, "Loading PDF...", 0.05),
-        (PipelineStatus.LOADING, "Loading PDF...", 0.10),
+        (PipelineStatus.LOADING, "Checking OCR cache...", 0.05),
+        (PipelineStatus.CHUNKING, "Chunking PDF text (1 pages)...", 0.05),
+        (PipelineStatus.CHUNKING, "PDF text chunked", 0.10),
     ]
 
 

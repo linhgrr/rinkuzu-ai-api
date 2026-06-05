@@ -252,9 +252,12 @@ async def load_or_extract_document_text_cached(
     resolve_file_size_bytes: ResolveFileSizeBytesFn | None = None,
 ) -> ExtractedDocumentText:
     if mongo_store.is_available():
+        logger.info("[DocumentText] OCR cache lookup file={} hash={}", file_name, file_hash)
         cached_record = await load_document_ocr_record(file_hash)
         if cached_record is not None:
+            logger.info("[DocumentText] OCR cache hit file={} hash={}", file_name, file_hash)
             return ocr_record_to_extracted_document_text(cached_record)
+        logger.info("[DocumentText] OCR cache miss file={} hash={}", file_name, file_hash)
 
     document_text = await extract_document_text()
     resolved_file_size_bytes = file_size_bytes
@@ -262,6 +265,7 @@ async def load_or_extract_document_text_cached(
         resolved_file_size_bytes = await resolve_file_size_bytes()
 
     if mongo_store.is_available():
+        logger.info("[DocumentText] OCR cache save file={} hash={}", file_name, file_hash)
         await save_document_ocr_record(
             file_hash=file_hash,
             file_name=file_name,
