@@ -189,10 +189,12 @@ class PipelineRunner:
                         )
                     return
 
+                document_text_holder: dict[str, Any] = {}
                 chunks = await load_document_chunks(
                     job,
                     file_path=file_path,
                     persist_job_state=self._persist_job_state,
+                    document_text_out=document_text_holder,
                 )
 
                 # Persist document chunks for RAG (MongoDB + ChromaDB)
@@ -213,6 +215,7 @@ class PipelineRunner:
                     extraction_chain=extraction_chain,
                     postprocess_concepts=bindings.postprocess_concepts,
                     persist_job_state=self._persist_job_state,
+                    document_text=document_text_holder.get("document_text"),
                 )
                 failure_ratio = (
                     job.failed_batch_count / job.batch_count if job.batch_count > 0 else 0.0

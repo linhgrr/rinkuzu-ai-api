@@ -11,6 +11,7 @@ from api.core.shared.document_text import DocumentPageText, ExtractedDocumentTex
 def test_load_document_chunks_updates_progress_and_total_chunks():
     job = PipelineJob(job_id="job-1", filename="lesson.pdf", subject_id="algebra")
     calls: list[tuple[PipelineStatus, str, float]] = []
+    document_text_out = {}
 
     async def persist_job_state(job_arg, status, step, progress):
         assert job_arg is job
@@ -67,12 +68,14 @@ def test_load_document_chunks_updates_progress_and_total_chunks():
                 job,
                 file_path="fixtures/lesson.pdf",
                 persist_job_state=persist_job_state,
+                document_text_out=document_text_out,
             )
         )
     finally:
         monkeypatch.undo()
 
     assert chunks == ["chunk-1", "chunk-2", "chunk-3"]
+    assert document_text_out["document_text"].text == "OCR text"
     assert job.total_chunks == 3
     assert job.total_pages == 1
     assert calls == [

@@ -149,6 +149,7 @@ class Settings(BaseSettings):
             "ADAPTIVE_LLM_RETRY_BACKOFF_SEC",
         ),
     )
+    content_pipeline_cache_restore_timeout_sec: float = 10.0
     content_pipeline_extraction_secs_per_page: float = 20.0
     content_pipeline_default_retry_after_sec: int = 3
     content_pipeline_active_retry_after_sec: int = 5

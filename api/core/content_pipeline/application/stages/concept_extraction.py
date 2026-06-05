@@ -40,6 +40,7 @@ async def extract_concepts_from_chunks(
     extraction_chain: Any,
     postprocess_concepts: Callable[[list[Any]], list[Any]],
     persist_job_state: PersistJobStateFn,
+    document_text: Any = None,
 ) -> list[Any]:
     """Extract concepts from loaded document chunks and persist stage progress."""
     await persist_job_state(
@@ -57,6 +58,7 @@ async def extract_concepts_from_chunks(
             file_path,
             job.subject_id,
             job.page_batch_size,
+            document_text=document_text,
             job_id=job.job_id,
         ),
         timeout=extraction_timeout,

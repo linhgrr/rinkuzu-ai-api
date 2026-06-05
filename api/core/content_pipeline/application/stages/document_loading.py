@@ -31,6 +31,7 @@ async def load_document_chunks(
     *,
     file_path: str,
     persist_job_state: PersistJobStateFn,
+    document_text_out: dict[str, Any] | None = None,
 ) -> list[Any]:
     """Load and chunk a source document while persisting job progress."""
     await persist_job_state(
@@ -74,6 +75,8 @@ async def load_document_chunks(
         len(document_text.text),
         bool(document_text.metadata.get("ocr_cache_hit", False)),
     )
+    if document_text_out is not None:
+        document_text_out["document_text"] = document_text
 
     content = extracted_document_text_to_content_payload(
         document_text,

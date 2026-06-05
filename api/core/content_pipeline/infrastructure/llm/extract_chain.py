@@ -17,6 +17,7 @@ from api.core.content_pipeline.infrastructure.prompts import (
 from api.core.content_pipeline.infrastructure.utils.timeit import atimeit
 from api.core.shared.document_text import (
     DocumentTextExtractor,
+    ExtractedDocumentText,
     build_document_text_extractor,
     build_text_batches,
 )
@@ -70,6 +71,7 @@ class ExtractionChain:
         subject_id: str,
         page_batch_size: int | None = None,
         *,
+        document_text: ExtractedDocumentText | None = None,
         max_previous_concepts: int = 20,
         job_id: str | None = None,
     ) -> list[ConceptExtraction]:
@@ -79,7 +81,11 @@ class ExtractionChain:
         self.last_usage = []
         extraction_started_at = time.perf_counter()
 
-        document_text = self.document_extractor.extract_file(file_path)
+        if document_text is None:
+            document_text = self.document_extractor.extract_file(file_path)
+            source = "ocr"
+        else:
+            source = "pipeline_cache"
         pending_batches = build_text_batches(document_text.pages, batch_size=batch_size)
 
         page_count = int(document_text.metadata.get("page_count") or len(document_text.pages))
@@ -90,12 +96,13 @@ class ExtractionChain:
         processed_concepts = 0
 
         logger.info(
-            "extract start job_id={} file={} subject={} pages={} batch_size={}",
+            "extract start job_id={} file={} subject={} pages={} batch_size={} source={}",
             job_id or "-",
             Path(file_path).name,
             subject_id,
             page_count,
             batch_size,
+            source,
         )
 
         while pending_batches:

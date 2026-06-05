@@ -9,6 +9,7 @@ from typing import Any
 
 from loguru import logger
 
+from api.config import get_settings
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from ..ports import SaveJobFn  # noqa: TC001
@@ -73,9 +74,22 @@ async def try_restore_completed_job_from_s3(
     )
     cache_key = f"cache/{file_hash}.json"
 
+    now = time.time()
     job.status = PipelineStatus.LOADING
     job.current_step = "Kiểm tra cache trên S3..."
     job.progress = PipelineProgress.CACHE_RESTORE
+    job.updated_at = now
+    job.heartbeat_at = now
+    await save_job(job)
+
+    settings = get_settings()
+    cache_timeout_sec = max(1.0, float(settings.content_pipeline_cache_restore_timeout_sec))
+    logger.info(
+        "[Pipeline] Checking S3 cache job_id={} key={} timeout_sec={}",
+        job.job_id,
+        cache_key,
+        cache_timeout_sec,
+    )
     saved = False
     try:
         response: dict[str, Any] = await run_blocking_stage(
@@ -83,10 +97,12 @@ async def try_restore_completed_job_from_s3(
             Bucket=bucket_name,
             Key=cache_key,
             stage_name="s3_cache_restore",
+            timeout_sec=cache_timeout_sec,
         )
         cache_bytes = await run_blocking_stage(
             response["Body"].read,
             stage_name="s3_cache_body_read",
+            timeout_sec=cache_timeout_sec,
         )
         cache_content = cache_bytes.decode("utf-8")
         job.result = json.loads(cache_content)
@@ -97,8 +113,14 @@ async def try_restore_completed_job_from_s3(
         job.completed_at = time.time()
         logger.info("[Pipeline] Job {} loaded from S3 cache {}", job.job_id, cache_key)
         saved = await save_job(job)
-    except Exception:
-        logger.debug("[Pipeline] Cache miss: {}", cache_key)
+    except Exception as exc:
+        logger.warning(
+            "[Pipeline] S3 cache unavailable/miss job_id={} key={} error_type={} error={}",
+            job.job_id,
+            cache_key,
+            type(exc).__name__,
+            str(exc)[:200],
+        )
         return cache_key
     if not saved:
         raise RuntimeError("Failed to persist S3-cached pipeline result to MongoDB")

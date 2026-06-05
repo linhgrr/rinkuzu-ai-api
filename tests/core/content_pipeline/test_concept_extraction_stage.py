@@ -16,8 +16,16 @@ class _FakeExtractionChain:
         self.last_batches = [{"batch_index": 0}, {"batch_index": 1}, {"batch_index": 2}]
         self.last_failed_batches = [{"batch_index": 2, "reason": "Error: boom"}]
 
-    async def extract_from_document(self, file_path, subject_id, page_batch_size, *, job_id=None):
-        self.calls.append((file_path, subject_id, page_batch_size, job_id))
+    async def extract_from_document(
+        self,
+        file_path,
+        subject_id,
+        page_batch_size,
+        *,
+        document_text=None,
+        job_id=None,
+    ):
+        self.calls.append((file_path, subject_id, page_batch_size, document_text, job_id))
         return self._response
 
 
@@ -76,7 +84,9 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
     )
 
     assert [concept.concept_id for concept in extracted] == ["c2", "c1"]
-    assert extraction_chain.calls == [("/tmp/lesson.pdf", "algebra", 10, "job-1")]  # noqa: S108
+    assert extraction_chain.calls == [
+        ("/tmp/lesson.pdf", "algebra", 10, None, "job-1")  # noqa: S108
+    ]
     assert job.batch_count == 3
     assert job.failed_batch_count == 1
     assert job.partial_success is True

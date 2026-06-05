@@ -84,11 +84,14 @@ def test_try_restore_completed_job_from_s3_hashes_and_reads_via_blocking_stage(m
             return {"Body": _Body()}
 
     async def fake_run_blocking_stage(func, *args, stage_name, timeout_sec=None, **kwargs):
-        del timeout_sec
+        assert timeout_sec in {None, 10.0}
         stage_names.append(stage_name)
         return func(*args, **kwargs)
 
+    saved_steps: list[str] = []
+
     async def save_job(_job):
+        saved_steps.append(_job.current_step)
         return True
 
     monkeypatch.setattr(cache_restore_stage, "run_blocking_stage", fake_run_blocking_stage)
@@ -107,5 +110,6 @@ def test_try_restore_completed_job_from_s3_hashes_and_reads_via_blocking_stage(m
 
     assert cache_key == "cache/hash-123.json"
     assert stage_names == ["s3_cache_hash", "s3_cache_restore", "s3_cache_body_read"]
+    assert saved_steps == ["Kiểm tra cache trên S3...", "Loaded from S3 cache"]
     assert job.status == PipelineStatus.COMPLETED
     assert job.current_step == "Loaded from S3 cache"

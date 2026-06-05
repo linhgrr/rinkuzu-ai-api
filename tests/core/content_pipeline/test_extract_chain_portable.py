@@ -243,3 +243,40 @@ def test_extract_from_document_uses_text_batches_and_tracks_failed_batches():
             "reason": "Error: missing signal",
         }
     ]
+
+
+def test_extract_from_document_reuses_provided_document_text_without_ocr():
+    document_text = ExtractedDocumentText(
+        text="## Trang 1\nAlpha",
+        pages=[DocumentPageText(page_number=1, text="Alpha")],
+        metadata={"page_count": 1, "file_name": "sample.pdf"},
+    )
+
+    class _Extractor:
+        def extract_file(self, _file_path: str) -> ExtractedDocumentText:
+            raise AssertionError("should reuse pipeline OCR text")
+
+    chain = ExtractionChain(client=_RetryClient(), document_extractor=_Extractor())
+    seen_ranges: list[tuple[int, int]] = []
+
+    async def fake_extract_single_batch(
+        *, job_id, subject_id, batch, previous_concepts, source_name
+    ):
+        del job_id, previous_concepts, source_name
+        seen_ranges.append((batch["page_start"], batch["page_end"]))
+        return ConceptExtraction(concepts=[], subject_id=subject_id, notes=None)
+
+    chain._extract_single_batch = fake_extract_single_batch  # type: ignore[method-assign]
+
+    async def _run():
+        return await chain.extract_from_document(
+            "sample.pdf",
+            "math",
+            page_batch_size=1,
+            document_text=document_text,
+        )
+
+    results = asyncio.run(_run())
+
+    assert len(results) == 1
+    assert seen_ranges == [(1, 1)]
