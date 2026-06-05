@@ -11,11 +11,14 @@ from api.core.shared import mongo_store
 from .common import epoch_to_utc, normalize_for_bson, optional_epoch_to_utc, utc_to_epoch
 from .document_chunks import delete_chunks_for_job
 from .documents import (
+    PipelineJobActiveProjection,
     PipelineJobDocument,
     PipelineJobListProjection,
     PipelineJobLookupProjection,
 )
 from .subject_progress import delete_subject_progress_for_user
+
+_NON_TERMINAL_STATUSES = [s.value for s in PipelineStatus if not s.is_terminal]
 
 
 def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
@@ -214,6 +217,71 @@ async def list_recent_pipeline_jobs(
             "completed_at": utc_to_epoch(row.completed_at, default=0.0),
         }
         for row in rows
+    ]
+
+
+async def list_active_pipeline_jobs(
+    *,
+    user_id: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """Full runtime payloads for non-terminal jobs (reaper/recovery scans)."""
+    query: dict[str, Any] = {"status": {"$in": _NON_TERMINAL_STATUSES}}
+    if user_id is not None:
+        query["user_id"] = user_id
+    try:
+        docs = await PipelineJobDocument.find(query).limit(limit).to_list()
+    except Exception:
+        logger.exception("[PipelineStore] list_active failed user_id={}", user_id)
+        return []
+    return [_document_to_runtime_payload(doc) for doc in docs]
+
+
+async def list_recent_pipeline_jobs_all_status(
+    *,
+    user_id: str,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Library listing: recent jobs of all statuses for one user."""
+    try:
+        rows = await (
+            PipelineJobDocument.find(
+                PipelineJobDocument.user_id == user_id,
+                projection_model=PipelineJobActiveProjection,
+            )
+            .sort(("updated_at", SortDirection.DESCENDING))
+            .limit(limit)
+            .to_list()
+        )
+    except Exception:
+        logger.exception("[PipelineStore] list_all_status failed user_id={}", user_id)
+        return []
+    return [
+        {
+            "job_id": r.job_id,
+            "filename": r.filename,
+            "subject_id": r.subject_id,
+            "status": r.status.value,
+            "current_step": r.current_step,
+            "progress": r.progress,
+            "page_batch_size": r.page_batch_size,
+            "batch_count": r.batch_count,
+            "failed_batch_count": r.failed_batch_count,
+            "partial_success": r.partial_success,
+            "concepts_extracted": r.concepts_extracted,
+            "concepts_after_merge": r.concepts_after_merge,
+            "relations_verified": r.relations_verified,
+            "error_code": r.error_code,
+            "user_message": r.user_message,
+            "retryable": r.retryable,
+            "retry_count": r.retry_count,
+            "eta_seconds": r.eta_seconds,
+            "created_at": utc_to_epoch(r.created_at, default=0.0),
+            "updated_at": utc_to_epoch(r.updated_at, default=0.0),
+            "heartbeat_at": utc_to_epoch(r.heartbeat_at, default=0.0),
+            "completed_at": utc_to_epoch(r.completed_at, default=0.0) if r.completed_at else None,
+        }
+        for r in rows
     ]
 
 
