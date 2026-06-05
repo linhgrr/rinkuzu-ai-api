@@ -16,6 +16,7 @@ from api.core.content_pipeline.infrastructure.runtime import (
     get_s3_client,
 )
 
+from .cancellation import JobCancelledError, raise_if_cancelled
 from .ports import LoadJobFn, PersistJobStateFn, SaveJobFn  # noqa: TC001
 from .stages.cache_restore import (
     try_restore_completed_job_from_mongo,
@@ -116,6 +117,31 @@ class PipelineRunner:
         self._persist_job_state = persist_job_state
         self._chunk_chroma_store = chunk_chroma_store
 
+    async def _check_cancelled(self, job: PipelineJob) -> None:
+        """Re-read the job document from Mongo and raise if cancel was requested.
+
+        The in-memory ``job`` object is not updated by a concurrent API write,
+        so we must fetch the latest document here before checking the flag.
+        """
+        doc = await self._load_job(job.job_id)
+        if doc and doc.get("cancel_requested"):
+            job.cancel_requested = True
+        raise_if_cancelled(job)
+
+    async def _persist_cancelled(self, job: PipelineJob, exc: JobCancelledError) -> None:
+        """Persist CANCELLED terminal state — distinct from FAILED."""
+        import time as _time
+
+        now = _time.time()
+        job.error_code = "pipeline_cancelled"
+        job.user_message = "Processing was cancelled."
+        job.retryable = True
+        job.mark_cancelled(str(exc))
+        job.completed_at = now
+        job.updated_at = now
+        job.heartbeat_at = now
+        await self._save_job(job)
+
     @staticmethod
     def _cleanup_upload(file_path: str) -> None:
         path = Path(file_path)
@@ -197,6 +223,9 @@ class PipelineRunner:
                     document_text_out=document_text_holder,
                 )
 
+                # Checkpoint 1: after document loading
+                await self._check_cancelled(job)
+
                 # Persist document chunks for RAG (MongoDB + ChromaDB)
                 await persist_document_chunks(
                     job,
@@ -217,6 +246,10 @@ class PipelineRunner:
                     persist_job_state=self._persist_job_state,
                     document_text=document_text_holder.get("document_text"),
                 )
+
+                # Checkpoint 2: after concept extraction
+                await self._check_cancelled(job)
+
                 failure_ratio = (
                     job.failed_batch_count / job.batch_count if job.batch_count > 0 else 0.0
                 )
@@ -239,12 +272,18 @@ class PipelineRunner:
                     batch_size=batch_size,
                 )
 
+                # Checkpoint 3: after embeddings
+                await self._check_cancelled(job)
+
                 all_concepts = await merge_duplicate_concepts(
                     job,
                     concepts=all_concepts,
                     merge_by_name=bindings.merge_by_name,
                     persist_job_state=self._persist_job_state,
                 )
+
+                # Checkpoint 4: after concept merge
+                await self._check_cancelled(job)
 
                 relation_result = await relation_engine.discover_relations(
                     job=job,
@@ -253,6 +292,9 @@ class PipelineRunner:
                     min_confidence=min_confidence,
                     persist_job_state=self._persist_job_state,
                 )
+
+                # Checkpoint 5: after relation discovery
+                await self._check_cancelled(job)
 
                 graph, graph_build_stats = await build_knowledge_graph(
                     job,
@@ -263,6 +305,9 @@ class PipelineRunner:
                 )
                 extracted_relation_count = graph_build_stats["extracted_relation_count"]
                 verified_relation_count = graph_build_stats["verified_relation_count"]
+
+                # Checkpoint 6: after graph build
+                await self._check_cancelled(job)
 
                 graph, optimization_stats = await optimize_graph(
                     job,
@@ -322,6 +367,9 @@ class PipelineRunner:
                 job.result["partial_success"] = job.partial_success
                 populate_job_metrics_from_result(job)
 
+                # Checkpoint 7: right before finalization
+                await self._check_cancelled(job)
+
                 await complete_pipeline_job(
                     job,
                     persist_job_state=self._persist_job_state,
@@ -332,6 +380,9 @@ class PipelineRunner:
                     bucket_name=bucket_name,
                     cache_key=cache_key,
                 )
+        except JobCancelledError as exc:
+            await self._persist_cancelled(job, exc)
+            return
         except asyncio.CancelledError as exc:
             await persist_terminal_failure(
                 job,
