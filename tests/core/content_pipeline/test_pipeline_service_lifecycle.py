@@ -309,3 +309,39 @@ def test_build_job_from_payload_maps_fields():
     assert job.retry_count == 2
     assert job.page_batch_size == 8
     assert job.total_pages == 12
+
+
+def test_build_job_from_payload_preserves_result_and_graph_fields():
+    saved = {}
+    svc = _make_service(saved, [])
+    payload = {
+        "job_id": "p9",
+        "filename": "a.pdf",
+        "subject_id": "a",
+        "user_id": "u",
+        "status": "failed",
+        "progress": 0.6,
+        "result": {"graph": {"nodes": [1], "edges": []}, "stats": {"num_nodes": 1}},
+        "graph_stats": {"num_nodes": 1, "num_edges": 0, "is_dag": True},
+        "partial_graph": {"nodes": [{"id": "c1"}], "edges": []},
+        "error_message": "boom",
+        "total_chunks": 7,
+        "batch_count": 3,
+        "failed_batch_count": 1,
+        "partial_success": True,
+        "concepts_extracted": 5,
+        "concepts_after_merge": 4,
+        "relations_verified": 2,
+    }
+    job = svc.build_job_from_payload(payload)
+    assert job.result == payload["result"]
+    assert job.graph_stats == payload["graph_stats"]
+    assert job.partial_graph == payload["partial_graph"]
+    assert job.error_message == "boom"
+    assert job.total_chunks == 7
+    assert job.batch_count == 3
+    assert job.failed_batch_count == 1
+    assert job.partial_success is True
+    assert job.concepts_extracted == 5
+    assert job.concepts_after_merge == 4
+    assert job.relations_verified == 2
