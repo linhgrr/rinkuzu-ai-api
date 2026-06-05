@@ -182,12 +182,6 @@ def build_llm_provider_config(
     )
 
 
-def sleep_before_retry(attempt: int, base_delay_sec: float) -> None:
-    if base_delay_sec <= 0:
-        return
-    time.sleep(base_delay_sec * attempt)
-
-
 def _build_retry_hooks(label: str, max_retries: int):
     def _before(retry_state):
         logger.debug(
@@ -244,6 +238,8 @@ def make_llm_retry(*, label: str):
 
 
 def make_async_llm_retry(*, label: str):
+    # retry=retry_if_exception_type(Exception) is intentionally broad: LLM callers
+    # raise ValueError/ValidationError on malformed JSON, not just httpx transport errors.
     def decorator(fn):
         @wraps(fn)
         async def wrapped(*args: Any, **kwargs: Any):
@@ -294,24 +290,6 @@ def with_llm_retry(
     except Exception:
         if on_exhausted is not None:
             return on_exhausted()
-        raise
-    return result
-
-
-async def awith_llm_retry(
-    *,
-    label: str,
-    fn: Callable[[], Any],
-    on_exhausted: Callable[[], Any] | None = None,
-) -> Any:
-    try:
-        result = await make_async_llm_retry(label=label)(fn)()
-    except Exception:
-        if on_exhausted is not None:
-            fallback = on_exhausted()
-            if isawaitable(fallback):
-                return await fallback
-            return fallback
         raise
     return result
 

@@ -15,12 +15,8 @@ def test_generate_exercise_retries_and_serializes(monkeypatch):
     def _select_type(_bloom_level, _mastery):
         return ExerciseType.MCQ
 
-    def _noop_sleep(_attempt, _delay):
-        return None
-
     monkeypatch.setattr(exercise_gen, "select_exercise_type", _select_type)
     monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (2, 0.0))
-    monkeypatch.setattr(llm_module, "sleep_before_retry", _noop_sleep)
 
     def _fake_invoke(*, schema, messages, temperature=0.3):
         attempts["count"] += 1
@@ -74,11 +70,7 @@ def test_evaluate_short_answer_returns_model_dump(monkeypatch):
 
 
 def test_generate_theory_returns_fallback_after_retries(monkeypatch):
-    def _noop_sleep(_attempt, _delay):
-        return None
-
     monkeypatch.setattr(llm_module, "resolve_retry_policy", lambda: (2, 0.0))
-    monkeypatch.setattr(llm_module, "sleep_before_retry", _noop_sleep)
 
     def _always_fail(**kwargs):
         raise RuntimeError("provider unavailable")

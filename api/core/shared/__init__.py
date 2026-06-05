@@ -7,7 +7,6 @@ from .llm import (
     LLMProviderConfig,
     ainvoke_structured_completion,
     astream_text_completion,
-    awith_llm_retry,
     build_llm_provider_config,
     extract_llm_text,
     get_default_llm_client,
@@ -20,7 +19,6 @@ from .llm import (
     resolve_llm_api_key,
     resolve_retry_policy,
     serialize_responses_sse_event,
-    sleep_before_retry,
     with_llm_retry,
 )
 
@@ -31,7 +29,6 @@ __all__ = [
     "LiteLLMClient",
     "ainvoke_structured_completion",
     "astream_text_completion",
-    "awith_llm_retry",
     "build_llm_provider_config",
     "extract_llm_text",
     "get_default_llm_client",
@@ -44,6 +41,5 @@ __all__ = [
     "resolve_llm_api_key",
     "resolve_retry_policy",
     "serialize_responses_sse_event",
-    "sleep_before_retry",
     "with_llm_retry",
 ]
