@@ -49,6 +49,13 @@ def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
         "updated_at": epoch_to_utc(job.updated_at),
         "heartbeat_at": epoch_to_utc(job.heartbeat_at),
         "completed_at": optional_epoch_to_utc(job.completed_at if job.status.is_terminal else None),
+        "source_s3_key": job.source_s3_key,
+        "prs_threshold": job.prs_threshold,
+        "min_confidence": job.min_confidence,
+        "apply_reduction": job.apply_reduction,
+        "retry_count": job.retry_count,
+        "cancel_requested": job.cancel_requested,
+        "eta_seconds": job.eta_seconds,
     }
 
 
@@ -83,6 +90,13 @@ def _document_to_runtime_payload(doc: PipelineJobDocument) -> dict[str, Any]:
         "updated_at": utc_to_epoch(doc.updated_at),
         "heartbeat_at": utc_to_epoch(doc.heartbeat_at),
         "completed_at": utc_to_epoch(doc.completed_at, default=0.0) if doc.completed_at else None,
+        "source_s3_key": doc.source_s3_key,
+        "prs_threshold": doc.prs_threshold,
+        "min_confidence": doc.min_confidence,
+        "apply_reduction": doc.apply_reduction,
+        "retry_count": doc.retry_count,
+        "cancel_requested": doc.cancel_requested,
+        "eta_seconds": doc.eta_seconds,
     }
 
 

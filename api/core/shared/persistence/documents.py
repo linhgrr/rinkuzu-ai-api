@@ -110,6 +110,13 @@ class PipelineJobDocument(Document):
     updated_at: datetime = Field(default_factory=utc_now)
     heartbeat_at: datetime = Field(default_factory=utc_now)
     completed_at: datetime | None = None
+    source_s3_key: str | None = None
+    prs_threshold: float | None = None
+    min_confidence: float = 0.6
+    apply_reduction: bool = True
+    retry_count: int = 0
+    cancel_requested: bool = False
+    eta_seconds: float | None = None
 
     class Settings:
         name = "al_pipeline_jobs"
@@ -140,6 +147,35 @@ class PipelineJobLookupProjection(BaseModel):
     job_id: str
     filename: str = ""
     subject_id: str = ""
+
+
+class PipelineJobActiveProjection(BaseModel):
+    job_id: str
+    filename: str
+    subject_id: str
+    status: PipelineStatus
+    current_step: str = ""
+    progress: float = 0.0
+    page_batch_size: int = 10
+    batch_count: int = 0
+    failed_batch_count: int = 0
+    partial_success: bool = False
+    concepts_extracted: int = 0
+    concepts_after_merge: int = 0
+    relations_verified: int = 0
+    error_code: str | None = None
+    user_message: str | None = None
+    retryable: bool = False
+    retry_count: int = 0
+    eta_seconds: float | None = None
+    source_s3_key: str | None = None
+    prs_threshold: float | None = None
+    min_confidence: float = 0.6
+    apply_reduction: bool = True
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    heartbeat_at: datetime = Field(default_factory=utc_now)
+    completed_at: datetime | None = None
 
 
 class SubjectProgressDocument(Document):
