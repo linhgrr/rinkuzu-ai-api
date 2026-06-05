@@ -64,22 +64,26 @@ Examples:
 | Type             | Meaning                            | Example Evidence                                                 |
 | ---------------- | ---------------------------------- | ---------------------------------------------------------------- |
 | **PREREQUISITE** | A is a **prerequisite** to learn B | "Trước khi học X, cần hiểu Y"; "X dựa trên Y" |
+Attach each relation to the concept that depends on another concept.
 Each relation must include:
 * `type`: `"PREREQUISITE"`
-* `target_id`: target concept id
+* `target_id`: the prerequisite concept id required by the current concept
 * `evidence`: explicit supporting sentence or paragraph from the text (in Vietnamese)
 ### HOW TO DETERMINE A PREREQUISITE RELATION
 A concept A is a **PREREQUISITE** of B when:
 * The text explicitly says "Trước khi học B, cần biết A."
 * B's **definition depends on A** or **uses A in its formula/example**.
 * B cannot be understood without A.
+### RELATION DIRECTION
+If concept B depends on prerequisite concept A, put the relation in B's `relations` list and set `target_id` to A's `concept_id`.
+The backend will convert this dependency relation into graph edge A → B.
 ### RELATIONS WITH PREVIOUS BATCH CONCEPTS
 If a list of **previously extracted concepts** is provided (format: `concept_id` : tên khái niệm), use it to:
 1. **Avoid duplicates**: Do NOT extract a concept that is already in that list (same meaning, even if slightly different wording).
-2. **Identify cross-batch PREREQUISITE relations**: If a newly extracted concept B depends on a previously extracted concept A (from the list), add a PREREQUISITE relation from B to A.
+2. **Identify cross-batch PREREQUISITE relations**: If a newly extracted concept B depends on a previously extracted concept A (from the list), add a PREREQUISITE relation to B and set `target_id` to A.
    - **CRITICAL**: You MUST use the EXACT `concept_id` from the list as `target_id`. Do NOT generate a new ID.
    - Example: If the list contains `dinh_luat_ohm : Định luật Ohm`, and concept B depends on it, set `target_id` to `"dinh_luat_ohm"` (the exact ID from the list).
-3. **Same-batch relations**: For relations between concepts extracted in the SAME batch, use the `concept_id` you generated for that concept as `target_id`.
+3. **Same-batch relations**: If newly extracted concept B depends on newly extracted concept A, add the relation to B and set `target_id` to A's generated `concept_id`.
 ## Data generation control
 **Do not invent or infer** any concepts not present in the text.
 However, if a concept is **mentioned but lacks a direct definition**, you may **briefly consult Wikipedia** to **complete its definition**, while still citing the **original evidence** from the text.

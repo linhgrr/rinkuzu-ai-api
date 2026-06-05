@@ -1,60 +1,43 @@
 import asyncio
 
-import fitz
 from pydantic import ValidationError
 import pytest
 
-from api.core.content_pipeline.infrastructure.llm import extract_chain as extract_chain_module
-from api.core.content_pipeline.infrastructure.llm.extract_chain import (
-    ExtractionChain,
-    ProviderUploadTooLargeError,
-    build_page_batches,
-)
-from api.core.content_pipeline.infrastructure.llm.openai_responses import (
-    FileReferenceError,
-    UploadedFileRef,
-)
+from api.core.content_pipeline.infrastructure.llm.extract_chain import ExtractionChain
 from api.core.content_pipeline.infrastructure.llm.schemas import (
     ConceptExtraction,
     ConceptExtractionPayload,
     materialize_concept_extraction,
 )
-from api.core.content_pipeline.infrastructure.processors.loaders.local_pdf_text_loader import (
-    load_pdf,
+from api.core.shared.document_text import (
+    DocumentPageText,
+    ExtractedDocumentText,
+    build_page_batches,
+    extract_document_text_from_file,
+    extracted_document_text_to_content_payload,
 )
-
-
-class _ParsedResponse:
-    def __init__(
-        self, parsed: object | None, *, usage: dict[str, int] | None = None, output_text: str = ""
-    ):
-        self.output_parsed = parsed
-        self.usage = usage or {}
-        self.output_text = output_text
 
 
 class _RetryClient:
     def __init__(self):
         self.calls = 0
 
-    async def parse_response(self, **_: object) -> _ParsedResponse:
+    async def parse_response(self, **_: object) -> ConceptExtractionPayload:
         self.calls += 1
         if self.calls == 1:
-            return _ParsedResponse(None, output_text="temporary malformed output")
-        payload = ConceptExtractionPayload.model_validate(
+            raise ValueError("temporary malformed output")
+        return ConceptExtractionPayload.model_validate(
             {
                 "concepts": [],
                 "subject_id": "math",
                 "notes": None,
             }
         )
-        return _ParsedResponse(
-            payload, usage={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
-        )
 
 
-async def _noop_upload_pdf_bytes(*, filename, pdf_bytes, sha256, now_ts, job_id=None):
-    return UploadedFileRef(file_id="file-123", purpose="user_data", cache_hit=False)
+class _NoopExtractor:
+    def extract_file(self, _file_path: str) -> ExtractedDocumentText:
+        return ExtractedDocumentText(text="", pages=[], metadata={"page_count": 0})
 
 
 def test_build_page_batches_uses_fixed_windows():
@@ -98,90 +81,61 @@ def test_payload_models_forbid_unknown_fields():
         )
 
 
-def test_extraction_response_retries_on_invalid_structured_output():
+def test_extraction_response_retries_on_client_error():
     client = _RetryClient()
-    chain = ExtractionChain(client=client)
+    chain = ExtractionChain(client=client, document_extractor=_NoopExtractor())
 
     async def _run():
-        payload, usage = await chain._invoke_extraction_response_with_retries(
+        return await chain._invoke_extraction_response(
             job_id="job-1",
             subject_id="math",
-            file_id="file-123",
+            document_text="Đây là nội dung cần trích xuất.",
             previous_concepts=[],
-            max_retries=2,
         )
-        return payload, usage
 
-    payload, usage = asyncio.run(_run())
+    payload = asyncio.run(_run())
 
     assert client.calls == 2
     assert payload.subject_id == "math"
     assert payload.concepts == []
-    assert usage == {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
 
 
-def test_invoke_extraction_response_uses_pydantic_structured_output():
+def test_invoke_extraction_response_uses_structured_generation_client():
     captured: dict[str, object] = {}
 
     class _Client:
-        async def parse_response(self, **kwargs: object) -> _ParsedResponse:
+        async def parse_response(self, **kwargs: object) -> ConceptExtractionPayload:
             captured.update(kwargs)
-            payload = ConceptExtractionPayload.model_validate(
+            return ConceptExtractionPayload.model_validate(
                 {"concepts": [], "subject_id": "math", "notes": None}
             )
-            return _ParsedResponse(payload)
 
-    chain = ExtractionChain(client=_Client())  # type: ignore[arg-type]
+    chain = ExtractionChain(  # type: ignore[arg-type]
+        client=_Client(),
+        document_extractor=_NoopExtractor(),
+    )
 
     async def _run():
-        payload, _usage = await chain._invoke_extraction_response(
+        return await chain._invoke_extraction_response(
             job_id="job-structured",
             subject_id="math",
-            file_id="file-structured",
+            document_text="## Trang 1\nKhái niệm cũ nối sang nội dung mới.",
             previous_concepts=[("c1", "Khái niệm cũ")],
         )
-        return payload
 
     payload = asyncio.run(_run())
 
     assert payload.subject_id == "math"
     assert captured["text_format"] is ConceptExtractionPayload
-    input_blocks = captured["input_blocks"]
-    assert isinstance(input_blocks, list)
-    assert input_blocks[1]["type"] == "input_file"
+    assert "Khái niệm cũ" in str(captured["user_text"])
+    assert "<document_text>" in str(captured["user_text"])
 
 
-def test_extract_single_batch_awaits_cache_invalidation_on_file_reference_error():
-    class _Client:
-        def __init__(self) -> None:
-            self.invalidated: list[str] = []
-            self.uploads = 0
+def test_extract_single_batch_returns_error_payload_when_client_fails():
+    chain = ExtractionChain(client=_RetryClient(), document_extractor=_NoopExtractor())
 
-        async def upload_pdf_bytes(self, **_: object) -> UploadedFileRef:
-            self.uploads += 1
-            return UploadedFileRef(
-                file_id=f"file-{self.uploads}",
-                purpose="user_data",
-                cache_hit=self.uploads == 1,
-            )
-
-        async def invalidate_cached_file(self, *, sha256: str) -> None:
-            self.invalidated.append(sha256)
-
-    client = _Client()
-    chain = ExtractionChain(client=client)  # type: ignore[arg-type]
-    calls = 0
-
-    async def fake_invoke(*, job_id, subject_id, file_id, previous_concepts, max_retries=2):
-        del job_id, subject_id, file_id, previous_concepts, max_retries
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise FileReferenceError("stale file ref")
-        payload = ConceptExtractionPayload.model_validate(
-            {"concepts": [], "subject_id": "math", "notes": None}
-        )
-        return payload, {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+    async def fake_invoke(**_kwargs):
+        raise RuntimeError("provider down")
 
     chain._invoke_extraction_response_with_retries = fake_invoke  # type: ignore[method-assign]
 
@@ -193,79 +147,68 @@ def test_extract_single_batch_awaits_cache_invalidation_on_file_reference_error(
                 "batch_index": 0,
                 "page_start": 1,
                 "page_end": 2,
-                "size_bytes": 128,
-                "pdf_bytes": b"pdf",
-                "sha256": "abc123",
+                "text": "## Trang 1\nNội dung",
+                "char_count": 20,
             },
             previous_concepts=[],
-            source_name="source",
+            source_name="source.pdf",
         )
 
     result = asyncio.run(_run())
 
     assert isinstance(result, ConceptExtraction)
-    assert client.invalidated == ["abc123"]
-    assert client.uploads == 2
+    assert result.notes is not None
+    assert result.notes.startswith("Error:")
 
 
-def test_render_batched_pdfs_uses_compressed_pdf_when_it_fits(monkeypatch):
-    chain = ExtractionChain(client=_RetryClient())
-
-    def _fake_extract_pdf_bytes(_document, _start, _end):
-        return b"a" * 10
-
-    def _fake_extract_compressed_pdf_bytes(_document, _start, _end, *, dpi, jpg_quality):
-        del dpi, jpg_quality
-        return b"b" * 4
-
-    monkeypatch.setattr(chain, "_extract_pdf_bytes", _fake_extract_pdf_bytes)
-    monkeypatch.setattr(
-        chain,
-        "_extract_compressed_pdf_bytes",
-        _fake_extract_compressed_pdf_bytes,
-    )
-
-    batches = chain._render_batched_pdfs(
-        document=object(),
-        batch_index=0,
-        start_page=1,
-        end_page=2,
-        max_bytes=5,
-    )
-
-    assert len(batches) == 1
-    assert batches[0]["size_bytes"] == 4
-    assert batches[0]["compression_applied"] is True
-    assert batches[0]["compression_profile"] == "144dpi-q75"
-
-
-def test_local_pdf_text_loader_extracts_page_text(tmp_path):
+def test_extract_document_text_from_file_can_be_reshaped_for_chunking(tmp_path):
     pdf_path = tmp_path / "lesson.pdf"
-    document = fitz.open()
-    page = document.new_page()
-    page.insert_text((72, 72), "Xin chao the gioi")
-    document.save(pdf_path)
-    document.close()
+    pdf_path.write_bytes(b"%PDF-demo")
 
-    payload = load_pdf(str(pdf_path))
+    class _Extractor:
+        def extract_file(self, _file_path: str) -> ExtractedDocumentText:
+            return ExtractedDocumentText(
+                text="## Trang 1\nXin chao the gioi",
+                pages=[DocumentPageText(page_number=1, text="Xin chao the gioi")],
+                metadata={"source": "ocr_api", "page_count": 1},
+            )
 
-    assert payload["metadata"]["source"] == "pymupdf"
+    def _build_extractor():
+        return _Extractor()
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "api.core.shared.document_text.build_document_text_extractor",
+        _build_extractor,
+    )
+
+    try:
+        payload = extracted_document_text_to_content_payload(
+            extract_document_text_from_file(str(pdf_path))
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert payload["metadata"]["source"] == "ocr_api"
     assert payload["metadata"]["page_count"] == 1
     assert "Xin chao the gioi" in payload["text"]
 
 
-def test_extract_from_document_splits_again_when_provider_rejects_upload_size(
-    tmp_path, monkeypatch
-):
-    pdf_path = tmp_path / "scan-like.pdf"
-    document = fitz.open()
-    for index in range(2):
-        page = document.new_page()
-        page.insert_text((72, 72), f"Page {index + 1}")
-    document.save(pdf_path)
-    document.close()
+def test_extract_from_document_uses_text_batches_and_tracks_failed_batches():
+    document_text = ExtractedDocumentText(
+        text="## Trang 1\nAlpha\n\n## Trang 2\nBeta",
+        pages=[
+            DocumentPageText(page_number=1, text="Alpha"),
+            DocumentPageText(page_number=2, text="Beta"),
+        ],
+        metadata={"page_count": 2, "file_name": "sample.pdf"},
+    )
 
-    chain = ExtractionChain(client=_RetryClient())
+    class _Extractor:
+        def extract_file(self, _file_path: str) -> ExtractedDocumentText:
+            return document_text
+
+    chain = ExtractionChain(client=_RetryClient(), document_extractor=_Extractor())
     seen_ranges: list[tuple[int, int]] = []
 
     async def fake_extract_single_batch(
@@ -273,61 +216,30 @@ def test_extract_from_document_splits_again_when_provider_rejects_upload_size(
     ):
         del job_id, previous_concepts, source_name
         seen_ranges.append((batch["page_start"], batch["page_end"]))
-        if (batch["page_start"], batch["page_end"]) == (1, 2):
-            raise ProviderUploadTooLargeError("payload too large")
+        if batch["page_start"] == 2:
+            return ConceptExtraction(
+                concepts=[], subject_id=subject_id, notes="Error: missing signal"
+            )
         return ConceptExtraction(concepts=[], subject_id=subject_id, notes=None)
 
-    monkeypatch.setattr(chain, "_extract_single_batch", fake_extract_single_batch)
-
-    async def fake_run_process_stage(target_path, *args, stage_name, timeout_sec=None, **kwargs):
-        del stage_name, timeout_sec
-        if target_path == extract_chain_module._READ_PAGE_COUNT_PROCESS_TARGET:
-            return 2
-        if target_path == extract_chain_module._RENDER_BATCHES_PROCESS_TARGET:
-            return [
-                {
-                    "batch_index": kwargs["batch_index"],
-                    "page_start": kwargs["start_page"],
-                    "page_end": kwargs["end_page"],
-                    "pdf_bytes": b"x",
-                    "sha256": "abc",
-                    "size_bytes": 1,
-                }
-            ]
-        if target_path == extract_chain_module._SPLIT_BATCH_PROCESS_TARGET:
-            _file_path = args[0]
-            batch = kwargs["batch"]
-            return [
-                {
-                    "batch_index": batch["batch_index"],
-                    "page_start": 1,
-                    "page_end": 1,
-                    "pdf_bytes": b"x",
-                    "sha256": "abc",
-                    "size_bytes": 1,
-                },
-                {
-                    "batch_index": batch["batch_index"],
-                    "page_start": 2,
-                    "page_end": 2,
-                    "pdf_bytes": b"x",
-                    "sha256": "abc",
-                    "size_bytes": 1,
-                },
-            ]
-        raise AssertionError(f"unexpected process target: {target_path}")
-
-    monkeypatch.setattr(extract_chain_module, "run_process_stage", fake_run_process_stage)
+    chain._extract_single_batch = fake_extract_single_batch  # type: ignore[method-assign]
 
     async def _run():
-        return await chain.extract_from_document(str(pdf_path), "math", page_batch_size=10)
+        return await chain.extract_from_document("sample.pdf", "math", page_batch_size=1)
 
     results = asyncio.run(_run())
 
     assert len(results) == 2
-    assert seen_ranges == [(1, 2), (1, 1), (2, 2)]
+    assert seen_ranges == [(1, 1), (2, 2)]
     assert [(batch["page_start"], batch["page_end"]) for batch in chain.last_batches] == [
         (1, 1),
         (2, 2),
     ]
-    assert chain.last_failed_batches == []
+    assert chain.last_failed_batches == [
+        {
+            "batch_index": 1,
+            "page_start": 2,
+            "page_end": 2,
+            "reason": "Error: missing signal",
+        }
+    ]

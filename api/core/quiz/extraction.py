@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import time
 from typing import Literal, cast
 
-from langchain_core.messages import HumanMessage
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.config import Settings, get_settings
-from api.core.shared.llm import get_structured_llm, resolve_llm_api_key, with_llm_retry
+from api.core.shared.document_text import (
+    DocumentTextConfigurationError,
+    ExtractedDocumentText,
+    build_ocr_api_config,
+    build_text_batches,
+    extract_document_text_from_bytes,
+)
+from api.core.shared.llm import invoke_structured_completion, resolve_llm_api_key, with_llm_retry
 
 MAX_PDF_BYTES = 50 * 1024 * 1024
-_FILE_PURPOSE = "user_data"
 
 EXTRACTION_PROMPT = """
 You are given educational content that may include questions, explanations, and references to images or diagrams.
@@ -34,27 +38,10 @@ Important Instructions:
 6. **OPEN-ENDED QUESTIONS:** If a question is essay-style or open-ended, convert it into a multiple-choice format if possible. If not convertible, skip it entirely.
 7. **MATH FORMATTING:** All mathematical expressions MUST use LaTeX notation. Inline: $...$ (e.g., $x^2 + 1$). Display: $$...$$ (e.g., $$\\Delta = b^2 - 4ac$$). Do NOT write formulas as plain text.
 
-Return ONLY a JSON array in the following format. Ensure the JSON is valid.
-
-[
-    {
-        "question": "What is the capital of France?",
-        "type": "single",
-        "options": ["London", "Berlin", "Paris", "Madrid"],
-        "correctIndex": 2
-    },
-    {
-        "question": "Which of the following are programming languages?",
-        "type": "multiple",
-        "options": ["JavaScript", "HTML", "Python", "CSS"],
-        "correctIndexes": [0, 2]
-    }
-]
+Return ONLY valid JSON.
 
 User constraint overrides (if any, follow these above defaults):
 <<<USER_PROMPT>>>
-
-Always return raw JSON list of question dictionaries with no markdown codeblocks unless wrapped around the full list.
 """
 
 
@@ -102,8 +89,8 @@ class ExtractedQuizQuestion(BaseModel):
         return payload
 
 
-class ExtractedQuizQuestionList(RootModel[list[ExtractedQuizQuestion]]):
-    pass
+class ExtractedQuizQuestionBatch(BaseModel):
+    questions: list[ExtractedQuizQuestion] = Field(default_factory=list)
 
 
 def build_extraction_prompt(user_prompt: str | None) -> str:
@@ -114,34 +101,24 @@ def build_extraction_prompt(user_prompt: str | None) -> str:
     )
 
 
-async def invoke_pdf_extract_llm(
+async def invoke_document_text_extract_llm(
     *,
-    pdf_bytes: bytes,
+    document_text: ExtractedDocumentText,
     filename: str,
     prompt: str,
     model: str,
 ) -> list[dict[str, str | int | list[str] | list[int]]]:
     timeout_sec = max(1.0, float(get_settings().llm_timeout_sec))
-
-    logger.info(
-        "[quiz_extract] llm_request_start model={} filename={} size_bytes={} prompt_chars={}",
-        model,
-        filename,
-        len(pdf_bytes),
-        len(prompt),
-    )
-
     llm_start = time.perf_counter()
     questions = await asyncio.to_thread(
-        _invoke_pdf_extract_llm_sync,
-        pdf_bytes,
+        _extract_questions_from_document_text_sync,
+        document_text,
         filename,
         prompt,
         model,
         timeout_sec,
     )
     llm_duration_ms = int((time.perf_counter() - llm_start) * 1000)
-
     logger.info(
         "[quiz_extract] llm_request_done duration_ms={} extracted_questions={}",
         llm_duration_ms,
@@ -150,51 +127,78 @@ async def invoke_pdf_extract_llm(
     return questions
 
 
-def _invoke_pdf_extract_llm_sync(
+def _extract_questions_from_pdf_bytes_sync(
     pdf_bytes: bytes,
     filename: str,
     prompt: str,
     model: str,
     timeout_sec: float,
 ) -> list[dict[str, str | int | list[str] | list[int]]]:
-    structured_llm = get_structured_llm(
-        ExtractedQuizQuestionList,
-        model=model,
-        temperature=0.0,
-        timeout=timeout_sec,
-        method="json_schema",
-        strict=True,
-        use_responses_api=True,
+    document_text = extract_document_text_from_bytes(pdf_bytes, filename=filename)
+    return _extract_questions_from_document_text_sync(
+        document_text,
+        filename,
+        prompt,
+        model,
+        timeout_sec,
     )
-    file_payload = base64.b64encode(pdf_bytes).decode("utf-8")
-    response = with_llm_retry(
-        label="quiz extraction",
-        fn=lambda: structured_llm.invoke(
-            [
-                HumanMessage(
-                    content=[
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "file",
-                            "base64": file_payload,
-                            "mime_type": "application/pdf",
-                            "filename": filename,
-                        },
-                    ]
-                )
-            ]
-        ),
-    )
-    if not isinstance(response, ExtractedQuizQuestionList):
-        raise TypeError(f"LLM returned invalid quiz extraction type: {type(response)}")
-    return [question.to_public_dict() for question in response.root]
+
+
+def _extract_questions_from_document_text_sync(
+    document_text: ExtractedDocumentText,
+    filename: str,
+    prompt: str,
+    model: str,
+    timeout_sec: float,
+) -> list[dict[str, str | int | list[str] | list[int]]]:
+    batch_size = max(1, int(get_settings().content_pipeline_pdf_page_batch_size))
+    batches = build_text_batches(document_text.pages, batch_size=batch_size)
+
+    collected_questions: list[ExtractedQuizQuestion] = []
+    for batch in batches:
+        batch_start = int(batch["page_start"])
+        batch_end = int(batch["page_end"])
+        batch_text = str(batch["text"])
+
+        def _invoke(
+            text: str = batch_text, start: int = batch_start, end: int = batch_end
+        ) -> ExtractedQuizQuestionBatch:
+            return invoke_structured_completion(
+                schema=ExtractedQuizQuestionBatch,
+                model=model,
+                temperature=0.0,
+                timeout=timeout_sec,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"## FILE\nTên file: {filename}\n"
+                            f"Trang: {start}-{end}\n\n"
+                            "<document_text>\n"
+                            f"{text}\n"
+                            "</document_text>\n\n"
+                            "Hãy trích xuất câu hỏi theo JSON/schema đã chỉ định."
+                        ),
+                    },
+                ],
+            )
+
+        payload = with_llm_retry(label="quiz extraction", fn=_invoke)
+        collected_questions.extend(payload.questions)
+
+    return [question.to_public_dict() for question in collected_questions]
 
 
 def validate_quiz_extract_dependencies(settings: Settings, s3_client: object) -> None:
     """Raise ValueError when external dependencies are not configured."""
     if not s3_client or not settings.object_storage_bucket:
         raise ValueError("S3 is not configured.")
-    if not settings.openai_base_url or not settings.openai_model:
+    if not settings.llm_model:
         raise ValueError("LLM configuration is missing.")
     if not resolve_llm_api_key():
         raise ValueError("LLM API key is missing.")
+    try:
+        build_ocr_api_config(settings)
+    except DocumentTextConfigurationError as exc:
+        raise ValueError("OCR configuration is missing.") from exc

@@ -63,7 +63,8 @@ repos:
         name: pip-audit local
         entry: >-
           bash -lc 'PYTHON=.venv/bin/python; [ -x "$PYTHON" ] || PYTHON=python;
-          exec "$PYTHON" -m pip_audit --progress-spinner off'
+          exec "$PYTHON" -m pip_audit --progress-spinner off
+          --ignore-vuln CVE-2026-45829'
         language: system
         pass_filenames: false
         stages: [pre-push]

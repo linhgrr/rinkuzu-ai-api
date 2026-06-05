@@ -26,10 +26,20 @@ def test_get_content_processor_bindings_uses_cached_bindings():
     assert second is first
 
 
-def test_content_processor_bindings_can_build_relation_engine():
+def test_content_processor_bindings_can_build_relation_engine(monkeypatch):
     class _ExtractionChain:
         def verify_relations_batch(self, pairs):
             return pairs
+
+    class _StubRanker:
+        @classmethod
+        def load(cls, *_args, **_kwargs):
+            instance = cls()
+            instance.rank = lambda concepts, threshold: []
+            return instance
+
+    monkeypatch.setattr(runtime, "_MLPPrerequisiteRanker", _StubRanker)
+    monkeypatch.setattr(runtime, "_MLP_RANKING_AVAILABLE", True)
 
     bindings = runtime.get_content_processor_bindings()
     engine = bindings.relation_engine_factory(extraction_chain=_ExtractionChain())

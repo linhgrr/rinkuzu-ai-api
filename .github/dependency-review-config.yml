@@ -5,6 +5,10 @@ fail-on-scopes:
   - unknown
 license-check: true
 vulnerability-check: true
+allow-ghsas:
+  # ChromaDB 1.x advisory currently has no patched release. The API embeds
+  # ChromaDB in-process and does not expose the vulnerable Chroma server route.
+  - GHSA-f4j7-r4q5-qw2c
 comment-summary-in-pr: on-failure
 show-patched-versions: true
 warn-on-openssf-scorecard-level: 4

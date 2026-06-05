@@ -7,15 +7,15 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, cast
 
-import httpx
-from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from api.config import get_settings
 from api.core.shared.llm import (
-    awith_llm_retry,
+    LLMConfigurationError,
+    _resolve_shared_llm_model,
+    astream_text_completion,
     extract_llm_text,
-    get_llm,
+    invoke_text_completion,
     serialize_responses_sse_event,
     with_llm_retry,
 )
@@ -43,6 +43,8 @@ TUTOR_RESPONSE_REQUIREMENTS = (
 
 
 def _extract_stream_chunk_text(chunk: object) -> str:
+    if isinstance(chunk, str):
+        return chunk
     text_accessor = getattr(chunk, "text", None)
     if text_accessor is not None:
         return str(text_accessor)
@@ -117,18 +119,15 @@ def _request_text_response(
     temperature: float,
     timeout_sec: float,
 ) -> str:
-    llm = get_llm(
+    return invoke_text_completion(
+        messages=[
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": user_text},
+        ],
         model=model,
         temperature=temperature,
         timeout=timeout_sec,
     )
-    response = llm.invoke(
-        [
-            SystemMessage(content=instructions),
-            HumanMessage(content=user_text),
-        ]
-    )
-    return extract_llm_text(response.content)
 
 
 def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
@@ -228,8 +227,12 @@ def build_tutor_prompt(
 
 
 def _resolve_tutor_model() -> str:
-    settings = get_settings()
-    return settings.exercise_llm_model or settings.openai_model or "gpt-4o-mini"
+    try:
+        return _resolve_shared_llm_model(None)
+    except LLMConfigurationError as exc:
+        raise LLMConfigurationError(
+            "LLM model is not set. Configure EXERCISE_LLM_MODEL or LLM_MODEL."
+        ) from exc
 
 
 async def _open_tutor_chat_stream(
@@ -237,24 +240,16 @@ async def _open_tutor_chat_stream(
     model: str,
     prompt: str,
     timeout_sec: float,
-) -> Any:
-    stream_timeout = httpx.Timeout(timeout_sec, read=None)
-
-    async def _try() -> Any:
-        llm = get_llm(
-            model=model,
-            temperature=0.7,
-            timeout=stream_timeout,
-            streaming=True,
-        )
-        return llm.astream(
-            [
-                SystemMessage(content=TUTOR_SYSTEM_PROMPT),
-                HumanMessage(content=prompt),
-            ]
-        )
-
-    return await awith_llm_retry(label="tutor chat stream", fn=_try)
+) -> AsyncIterator[str]:
+    return astream_text_completion(
+        messages=[
+            {"role": "system", "content": TUTOR_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        model=model,
+        temperature=0.7,
+        timeout=timeout_sec,
+    )
 
 
 async def create_tutor_chat_stream(

@@ -1,10 +1,8 @@
 """Exact name-based concept merging."""
 
 from collections import defaultdict
-from typing import cast
 
 from loguru import logger
-import numpy as np
 
 from api.core.content_pipeline.infrastructure.llm.postprocess import normalize_concept_name
 from api.core.content_pipeline.infrastructure.llm.schemas import Concept, Relation
@@ -122,38 +120,6 @@ def _select_canonical(concepts: list[Concept]) -> Concept:
     return min(concepts, key=_key)
 
 
-def _merge_embeddings(
-    concepts: list[Concept],
-    canonical: Concept,
-    attr: str,
-    label: str,
-) -> list[float] | None:
-    """Average embeddings from a group of concepts, with consistency validation."""
-    emb_list = [
-        np.asarray(getattr(c, attr), dtype=float) for c in concepts if getattr(c, attr) is not None
-    ]
-    if not emb_list:
-        return None
-    emb_shapes = [e.shape for e in emb_list]
-    if len(set(emb_shapes)) > 1:
-        logger.warning(
-            "Inconsistent {} shapes in merge group: {}, using canonical",
-            label,
-            set(emb_shapes),
-        )
-        canonical_embedding = getattr(canonical, attr)
-        return (
-            cast("list[float]", canonical_embedding)
-            if canonical_embedding is not None
-            else cast("list[float]", emb_list[0].tolist())
-        )
-    merged_embedding = np.mean(emb_list, axis=0)
-    norm = np.linalg.norm(merged_embedding)
-    if norm > 0:
-        merged_embedding = merged_embedding / norm
-    return cast("list[float]", merged_embedding.tolist())
-
-
 def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
     """
     Merge multiple concepts into one.
@@ -198,11 +164,6 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
 
     all_relations: list[dict] = [rel.model_dump() for c in concepts for rel in (c.relations or [])]
 
-    avg_name_embedding = _merge_embeddings(concepts, canonical, "name_embedding", "name_embedding")
-    avg_definition_embedding = _merge_embeddings(
-        concepts, canonical, "definition_embedding", "definition_embedding"
-    )
-
     merged = Concept(
         concept_id=canonical.concept_id,
         subject_id=canonical.subject_id,
@@ -211,8 +172,6 @@ def _merge_concepts(concepts: list[Concept]) -> tuple[Concept, dict[str, str]]:
         examples=examples,
         formulas=formulas,
         relations=all_relations,
-        name_embedding=avg_name_embedding,
-        definition_embedding=avg_definition_embedding,
     )
 
     id_map = {c.concept_id: canonical.concept_id for c in concepts}

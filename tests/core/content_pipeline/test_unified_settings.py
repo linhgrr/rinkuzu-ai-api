@@ -3,28 +3,76 @@ from types import SimpleNamespace
 import pytest
 
 from api.config import Settings
-from api.core.content_pipeline.infrastructure.llm.openai_responses import (
+from api.core.content_pipeline.infrastructure.llm.structured_generation import (
     ProviderConfigError,
     build_provider_config,
-    normalize_openai_base_url,
 )
+from api.core.shared import llm as llm_module
 
 
-def test_normalize_openai_base_url_appends_v1():
-    assert normalize_openai_base_url(None) == "https://api.openai.com/v1"
-    assert normalize_openai_base_url("http://localhost:6969") == "http://localhost:6969/v1"
-    assert normalize_openai_base_url("http://localhost:6969/v1") == "http://localhost:6969/v1"
+def test_normalize_llm_base_url_requires_explicit_value():
+    with pytest.raises(llm_module.LLMConfigurationError, match="LLM_BASE_URL"):
+        llm_module.normalize_llm_base_url(None)
+
+    assert llm_module.normalize_llm_base_url("http://localhost:6969") == "http://localhost:6969"
+    assert llm_module.normalize_llm_base_url("http://localhost:6969/") == "http://localhost:6969"
 
 
-def test_build_provider_config_requires_openai_settings(monkeypatch):
+def test_build_llm_provider_config_passes_model_through(monkeypatch):
     monkeypatch.setattr(
-        "api.core.content_pipeline.infrastructure.llm.openai_responses.get_settings",
+        llm_module,
+        "get_settings",
         lambda: SimpleNamespace(
-            openai_base_url="",
-            openai_api_key="",
-            openai_model="",
+            llm_base_url="https://api.deepseek.com",
+            llm_api_key="test-key",  # pragma: allowlist secret
+            llm_model="deepseek-v4-flash",
+            llm_custom_provider=None,
+            llm_timeout_sec=120,
+        ),
+    )
+
+    config = llm_module.build_llm_provider_config()
+
+    assert config.model == "deepseek-v4-flash"
+    assert config.custom_llm_provider is None
+
+
+def test_build_llm_provider_config_allows_explicit_custom_provider(monkeypatch):
+    monkeypatch.setattr(
+        llm_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            llm_base_url="https://senator-gigolo-stark.ngrok-free.dev/v1",
+            llm_api_key="test-key",  # pragma: allowlist secret
+            llm_model="vip",
+            llm_custom_provider="openai",
+            llm_timeout_sec=120,
+        ),
+    )
+
+    config = llm_module.build_llm_provider_config()
+
+    assert config.model == "vip"
+    assert config.custom_llm_provider == "openai"
+
+
+def test_build_provider_config_requires_llm_settings(monkeypatch):
+    monkeypatch.setattr(
+        "api.core.content_pipeline.infrastructure.llm.structured_generation.get_settings",
+        lambda: SimpleNamespace(
+            llm_base_url="",
+            llm_api_key="",
+            llm_model="",
             content_pipeline_llm_request_timeout_sec=180,
-            llm_max_retries=2,
+        ),
+    )
+    monkeypatch.setattr(
+        "api.core.shared.llm.get_settings",
+        lambda: SimpleNamespace(
+            llm_base_url="",
+            llm_api_key="",
+            llm_model="",
+            llm_timeout_sec=120,
         ),
     )
 
@@ -32,20 +80,32 @@ def test_build_provider_config_requires_openai_settings(monkeypatch):
         build_provider_config()
 
 
-def test_build_provider_config_disables_sdk_retries_for_pipeline(monkeypatch):
+def test_build_provider_config_uses_pipeline_timeout(monkeypatch):
     monkeypatch.setattr(
-        "api.core.content_pipeline.infrastructure.llm.openai_responses.get_settings",
+        "api.core.content_pipeline.infrastructure.llm.structured_generation.get_settings",
         lambda: SimpleNamespace(
-            openai_base_url="https://api.openai.com",
-            openai_api_key="test-key",  # pragma: allowlist secret
-            openai_model="gpt-4.1-mini",
+            llm_base_url="https://api.deepseek.com",
+            llm_api_key="test-key",  # pragma: allowlist secret
+            llm_model="deepseek-v4-flash",
             content_pipeline_llm_request_timeout_sec=180,
+        ),
+    )
+
+    monkeypatch.setattr(
+        "api.core.shared.llm.get_settings",
+        lambda: SimpleNamespace(
+            llm_base_url="https://api.deepseek.com",
+            llm_api_key="test-key",  # pragma: allowlist secret
+            llm_model="deepseek-v4-flash",
+            llm_timeout_sec=120,
         ),
     )
 
     config = build_provider_config()
 
-    assert config.request_timeout_sec == 180
+    assert config.base_url == "https://api.deepseek.com"
+    assert config.model == "deepseek-v4-flash"
+    assert config.timeout_sec == 180
     assert config.max_retries == 0
 
 

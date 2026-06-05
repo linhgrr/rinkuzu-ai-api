@@ -24,7 +24,6 @@ from .graph.reduction import apply_transitive_reduction
 from .llm.extract_chain import ExtractionChain
 from .llm.postprocess import postprocess_concepts
 from .merge.name_merge import merge_by_name
-from .processors.factory import load_and_chunk_pdf
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -35,16 +34,16 @@ PrereqRankingFn = Callable[[list[Any], float], list[tuple[str, str]]]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CONTENT_PROCESSOR_SRC = str(PROJECT_ROOT)
-_rank_prerequisites: PrereqRankingFn | None = None
+_MLPPrerequisiteRanker: Any | None = None
 _SentenceTransformerFactory: Callable[[str], Any] | None = None
 
 try:
-    from .embed.prereq_ranking import rank_prerequisites as _imported_rank_prerequisites
+    from .embed.mlp_prereq import MLPPrerequisiteRanker as _ImportedMLPPrerequisiteRanker
 
-    _rank_prerequisites = _imported_rank_prerequisites
-    _PREREQ_RANKING_AVAILABLE = True
+    _MLPPrerequisiteRanker = _ImportedMLPPrerequisiteRanker
+    _MLP_RANKING_AVAILABLE = True
 except ModuleNotFoundError:
-    _PREREQ_RANKING_AVAILABLE = False
+    _MLP_RANKING_AVAILABLE = False
 
 try:
     from sentence_transformers import SentenceTransformer as _ImportedSentenceTransformer
@@ -59,7 +58,6 @@ except ImportError:
 class ContentProcessorBindings:
     """Imported collaborators used by the unified content pipeline."""
 
-    file_loader_factory: Any
     extraction_chain_cls: Any
     postprocess_concepts: Callable[[list[Any]], list[Any]]
     embedding_client_factory: Callable[[str, int], Any]
@@ -135,20 +133,19 @@ def _load_saint_text_model() -> LockedSentenceTransformerModel:
 
 
 def _build_relation_engine(*, extraction_chain: Any) -> Any:
-    if not _PREREQ_RANKING_AVAILABLE:
+    if not _MLP_RANKING_AVAILABLE or _MLPPrerequisiteRanker is None:
 
         def rank_prerequisites_stub(
             _items: list[Any],
             _threshold: float,
         ) -> list[tuple[str, str]]:
-            raise ModuleNotFoundError(
-                "Optional embedding dependencies are required for prerequisite ranking"
-            )
+            raise ModuleNotFoundError("torch + transformers required for MLP prerequisite ranking")
 
         rank_fn: PrereqRankingFn = rank_prerequisites_stub
     else:
-        assert _rank_prerequisites is not None
-        rank_fn = _rank_prerequisites
+        settings = get_settings()
+        ranker = _MLPPrerequisiteRanker.load(Path(settings.mlp_weights_path))
+        rank_fn = ranker.rank
 
     return DefaultRelationEngine(
         rank_prerequisites=rank_fn,
@@ -178,7 +175,6 @@ def _build_saint_text_model() -> Any:
 
 def _build_content_processor_bindings() -> ContentProcessorBindings:
     return ContentProcessorBindings(
-        file_loader_factory=load_and_chunk_pdf,
         extraction_chain_cls=ExtractionChain,
         postprocess_concepts=postprocess_concepts,
         embedding_client_factory=_build_embedding_client,

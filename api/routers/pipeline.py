@@ -89,7 +89,7 @@ class ProcessDocumentRequest(BaseModel):
     file_url: str
     filename: str
     subject_id: str | None = None
-    prs_threshold: float = 0.75
+    prs_threshold: float | None = None  # falls back to settings.prs_threshold (MLP probability)
     min_confidence: float = 0.6
     apply_reduction: bool = True
     page_batch_size: int = Field(default=10, ge=1, le=50)
@@ -171,7 +171,9 @@ async def process_document(  # noqa: C901
         job = await pipeline_service.start_job(
             file_path=str(save_path),
             subject_id=req.subject_id,
-            prs_threshold=req.prs_threshold,
+            prs_threshold=(
+                req.prs_threshold if req.prs_threshold is not None else settings.prs_threshold
+            ),
             min_confidence=req.min_confidence,
             apply_reduction=req.apply_reduction,
             user_id=user_id,

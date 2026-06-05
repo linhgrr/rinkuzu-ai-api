@@ -1,8 +1,14 @@
+from types import SimpleNamespace
+
 from pydantic import ValidationError
 import pytest
 
 from api.core.quiz import extraction
-from api.core.quiz.extraction import ExtractedQuizQuestion, ExtractedQuizQuestionList
+from api.core.quiz.extraction import (
+    ExtractedQuizQuestion,
+    ExtractedQuizQuestionBatch,
+)
+from api.core.shared.document_text import DocumentPageText, ExtractedDocumentText
 
 
 def test_extracted_quiz_question_requires_single_correct_index():
@@ -26,39 +32,56 @@ def test_extracted_quiz_question_rejects_invalid_multiple_indexes():
         )
 
 
-def test_pdf_quiz_extraction_uses_langchain_structured_output(monkeypatch):
-    captured: dict[str, object] = {}
+def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypatch):
+    captured: list[dict[str, object]] = []
 
-    class FakeStructuredLLM:
-        def invoke(self, messages):
-            captured["messages"] = messages
-            return ExtractedQuizQuestionList(
-                [
-                    ExtractedQuizQuestion(
-                        question="Thủ đô của Pháp là gì?",
-                        type="single",
-                        options=["London", "Berlin", "Paris", "Madrid"],
-                        correctIndex=2,
-                    )
-                ]
-            )
-
-    def _fake_get_structured_llm(*_args, **_kwargs):
-        return FakeStructuredLLM()
+    def fake_invoke_structured_completion(**kwargs):
+        captured.append(kwargs)
+        return ExtractedQuizQuestionBatch(
+            questions=[
+                ExtractedQuizQuestion(
+                    question="Thủ đô của Pháp là gì?",
+                    type="single",
+                    options=["London", "Berlin", "Paris", "Madrid"],
+                    correctIndex=2,
+                )
+            ]
+        )
 
     monkeypatch.setattr(
         extraction,
-        "get_structured_llm",
-        _fake_get_structured_llm,
+        "extract_document_text_from_bytes",
+        lambda _pdf_bytes, *, filename=None: ExtractedDocumentText(
+            text="## Trang 1\nCâu 1\n\n## Trang 2\nCâu 2",
+            pages=[
+                DocumentPageText(page_number=1, text="Câu 1"),
+                DocumentPageText(page_number=2, text="Câu 2"),
+            ],
+            metadata={"file_name": filename or "sample.pdf", "page_count": 2},
+        ),
+    )
+    monkeypatch.setattr(
+        extraction, "invoke_structured_completion", fake_invoke_structured_completion
+    )
+    monkeypatch.setattr(
+        extraction,
+        "get_settings",
+        lambda: SimpleNamespace(content_pipeline_pdf_page_batch_size=1),
     )
 
-    result = extraction._invoke_pdf_extract_llm_sync(
+    result = extraction._extract_questions_from_pdf_bytes_sync(
         b"%PDF-demo",
         "sample.pdf",
         "extract quiz",
-        "gpt-4o-mini",
+        "quiz-model",
         5.0,
     )
 
     assert result[0]["correctIndex"] == 2
-    assert captured["messages"][0].content[1]["type"] == "file"
+    assert len(captured) == 2
+    first_request = captured[0]
+    assert first_request["schema"] is ExtractedQuizQuestionBatch
+    messages = first_request["messages"]
+    assert messages[1]["role"] == "user"
+    assert "<document_text>" in messages[1]["content"]
+    assert "Tên file: sample.pdf" in messages[1]["content"]

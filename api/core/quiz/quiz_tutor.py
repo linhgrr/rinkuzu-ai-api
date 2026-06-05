@@ -1,5 +1,5 @@
 """
-quiz_tutor.py — Quiz ask-AI generation and streaming via the official OpenAI Responses API.
+quiz_tutor.py — Quiz ask-AI generation and streaming via the shared chat API.
 """
 
 from __future__ import annotations
@@ -7,15 +7,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-import httpx
-from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from api.config import get_settings
 from api.core.shared.llm import (
-    awith_llm_retry,
-    extract_llm_text,
-    get_llm,
+    LLMConfigurationError,
+    _resolve_shared_llm_model,
+    astream_text_completion,
+    invoke_text_completion,
     serialize_responses_sse_event,
     with_llm_retry,
 )
@@ -34,8 +33,12 @@ _MIN_EXPLANATION_LENGTH = 20
 
 
 def _resolve_quiz_tutor_model() -> str:
-    settings = get_settings()
-    return settings.exercise_llm_model or settings.openai_model or "gpt-4o-mini"
+    try:
+        return _resolve_shared_llm_model(None)
+    except LLMConfigurationError as exc:
+        raise LLMConfigurationError(
+            "LLM model is not set. Configure EXERCISE_LLM_MODEL or LLM_MODEL."
+        ) from exc
 
 
 def _build_input_message(
@@ -46,7 +49,7 @@ def _build_input_message(
     chat_history: list[dict[str, str]],
     question_image: str | None,
     option_images: list[str | None] | None,
-) -> list[SystemMessage | HumanMessage]:
+) -> list[dict[str, Any]]:
     prompt = build_tutor_prompt(
         question=question,
         options=options,
@@ -68,46 +71,37 @@ def _build_input_message(
     )
 
     return [
-        SystemMessage(content=TUTOR_SYSTEM_PROMPT),
-        HumanMessage(content=user_content),  # type: ignore[arg-type]
+        {"role": "system", "content": TUTOR_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
     ]
 
 
 def _request_quiz_tutor_text(
     *,
     model: str,
-    input_messages: list[SystemMessage | HumanMessage],
+    input_messages: list[dict[str, Any]],
     timeout_sec: float,
 ) -> str:
-    llm = get_llm(
+    return invoke_text_completion(
+        messages=input_messages,
         model=model,
         temperature=0.7,
         timeout=timeout_sec,
-        use_responses_api=True,
     )
-    response = llm.invoke(input_messages)
-    return extract_llm_text(response.content)
 
 
 async def _open_quiz_tutor_stream(
     *,
     model: str,
-    input_messages: list[SystemMessage | HumanMessage],
+    input_messages: list[dict[str, Any]],
     timeout_sec: float,
-) -> Any:
-    stream_timeout = httpx.Timeout(timeout_sec, read=None)
-
-    async def _try() -> Any:
-        llm = get_llm(
-            model=model,
-            temperature=0.7,
-            timeout=stream_timeout,
-            streaming=True,
-            use_responses_api=True,
-        )
-        return llm.astream(input_messages)
-
-    return await awith_llm_retry(label="quiz tutor stream", fn=_try)
+) -> AsyncIterator[str]:
+    return astream_text_completion(
+        messages=input_messages,
+        model=model,
+        temperature=0.7,
+        timeout=timeout_sec,
+    )
 
 
 def generate_quiz_tutor_response(

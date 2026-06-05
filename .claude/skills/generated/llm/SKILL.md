@@ -1,69 +1,40 @@
 ---
 name: llm
-description: "Skill for the Llm area of rinkuzu-ai-api. 20 symbols across 3 files."
+description: "Skill for the LLM area of rinkuzu-ai-api after the shared LiteLLM migration."
 ---
 
-# Llm
+# LLM
 
-20 symbols | 3 files | Cohesion: 100%
+This area is now standardized around the shared LiteLLM-backed abstraction in `api/core/shared/llm.py`.
 
 ## When to Use
 
 - Working with code in `api/`
-- Understanding how upload_pdf_bytes, parse_response, response_usage_summary work
-- Modifying llm-related functionality
+- Modifying provider configuration, structured generation, or streaming text generation
+- Understanding how the backend normalizes provider-specific message shapes into the project-wide LLM surface
 
 ## Key Files
 
-| File | Symbols |
+| File | Purpose |
 |------|---------|
-| `api/core/content_pipeline/infrastructure/llm/schemas.py` | StrictSchemaModel, Relation, Formula, Concept, ConceptExtraction (+5) |
-| `api/core/content_pipeline/infrastructure/llm/openai_responses.py` | upload_pdf_bytes, parse_response, response_usage_summary, _api_error_message, _looks_like_missing_file (+1) |
-| `api/core/content_pipeline/infrastructure/llm/postprocess.py` | postprocess_concepts, _postprocess_relation, _is_valid_relation, normalize_concept_id |
+| `api/core/shared/llm.py` | Shared provider config, chat-completions adapter, text + structured generation helpers |
+| `api/core/shared/document_text.py` | Provider boundary for page-level document text extraction |
+| `api/core/content_pipeline/infrastructure/llm/structured_generation.py` | Content-pipeline structured generation adapter |
+| `api/core/content_pipeline/infrastructure/llm/schemas.py` | Pydantic schemas used for structured extraction |
+| `api/core/content_pipeline/infrastructure/llm/postprocess.py` | Post-processing for extracted concepts |
 
 ## Entry Points
 
-Start here when exploring this area:
+- `build_llm_provider_config`
+- `LiteLLMClient`
+- `invoke_text_completion`
+- `astream_text_completion`
+- `invoke_structured_completion`
+- `ainvoke_structured_completion`
+- `LiteLLMStructuredGenerationClient.parse_response`
 
-- **`upload_pdf_bytes`** (Function) — `api/core/content_pipeline/infrastructure/llm/openai_responses.py:125`
-- **`parse_response`** (Function) — `api/core/content_pipeline/infrastructure/llm/openai_responses.py:195`
-- **`response_usage_summary`** (Function) — `api/core/content_pipeline/infrastructure/llm/openai_responses.py:244`
-- **`postprocess_concepts`** (Function) — `api/core/content_pipeline/infrastructure/llm/postprocess.py:12`
-- **`normalize_concept_id`** (Function) — `api/core/content_pipeline/infrastructure/llm/postprocess.py:131`
+## Notes
 
-## Key Symbols
-
-| Symbol | Type | File | Line |
-|--------|------|------|------|
-| `StrictSchemaModel` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 7 |
-| `Relation` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 13 |
-| `Formula` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 31 |
-| `Concept` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 43 |
-| `ConceptExtraction` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 72 |
-| `ExtractionConceptPayload` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 84 |
-| `ConceptExtractionPayload` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 105 |
-| `EvidenceVerification` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 140 |
-| `EdgeDecision` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 165 |
-| `CycleRemovalDecision` | Class | `api/core/content_pipeline/infrastructure/llm/schemas.py` | 181 |
-| `upload_pdf_bytes` | Function | `api/core/content_pipeline/infrastructure/llm/openai_responses.py` | 125 |
-| `parse_response` | Function | `api/core/content_pipeline/infrastructure/llm/openai_responses.py` | 195 |
-| `response_usage_summary` | Function | `api/core/content_pipeline/infrastructure/llm/openai_responses.py` | 244 |
-| `postprocess_concepts` | Function | `api/core/content_pipeline/infrastructure/llm/postprocess.py` | 12 |
-| `normalize_concept_id` | Function | `api/core/content_pipeline/infrastructure/llm/postprocess.py` | 131 |
-| `_api_error_message` | Function | `api/core/content_pipeline/infrastructure/llm/openai_responses.py` | 268 |
-| `_looks_like_missing_file` | Function | `api/core/content_pipeline/infrastructure/llm/openai_responses.py` | 275 |
-| `_looks_like_payload_too_large` | Function | `api/core/content_pipeline/infrastructure/llm/openai_responses.py` | 280 |
-| `_postprocess_relation` | Function | `api/core/content_pipeline/infrastructure/llm/postprocess.py` | 59 |
-| `_is_valid_relation` | Function | `api/core/content_pipeline/infrastructure/llm/postprocess.py` | 86 |
-
-## Execution Flows
-
-| Flow | Type | Steps |
-|------|------|-------|
-| `Postprocess_concepts → Normalize_concept_id` | intra_community | 3 |
-
-## How to Explore
-
-1. `gitnexus_context({name: "upload_pdf_bytes"})` — see callers and callees
-2. `gitnexus_query({query: "llm"})` — find related execution flows
-3. Read key files listed above for implementation details
+- Legacy file-upload / Responses-specific extraction paths have been removed.
+- Runtime config is strict: use `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`; the model string is passed through as-is.
+- Runtime LLM consumers should go through `api.core.shared.llm` instead of creating provider clients directly.

@@ -12,8 +12,12 @@ def compute_embedding_for_concepts(concepts: list[Concept], client: EmbeddingCli
     Compute embeddings for concepts IN-PLACE.
 
     This function modifies the input concepts by adding embeddings:
-    - name_embedding: embedding of concept name only (used for CSR prerequisite ranking)
-    - definition_embedding: embedding of definition only (used for CSR prerequisite ranking)
+    - name_embedding: embedding of concept name (used for concept merging via cosine dedup)
+    - definition_embedding: embedding of definition (averaged across duplicates during merge)
+
+    Note: prerequisite ranking is now performed by MLPPrerequisiteRanker, which
+    computes its own XLM-RoBERTa encodings of concept names and does not consume
+    these vietnamese-sbert embeddings.
 
     Args:
         concepts: List of concepts to compute embeddings for (modified in-place)

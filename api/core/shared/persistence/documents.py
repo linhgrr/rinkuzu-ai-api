@@ -235,6 +235,36 @@ class QuizDraftListProjection(BaseModel):
     expires_at: datetime
 
 
+class DocumentOCRPage(BaseModel):
+    page_number: int
+    text: str
+
+
+class DocumentOCRRecordDocument(Document):
+    file_hash: str
+    file_name: str
+    file_size_bytes: int | None = None
+    text: str
+    page_count: int = 0
+    provider: str | None = None
+    model: str | None = None
+    pages: list[DocumentOCRPage] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    @before_event([Insert, Replace, SaveChanges])
+    def touch_updated_at(self) -> None:
+        self.updated_at = utc_now()
+
+    class Settings:
+        name = "al_document_ocr_records"
+        indexes: ClassVar[list[IndexModel]] = [
+            IndexModel([("file_hash", ASCENDING)], unique=True),
+            IndexModel([("updated_at", DESCENDING)]),
+        ]
+
+
 class DocumentChunkDocument(Document):
     job_id: str
     subject_id: str
@@ -249,20 +279,4 @@ class DocumentChunkDocument(Document):
         indexes: ClassVar[list[IndexModel]] = [
             IndexModel([("job_id", ASCENDING), ("chunk_index", ASCENDING)], unique=True),
             IndexModel([("subject_id", ASCENDING), ("job_id", ASCENDING)]),
-        ]
-
-
-class OpenAIFileCacheDocument(Document):
-    provider_fingerprint: str
-    sha256: str
-    file_id: str
-    purpose: str
-    created_at: datetime = Field(default_factory=utc_now)
-    expires_at: datetime
-
-    class Settings:
-        name = "al_openai_file_cache"
-        indexes: ClassVar[list[IndexModel]] = [
-            IndexModel([("provider_fingerprint", ASCENDING), ("sha256", ASCENDING)], unique=True),
-            IndexModel("expires_at", expireAfterSeconds=0),
         ]

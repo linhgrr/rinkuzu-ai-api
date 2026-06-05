@@ -6,18 +6,23 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class StrictSchemaModel(BaseModel):
-    """Base model for OpenAI structured outputs."""
+    """Base model for provider-agnostic structured LLM outputs."""
 
     model_config = ConfigDict(extra="forbid")
 
 
 class Relation(StrictSchemaModel):
-    """Directed relation from this concept to a target concept."""
+    """Dependency relation attached to the current extracted concept."""
 
     type: Literal["PREREQUISITE"] = Field(
-        ..., description="Relation type. PREREQUISITE is a learning-oriented edge."
+        ...,
+        description=("Relation type. PREREQUISITE means the current concept depends on target_id."),
     )
-    target_id: str = Field(..., min_length=1, description="Target concept ID.")
+    target_id: str = Field(
+        ...,
+        min_length=1,
+        description="Concept ID of the prerequisite required by the current concept.",
+    )
     confidence: float | None = Field(
         None,
         ge=0,
@@ -59,14 +64,28 @@ class Concept(StrictSchemaModel):
         default_factory=list, description="List of related formulas (if any)."
     )
     relations: list[Relation] = Field(
-        default_factory=list, description="Relations to other concepts (prioritize PREREQUISITE)."
+        default_factory=list,
+        description=(
+            "Prerequisites required by this concept. The graph converts each relation "
+            "to target_id -> current concept."
+        ),
     )
 
     name_embedding: list[float] | None = Field(
-        None, description="Vector embedding of concept name only (for CSR prerequisite ranking)."
+        None,
+        description=(
+            "DEPRECATED. Vietnamese-sbert embedding of the concept name. Kept "
+            "optional for backward compatibility with existing MongoDB documents; "
+            "no longer populated by the live pipeline (MLPPrerequisiteRanker "
+            "carries its own XLM-RoBERTa encoder)."
+        ),
     )
     definition_embedding: list[float] | None = Field(
-        None, description="Vector embedding of definition text only (for CSR prerequisite ranking)."
+        None,
+        description=(
+            "DEPRECATED. Vietnamese-sbert embedding of the definition. Kept "
+            "optional for backward compatibility; no longer populated."
+        ),
     )
 
 
@@ -99,7 +118,10 @@ class ExtractionConceptPayload(StrictSchemaModel):
     )
     relations: list[Relation] = Field(
         default_factory=list,
-        description="Relations to other concepts. Use target_id for the destination concept id.",
+        description=(
+            "Prerequisites required by this concept. For PREREQUISITE, target_id is "
+            "the prerequisite concept id, not the dependent concept id."
+        ),
     )
 
 
