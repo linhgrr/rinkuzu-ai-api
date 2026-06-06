@@ -53,6 +53,18 @@ async def extract_concepts_from_chunks(
     settings = get_settings()
     extraction_timeout = await _resolve_extraction_timeout(file_path, job, settings)
 
+    async def _heartbeat(done: int, total: int) -> None:
+        frac = (done / total) if total > 0 else 0.0
+        progress = PipelineProgress.CONCEPT_EXTRACTION_START + frac * (
+            PipelineProgress.CONCEPT_EXTRACTION_DONE - PipelineProgress.CONCEPT_EXTRACTION_START
+        )
+        await persist_job_state(
+            job,
+            PipelineStatus.EXTRACTING,
+            f"Extracting concepts with LLM... ({done}/{total} batches)",
+            progress,
+        )
+
     extractions: list[Any] = await asyncio.wait_for(
         extraction_chain.extract_from_document(
             file_path,
@@ -60,6 +72,7 @@ async def extract_concepts_from_chunks(
             job.page_batch_size,
             document_text=document_text,
             job_id=job.job_id,
+            on_batch_progress=_heartbeat,
         ),
         timeout=extraction_timeout,
     )

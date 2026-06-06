@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import time
 
 import pytest
@@ -345,3 +346,52 @@ def test_build_job_from_payload_preserves_result_and_graph_fields():
     assert job.concepts_extracted == 5
     assert job.concepts_after_merge == 4
     assert job.relations_verified == 2
+
+
+@pytest.mark.asyncio
+async def test_reaper_cancels_local_task_before_failing():
+    saved = {}
+    svc = _make_service(saved, [])
+
+    # Simulate an in-flight background task for "j_inflight".
+    inflight = asyncio.create_task(asyncio.sleep(60))
+    svc._scheduled_tasks["j_inflight"] = inflight
+
+    async def list_active(**kwargs):
+        return [
+            {
+                "job_id": "j_inflight",
+                "filename": "a.pdf",
+                "subject_id": "a",
+                "user_id": "u",
+                "status": "extracting",
+                "heartbeat_at": time.time() - 10_000,
+                "progress": 0.3,
+            }
+        ]
+
+    reaped = await svc.reap_stalled_jobs(list_active=list_active, stalled_after_sec=900)
+
+    assert reaped == 1
+    # cancel() was requested on the orphaned local task by the reaper.
+    assert inflight.cancelling() > 0
+    # The reaper persisted an authoritative FAILED + retryable outcome.
+    assert saved["j_inflight"].status is PipelineStatus.FAILED
+    assert saved["j_inflight"].error_code == "pipeline_stalled"
+    assert saved["j_inflight"].retryable is True
+
+    # Drain the cancelled task and confirm cancellation actually landed,
+    # avoiding "task was destroyed" warnings.
+    with contextlib.suppress(asyncio.CancelledError):
+        await inflight
+    assert inflight.cancelled()
+    # No *live* (non-done) task remains tracked for the job.
+    tracked = svc._scheduled_tasks.get("j_inflight")
+    assert tracked is None or tracked.done()
+
+
+@pytest.mark.asyncio
+async def test_cancel_local_task_noop_when_absent():
+    saved = {}
+    svc = _make_service(saved, [])
+    assert svc._cancel_local_task("nope") is False

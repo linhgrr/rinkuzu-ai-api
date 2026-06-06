@@ -24,7 +24,9 @@ class _FakeExtractionChain:
         *,
         document_text=None,
         job_id=None,
+        on_batch_progress=None,
     ):
+        del on_batch_progress
         self.calls.append((file_path, subject_id, page_batch_size, document_text, job_id))
         return self._response
 
@@ -76,7 +78,7 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
     extracted = asyncio.run(
         extract_concepts_from_chunks(
             job,
-            file_path="/tmp/lesson.pdf",  # noqa: S108
+            file_path="/tmp/lesson.pdf",
             extraction_chain=extraction_chain,
             postprocess_concepts=postprocess,
             persist_job_state=persist_job_state,
@@ -84,9 +86,7 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
     )
 
     assert [concept.concept_id for concept in extracted] == ["c2", "c1"]
-    assert extraction_chain.calls == [
-        ("/tmp/lesson.pdf", "algebra", 10, None, "job-1")  # noqa: S108
-    ]
+    assert extraction_chain.calls == [("/tmp/lesson.pdf", "algebra", 10, None, "job-1")]
     assert job.batch_count == 3
     assert job.failed_batch_count == 1
     assert job.partial_success is True
@@ -102,6 +102,78 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
         (PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.15),
         (PipelineStatus.EXTRACTING, "Extracting concepts with LLM...", 0.30),
     ]
+
+
+class _BatchHeartbeatExtractionChain:
+    """Fake chain that drives ``on_batch_progress`` once per simulated batch."""
+
+    def __init__(self, response, total_batches):
+        self._response = response
+        self._total_batches = total_batches
+        self.last_batches = [{"batch_index": i} for i in range(total_batches)]
+        self.last_failed_batches = []
+
+    async def extract_from_document(
+        self,
+        file_path,
+        subject_id,
+        page_batch_size,
+        *,
+        document_text=None,
+        job_id=None,
+        on_batch_progress=None,
+    ):
+        del file_path, subject_id, page_batch_size, document_text, job_id
+        for done in range(1, self._total_batches + 1):
+            if on_batch_progress is not None:
+                await on_batch_progress(done, self._total_batches)
+        return self._response
+
+
+def test_extract_concepts_emits_per_batch_heartbeat():
+    job = PipelineJob(
+        job_id="job-hb",
+        filename="lesson.pdf",
+        subject_id="algebra",
+        page_batch_size=10,
+    )
+    total_batches = 3
+    extraction_chain = _BatchHeartbeatExtractionChain(
+        [SimpleNamespace(concepts=[], notes=None) for _ in range(total_batches)],
+        total_batches=total_batches,
+    )
+    calls: list[tuple[PipelineStatus, str, float]] = []
+
+    async def persist_job_state(job_arg, status, step, progress):
+        assert job_arg is job
+        calls.append((status, step, progress))
+
+    asyncio.run(
+        extract_concepts_from_chunks(
+            job,
+            file_path="/tmp/lesson.pdf",
+            extraction_chain=extraction_chain,
+            postprocess_concepts=lambda items: items,
+            persist_job_state=persist_job_state,
+        )
+    )
+
+    # START + 3 per-batch heartbeats + DONE = 5 persist calls.
+    assert len(calls) == total_batches + 2
+    progresses = [progress for _, _, progress in calls]
+    assert progresses[0] == 0.15
+    assert progresses[-1] == 0.30
+    # Mid-extraction heartbeats interpolate strictly within [0.15, 0.30].
+    heartbeat_progresses = progresses[1:-1]
+    assert len(heartbeat_progresses) == total_batches
+    for value in heartbeat_progresses:
+        assert 0.15 <= value <= 0.30
+    # Monotonically increasing across the whole sequence.
+    assert progresses == sorted(progresses)
+    # Per-batch steps carry the batch counter so liveness can be confirmed.
+    steps = [step for _, step, _ in calls]
+    assert steps[1] == "Extracting concepts with LLM... (1/3 batches)"
+    assert steps[3] == "Extracting concepts with LLM... (3/3 batches)"
 
 
 def test_resolve_extraction_timeout_uses_retry_aware_llm_budget(monkeypatch):
@@ -126,7 +198,7 @@ def test_resolve_extraction_timeout_uses_retry_aware_llm_budget(monkeypatch):
 
     timeout = asyncio.run(
         _resolve_extraction_timeout(
-            "/tmp/lesson.pdf",  # noqa: S108
+            "/tmp/lesson.pdf",
             job,
             SimpleNamespace(
                 content_pipeline_extraction_secs_per_page=20.0,

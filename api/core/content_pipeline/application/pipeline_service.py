@@ -64,7 +64,7 @@ class PipelineService:
     ):
         self._save_job = save_job
         self._run_pipeline = run_pipeline
-        self._scheduled_tasks: set[asyncio.Task[None]] = set()
+        self._scheduled_tasks: dict[str, asyncio.Task[None]] = {}
         self._concurrency_semaphore = asyncio.Semaphore(max_concurrent_jobs)
         self._is_shutting_down = False
         self._upload_dir = upload_dir or (
@@ -209,8 +209,12 @@ class PipelineService:
                 )
 
         task: asyncio.Task[None] = asyncio.create_task(_gated_run())
-        self._scheduled_tasks.add(task)
-        task.add_done_callback(self._scheduled_tasks.discard)
+        self._scheduled_tasks[job.job_id] = task
+
+        def _discard(_t: asyncio.Task[None], jid: str = job.job_id) -> None:
+            self._scheduled_tasks.pop(jid, None)
+
+        task.add_done_callback(_discard)
 
     def build_job_from_payload(self, doc: dict[str, Any]) -> PipelineJob:
         """Rehydrate a :class:`PipelineJob` from a persisted document.
@@ -271,6 +275,20 @@ class PipelineService:
         job.retryable = True
         await self.persist_job_state(job, PipelineStatus.FAILED, step, job.progress)
 
+    def _cancel_local_task(self, job_id: str) -> bool:
+        """Best-effort cancel of the in-process background task for ``job_id``.
+
+        Single-instance deployment: the task lives in THIS process, so cancelling
+        the local task is the correct lever. In a multi-worker future the task may
+        live in another worker and this is a harmless no-op; the Mongo FAILED write
+        plus the runner's own cancel/heartbeat checks remain the backstop.
+        """
+        task = self._scheduled_tasks.get(job_id)
+        if task is not None and not task.done():
+            task.cancel()
+            return True
+        return False
+
     async def reap_stalled_jobs(
         self,
         *,
@@ -285,6 +303,8 @@ class PipelineService:
             if heartbeat_at is None or now - heartbeat_at < stalled_after_sec:
                 continue
             job = self.build_job_from_payload(doc)
+            if self._cancel_local_task(job.job_id):
+                logger.info("Cancelled local task for stalled job %s", job.job_id)
             await self._fail_as_stalled(job, "Stalled — reaped")
             reaped += 1
         if reaped:
@@ -363,7 +383,7 @@ class PipelineService:
     ) -> None:
         """Stop accepting new jobs and drain/cancel scheduled background tasks."""
         self._is_shutting_down = True
-        pending_tasks = list(self._scheduled_tasks)
+        pending_tasks = list(self._scheduled_tasks.values())
         if not pending_tasks:
             return
 
@@ -376,4 +396,4 @@ class PipelineService:
                 asyncio.gather(*pending_tasks, return_exceptions=True),
                 timeout=timeout_sec,
             )
-        self._scheduled_tasks.difference_update(pending_tasks)
+        self._scheduled_tasks.clear()
