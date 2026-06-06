@@ -97,7 +97,7 @@ def async_retry(
             async def _call() -> _T:
                 return await fn(*args, **kwargs)
 
-            return await retrying(_call)
+            return cast("_T", await retrying(_call))
 
         return wrapped
 
@@ -129,7 +129,7 @@ def sync_retry(
             def _call() -> _T:
                 return fn(*args, **kwargs)
 
-            return retrying(_call)
+            return cast("_T", retrying(_call))
 
         return wrapped
 

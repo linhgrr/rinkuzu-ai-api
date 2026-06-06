@@ -1,55 +1,6 @@
-"""Shared infrastructure used across domains."""
+"""Shared infrastructure used across domains.
 
-from .llm import (
-    LiteLLMClient,
-    LLMClient,
-    LLMConfigurationError,
-    LLMProviderConfig,
-    ainvoke_structured_completion,
-    astream_text_completion,
-    build_llm_provider_config,
-    extract_llm_text,
-    get_default_llm_client,
-    invoke_structured_completion,
-    invoke_text_completion,
-    normalize_chat_messages,
-    normalize_llm_base_url,
-    resolve_llm_api_key,
-    serialize_responses_sse_event,
-)
-from .retry import (
-    async_retry,
-    async_transient_retry,
-    is_retryable_llm_error,
-    is_transient_error,
-    llm_async_retry,
-    llm_retry_call,
-    resolve_llm_retry_policy,
-    sync_retry,
-)
-
-__all__ = [
-    "LLMClient",
-    "LLMConfigurationError",
-    "LLMProviderConfig",
-    "LiteLLMClient",
-    "ainvoke_structured_completion",
-    "astream_text_completion",
-    "async_retry",
-    "async_transient_retry",
-    "build_llm_provider_config",
-    "extract_llm_text",
-    "get_default_llm_client",
-    "invoke_structured_completion",
-    "invoke_text_completion",
-    "is_retryable_llm_error",
-    "is_transient_error",
-    "llm_async_retry",
-    "llm_retry_call",
-    "normalize_chat_messages",
-    "normalize_llm_base_url",
-    "resolve_llm_api_key",
-    "resolve_llm_retry_policy",
-    "serialize_responses_sse_event",
-    "sync_retry",
-]
+Keep this package import light so submodule imports like
+``from api.core.shared import mongo_store`` do not eagerly pull the optional
+LLM stack into unrelated tests.
+"""

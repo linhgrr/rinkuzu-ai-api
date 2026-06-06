@@ -110,7 +110,7 @@ class TextChunker:
 
         # 2) Re-chunk về kích thước mục tiêu
         splitter = self._build_text_splitter()
-        final_docs = splitter.split_documents(docs)
+        final_docs: list[Document] = splitter.split_documents(docs)
 
         # 3) Thêm ước lượng page range (nếu cần)
         # Nếu loader đã có mapping trang -> bạn có thể gắn vào metadata ở đây.
