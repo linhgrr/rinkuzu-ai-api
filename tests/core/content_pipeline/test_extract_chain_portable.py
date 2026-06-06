@@ -245,6 +245,98 @@ def test_extract_from_document_uses_text_batches_and_tracks_failed_batches():
     ]
 
 
+def test_extract_from_document_fires_on_batch_progress_once_per_batch():
+    document_text = ExtractedDocumentText(
+        text="## Trang 1\nAlpha\n\n## Trang 2\nBeta\n\n## Trang 3\nGamma",
+        pages=[
+            DocumentPageText(page_number=1, text="Alpha"),
+            DocumentPageText(page_number=2, text="Beta"),
+            DocumentPageText(page_number=3, text="Gamma"),
+        ],
+        metadata={"page_count": 3, "file_name": "sample.pdf"},
+    )
+
+    class _Extractor:
+        def extract_file(self, _file_path: str) -> ExtractedDocumentText:
+            return document_text
+
+    chain = ExtractionChain(client=_RetryClient(), document_extractor=_Extractor())
+
+    async def fake_extract_single_batch(
+        *, job_id, subject_id, batch, previous_concepts, source_name
+    ):
+        del job_id, previous_concepts, source_name
+        return ConceptExtraction(concepts=[], subject_id=subject_id, notes=None)
+
+    chain._extract_single_batch = fake_extract_single_batch  # type: ignore[method-assign]
+
+    progress_calls: list[tuple[int, int]] = []
+
+    async def on_batch_progress(done: int, total: int) -> None:
+        progress_calls.append((done, total))
+
+    async def _run():
+        return await chain.extract_from_document(
+            "sample.pdf",
+            "math",
+            page_batch_size=1,
+            on_batch_progress=on_batch_progress,
+        )
+
+    results = asyncio.run(_run())
+
+    assert len(results) == 3
+    # One heartbeat per batch, reporting the running (completed, total) counts.
+    assert progress_calls == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_extract_from_document_survives_failing_on_batch_progress():
+    document_text = ExtractedDocumentText(
+        text="## Trang 1\nAlpha\n\n## Trang 2\nBeta",
+        pages=[
+            DocumentPageText(page_number=1, text="Alpha"),
+            DocumentPageText(page_number=2, text="Beta"),
+        ],
+        metadata={"page_count": 2, "file_name": "sample.pdf"},
+    )
+
+    class _Extractor:
+        def extract_file(self, _file_path: str) -> ExtractedDocumentText:
+            return document_text
+
+    chain = ExtractionChain(client=_RetryClient(), document_extractor=_Extractor())
+
+    async def fake_extract_single_batch(
+        *, job_id, subject_id, batch, previous_concepts, source_name
+    ):
+        del job_id, previous_concepts, source_name
+        return ConceptExtraction(concepts=[], subject_id=subject_id, notes=None)
+
+    chain._extract_single_batch = fake_extract_single_batch  # type: ignore[method-assign]
+
+    attempts: list[int] = []
+
+    async def exploding_on_batch_progress(done: int, total: int) -> None:
+        del total
+        attempts.append(done)
+        raise RuntimeError("mongo heartbeat blip")
+
+    async def _run():
+        return await chain.extract_from_document(
+            "sample.pdf",
+            "math",
+            page_batch_size=1,
+            on_batch_progress=exploding_on_batch_progress,
+        )
+
+    # A failing heartbeat must NOT abort extraction.
+    results = asyncio.run(_run())
+
+    assert len(results) == 2
+    # Callback was still attempted for every batch despite raising.
+    assert attempts == [1, 2]
+
+
 def test_extract_from_document_reuses_provided_document_text_without_ocr():
     document_text = ExtractedDocumentText(
         text="## Trang 1\nAlpha",

@@ -129,7 +129,7 @@ def sync_retry(
             def _call() -> _T:
                 return fn(*args, **kwargs)
 
-            return cast("_T", retrying(_call))
+            return retrying(_call)
 
         return wrapped
 

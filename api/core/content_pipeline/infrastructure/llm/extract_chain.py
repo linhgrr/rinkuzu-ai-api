@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 import time
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 from api.config import get_settings
 from api.core.content_pipeline.infrastructure.prompts import (
@@ -74,6 +77,7 @@ class ExtractionChain:
         document_text: ExtractedDocumentText | None = None,
         max_previous_concepts: int = 20,
         job_id: str | None = None,
+        on_batch_progress: Callable[[int, int], Awaitable[None]] | None = None,
     ) -> list[ConceptExtraction]:
         batch_size = page_batch_size or self.settings.content_pipeline_pdf_page_batch_size
         self.last_batches = []
@@ -149,6 +153,19 @@ class ExtractionChain:
                 len(pending_batches),
             )
 
+            if on_batch_progress is not None:
+                try:
+                    await on_batch_progress(completed_batches, total_planned_batches)
+                except Exception as exc:
+                    # Heartbeat is best-effort: a Mongo blip must never abort a
+                    # healthy extraction. Log at debug and keep processing.
+                    logger.debug(
+                        "extract heartbeat failed job_id={} done={}/{}: {}",
+                        job_id or "-",
+                        completed_batches,
+                        total_planned_batches,
+                        exc,
+                    )
         total_concepts = sum(len(extraction.concepts) for extraction in results)
         total_usage = {
             "input_tokens": sum(item.get("input_tokens", 0) for item in self.last_usage),
