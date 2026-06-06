@@ -21,7 +21,7 @@ from api.core.shared.document_text import (
     build_document_text_extractor,
     build_text_batches,
 )
-from api.core.shared.llm import make_async_llm_retry
+from api.core.shared.retry import llm_async_retry
 
 from .schemas import (
     ConceptExtraction,
@@ -252,7 +252,7 @@ class ExtractionChain:
         )
         return materialized
 
-    @make_async_llm_retry(label="extract batch")
+    @llm_async_retry(label="extract batch")
     async def _invoke_extraction_response(
         self,
         *,
@@ -308,13 +308,24 @@ class ExtractionChain:
         max_retries: int | None = None,
     ) -> ConceptExtractionPayload:
         del max_retries
+        return await self._invoke_extraction_response(
+            job_id=job_id,
+            subject_id=subject_id,
+            document_text=document_text,
+            previous_concepts=previous_concepts,
+        )
+
+    @llm_async_retry(label="relation verification")
+    async def _parse_verification_response(
+        self,
+        user_message: str,
+    ) -> EvidenceVerification:
         return cast(
-            "ConceptExtractionPayload",
-            await self._invoke_extraction_response(
-                job_id=job_id,
-                subject_id=subject_id,
-                document_text=document_text,
-                previous_concepts=previous_concepts,
+            "EvidenceVerification",
+            await self.client.parse_response(
+                instructions=EVIDENCE_VERIFICATION_PROMPT,
+                user_text=user_message,
+                text_format=EvidenceVerification,
             ),
         )
 
@@ -323,7 +334,7 @@ class ExtractionChain:
         concept_a: str,
         concept_b: str,
         pair_idx: int,
-        max_retries: int = 3,
+        max_retries: int = 3,  # noqa: ARG002 — kept for API compatibility; effective attempts from resolve_llm_retry_policy()
     ) -> EvidenceVerification:
         user_message = (
             "## CONCEPTS TO ANALYZE\n\n"
@@ -331,27 +342,17 @@ class ExtractionChain:
             f"- Concept B: {concept_b}\n\n"
             "Trả về đúng dữ liệu theo schema đã chỉ định. Không thêm văn bản ngoài schema."
         )
-        last_error: BaseException | None = None
-        for attempt in range(max_retries):
-            try:
-                return await self.client.parse_response(
-                    instructions=EVIDENCE_VERIFICATION_PROMPT,
-                    user_text=user_message,
-                    text_format=EvidenceVerification,
-                )
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "Verification attempt {}/{} failed for pair {}: {}",
-                    attempt + 1,
-                    max_retries,
-                    pair_idx,
-                    exc,
-                )
-                await asyncio.sleep(0.5 * (attempt + 1))
-        return self._verification_error(
-            f"Failed to generate structured output after {max_retries} attempts. Last error: {str(last_error)[:100]}"
-        )
+        try:
+            return await self._parse_verification_response(user_message)
+        except Exception as exc:
+            logger.warning(
+                "Verification failed for pair {} after all retries: {}",
+                pair_idx,
+                exc,
+            )
+            return self._verification_error(
+                f"Failed to generate structured output after all retries. Last error: {str(exc)[:100]}"
+            )
 
     @staticmethod
     def _verification_error(message: str) -> EvidenceVerification:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from beanie.odm.enums import SortDirection
@@ -8,14 +9,23 @@ from loguru import logger
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 from api.core.shared import mongo_store
 
-from .common import epoch_to_utc, normalize_for_bson, optional_epoch_to_utc, utc_to_epoch
+from .common import (
+    epoch_to_utc,
+    normalize_for_bson,
+    optional_epoch_to_utc,
+    utc_now,
+    utc_to_epoch,
+)
 from .document_chunks import delete_chunks_for_job
 from .documents import (
+    PipelineJobActiveProjection,
     PipelineJobDocument,
     PipelineJobListProjection,
     PipelineJobLookupProjection,
 )
 from .subject_progress import delete_subject_progress_for_user
+
+_NON_TERMINAL_STATUSES = [s.value for s in PipelineStatus if not s.is_terminal]
 
 
 def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
@@ -49,6 +59,13 @@ def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
         "updated_at": epoch_to_utc(job.updated_at),
         "heartbeat_at": epoch_to_utc(job.heartbeat_at),
         "completed_at": optional_epoch_to_utc(job.completed_at if job.status.is_terminal else None),
+        "source_s3_key": job.source_s3_key,
+        "prs_threshold": job.prs_threshold,
+        "min_confidence": job.min_confidence,
+        "apply_reduction": job.apply_reduction,
+        "retry_count": job.retry_count,
+        "cancel_requested": job.cancel_requested,
+        "eta_seconds": job.eta_seconds,
     }
 
 
@@ -83,6 +100,13 @@ def _document_to_runtime_payload(doc: PipelineJobDocument) -> dict[str, Any]:
         "updated_at": utc_to_epoch(doc.updated_at),
         "heartbeat_at": utc_to_epoch(doc.heartbeat_at),
         "completed_at": utc_to_epoch(doc.completed_at, default=0.0) if doc.completed_at else None,
+        "source_s3_key": doc.source_s3_key,
+        "prs_threshold": doc.prs_threshold,
+        "min_confidence": doc.min_confidence,
+        "apply_reduction": doc.apply_reduction,
+        "retry_count": doc.retry_count,
+        "cancel_requested": doc.cancel_requested,
+        "eta_seconds": doc.eta_seconds,
     }
 
 
@@ -200,6 +224,105 @@ async def list_recent_pipeline_jobs(
             "completed_at": utc_to_epoch(row.completed_at, default=0.0),
         }
         for row in rows
+    ]
+
+
+async def list_active_pipeline_jobs(
+    *,
+    user_id: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """Full runtime payloads for non-terminal jobs (reaper/recovery scans)."""
+    query: dict[str, Any] = {"status": {"$in": _NON_TERMINAL_STATUSES}}
+    if user_id is not None:
+        query["user_id"] = user_id
+    try:
+        docs = await PipelineJobDocument.find(query).limit(limit).to_list()
+    except Exception:
+        logger.exception("[PipelineStore] list_active failed user_id={}", user_id)
+        return []
+    return [_document_to_runtime_payload(doc) for doc in docs]
+
+
+async def find_recent_active_job_by_source(
+    *,
+    user_id: str,
+    source_s3_key: str,
+    window_sec: int,
+) -> dict[str, Any] | None:
+    """Most recent non-terminal job for this user+source within the window.
+
+    Used to dedup rapid double-submits of the same upload. Returns the
+    runtime payload of the newest match, or ``None`` if none exists.
+    """
+    cutoff = utc_now() - timedelta(seconds=window_sec)
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "source_s3_key": source_s3_key,
+        "status": {"$in": _NON_TERMINAL_STATUSES},
+        "created_at": {"$gte": cutoff},
+    }
+    try:
+        doc = await (
+            PipelineJobDocument.find(query)
+            .sort(("created_at", SortDirection.DESCENDING))
+            .first_or_none()
+        )
+    except Exception:
+        logger.exception(
+            "[PipelineStore] find_recent_active_by_source failed user_id={} source={}",
+            user_id,
+            source_s3_key,
+        )
+        return None
+    return None if doc is None else _document_to_runtime_payload(doc)
+
+
+async def list_recent_pipeline_jobs_all_status(
+    *,
+    user_id: str,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Library listing: recent jobs of all statuses for one user."""
+    try:
+        rows = await (
+            PipelineJobDocument.find(
+                PipelineJobDocument.user_id == user_id,
+                projection_model=PipelineJobActiveProjection,
+            )
+            .sort(("updated_at", SortDirection.DESCENDING))
+            .limit(limit)
+            .to_list()
+        )
+    except Exception:
+        logger.exception("[PipelineStore] list_all_status failed user_id={}", user_id)
+        return []
+    return [
+        {
+            "job_id": r.job_id,
+            "filename": r.filename,
+            "subject_id": r.subject_id,
+            "status": r.status.value,
+            "current_step": r.current_step,
+            "progress": r.progress,
+            "page_batch_size": r.page_batch_size,
+            "batch_count": r.batch_count,
+            "failed_batch_count": r.failed_batch_count,
+            "partial_success": r.partial_success,
+            "concepts_extracted": r.concepts_extracted,
+            "concepts_after_merge": r.concepts_after_merge,
+            "relations_verified": r.relations_verified,
+            "error_code": r.error_code,
+            "user_message": r.user_message,
+            "retryable": r.retryable,
+            "retry_count": r.retry_count,
+            "eta_seconds": r.eta_seconds,
+            "created_at": utc_to_epoch(r.created_at, default=0.0),
+            "updated_at": utc_to_epoch(r.updated_at, default=0.0),
+            "heartbeat_at": utc_to_epoch(r.heartbeat_at, default=0.0),
+            "completed_at": utc_to_epoch(r.completed_at, default=0.0) if r.completed_at else None,
+        }
+        for r in rows
     ]
 
 

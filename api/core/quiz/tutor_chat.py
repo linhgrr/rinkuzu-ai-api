@@ -17,8 +17,8 @@ from api.core.shared.llm import (
     extract_llm_text,
     invoke_text_completion,
     serialize_responses_sse_event,
-    with_llm_retry,
 )
+from api.core.shared.retry import llm_retry_call
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -351,4 +351,4 @@ def generate_tutor_chat_response(
             raise ValueError("Chat explanation too short")
         return explanation
 
-    return cast("str", with_llm_retry(label="tutor chat", fn=_try))
+    return cast("str", llm_retry_call(label="tutor chat", fn=_try))

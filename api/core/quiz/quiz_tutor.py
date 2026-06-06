@@ -16,8 +16,8 @@ from api.core.shared.llm import (
     astream_text_completion,
     invoke_text_completion,
     serialize_responses_sse_event,
-    with_llm_retry,
 )
+from api.core.shared.retry import llm_retry_call
 
 from .tutor_chat import (
     TUTOR_SYSTEM_PROMPT,
@@ -139,7 +139,7 @@ def generate_quiz_tutor_response(
             raise ValueError("explanation too short")
         return explanation
 
-    explanation = with_llm_retry(label="quiz tutor", fn=_try)
+    explanation = llm_retry_call(label="quiz tutor", fn=_try)
     logger.info("[LLM] ✓ Quiz tutor chat generated")
     return {
         "explanation": explanation,

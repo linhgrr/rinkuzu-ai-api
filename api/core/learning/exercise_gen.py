@@ -12,8 +12,8 @@ from pydantic import BaseModel
 from api.core.shared.llm import (
     _resolve_shared_llm_model,
     invoke_structured_completion,
-    with_llm_retry,
 )
+from api.core.shared.retry import llm_retry_call
 
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
 from .prompts import (
@@ -94,7 +94,7 @@ def generate_exercise(
         subject_context=subject_context,
     )
 
-    result = with_llm_retry(
+    result = llm_retry_call(
         label="generate_exercise",
         fn=lambda: _invoke_structured_llm(schema=schema, messages=messages),
     )
@@ -121,7 +121,7 @@ def evaluate_short_answer(
         student_answer=student_answer,
     )
 
-    result = with_llm_retry(
+    result = llm_retry_call(
         label="evaluate_short_answer",
         fn=lambda: _invoke_structured_llm(schema=ShortAnswerEvaluationOutput, messages=messages),
     )
@@ -146,7 +146,7 @@ def generate_theory(
         "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."],
     }
 
-    return with_llm_retry(
+    return llm_retry_call(
         label="generate_theory",
         fn=lambda: _invoke_structured_llm(
             schema=TheoryOutput,

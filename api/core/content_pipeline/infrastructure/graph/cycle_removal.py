@@ -9,7 +9,8 @@ import networkx as nx
 
 from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision
 from api.core.content_pipeline.infrastructure.prompts import CYCLE_REMOVAL_PROMPT
-from api.core.shared.llm import ainvoke_structured_completion, make_async_llm_retry
+from api.core.shared.llm import ainvoke_structured_completion
+from api.core.shared.retry import llm_async_retry
 
 
 class CycleRemover:
@@ -148,7 +149,7 @@ class CycleRemover:
                 result = 1
         return result
 
-    @make_async_llm_retry(label="cycle removal")
+    @llm_async_retry(label="cycle removal")
     async def _invoke_cycle_removal_decision(self, cycle_info: str) -> CycleRemovalDecision:
         return await ainvoke_structured_completion(
             model=self.model,

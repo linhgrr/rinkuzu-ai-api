@@ -81,6 +81,8 @@ class PipelineJobStatusResponse(BaseModel):
     error_message: str | None = None
     error_code: str | None = None
     user_message: str | None = None
+    eta_seconds: float | None = None
+    retry_count: int = 0
     retryable: bool = False
     failed_batches: list[PipelineFailedBatchResponse] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

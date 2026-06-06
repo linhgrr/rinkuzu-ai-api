@@ -12,6 +12,7 @@
           "session"
         ],
         "summary": "Start Session",
+        "description": "Create a new adaptive learning session.",
         "operationId": "start_session_api_session_start_post",
         "parameters": [
           {
@@ -63,7 +64,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionCreateResponse"
+                  "$ref": "#/components/schemas/StandardResponse_SessionCreateResponse_"
                 }
               }
             }
@@ -87,6 +88,7 @@
           "session"
         ],
         "summary": "Next Concept",
+        "description": "Recommend the next concept to study based on mastery and prerequisites.",
         "operationId": "next_concept_api_session__session_id__next_concept_post",
         "parameters": [
           {
@@ -95,8 +97,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -137,7 +144,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NextConceptResponse"
+                  "$ref": "#/components/schemas/StandardResponse_NextConceptResponse_"
                 }
               }
             }
@@ -161,6 +168,7 @@
           "session"
         ],
         "summary": "Theory",
+        "description": "Retrieve theory content for the current pending concept.",
         "operationId": "theory_api_session__session_id__theory_get",
         "parameters": [
           {
@@ -169,8 +177,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -211,7 +224,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TheoryResponse"
+                  "$ref": "#/components/schemas/StandardResponse_TheoryResponse_"
                 }
               }
             }
@@ -235,6 +248,7 @@
           "session"
         ],
         "summary": "Generate Exercise",
+        "description": "Generate an exercise for the current concept at the appropriate Bloom level.",
         "operationId": "generate_exercise_api_session__session_id__exercise_post",
         "parameters": [
           {
@@ -243,8 +257,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -285,7 +304,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExerciseResponse"
+                  "$ref": "#/components/schemas/StandardResponse_ExerciseResponse_"
                 }
               }
             }
@@ -309,6 +328,7 @@
           "session"
         ],
         "summary": "Submit Answer",
+        "description": "Evaluate the user's answer and update BKT mastery estimates.",
         "operationId": "submit_answer_api_session__session_id__submit_post",
         "parameters": [
           {
@@ -317,8 +337,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -369,7 +394,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SubmitAnswerResponse"
+                  "$ref": "#/components/schemas/StandardResponse_SubmitAnswerResponse_"
                 }
               }
             }
@@ -393,6 +418,7 @@
           "session"
         ],
         "summary": "Chat About Exercise",
+        "description": "Chat with an AI tutor about the current exercise, with optional RAG context.",
         "operationId": "chat_about_exercise_api_session__session_id__chat_post",
         "parameters": [
           {
@@ -401,8 +427,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -453,7 +484,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TutorChatResponse"
+                  "$ref": "#/components/schemas/StandardResponse_TutorChatResponse_"
                 }
               }
             }
@@ -477,6 +508,7 @@
           "session"
         ],
         "summary": "Session Status",
+        "description": "Return the current status and progress of a learning session.",
         "operationId": "session_status_api_session__session_id__status_get",
         "parameters": [
           {
@@ -485,8 +517,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -527,7 +564,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionStatusResponse"
+                  "$ref": "#/components/schemas/StandardResponse_SessionStatusResponse_"
                 }
               }
             }
@@ -551,6 +588,7 @@
           "knowledge"
         ],
         "summary": "Get Knowledge Graph",
+        "description": "Return the prerequisite knowledge graph for a session.",
         "operationId": "get_knowledge_graph_api_session__session_id__graph_get",
         "parameters": [
           {
@@ -559,8 +597,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -601,7 +644,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/KnowledgeGraphResponse"
+                  "$ref": "#/components/schemas/StandardResponse_KnowledgeGraphResponse_"
                 }
               }
             }
@@ -625,6 +668,7 @@
           "knowledge"
         ],
         "summary": "Get Mastery Matrix",
+        "description": "Return the concept x Bloom-level mastery matrix for a session.",
         "operationId": "get_mastery_matrix_api_session__session_id__mastery_matrix_get",
         "parameters": [
           {
@@ -633,8 +677,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -675,7 +724,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MasteryMatrixResponse"
+                  "$ref": "#/components/schemas/StandardResponse_MasteryMatrixResponse_"
                 }
               }
             }
@@ -699,6 +748,7 @@
           "knowledge"
         ],
         "summary": "Get Concept Detail",
+        "description": "Return detailed information about a specific concept.",
         "operationId": "get_concept_detail_api_session__session_id__concept__concept_id__get",
         "parameters": [
           {
@@ -707,8 +757,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Session Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "concept_id",
@@ -716,8 +771,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Concept Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -758,7 +818,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConceptDetailResponse"
+                  "$ref": "#/components/schemas/StandardResponse_ConceptDetailResponse_"
                 }
               }
             }
@@ -789,7 +849,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           }
@@ -855,7 +917,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PipelineProcessResponse"
+                  "$ref": "#/components/schemas/StandardResponse_PipelineProcessResponse_"
                 }
               }
             }
@@ -873,22 +935,25 @@
         }
       }
     },
-    "/api/pipeline/jobs/{job_id}": {
+    "/api/pipeline/jobs": {
       "get": {
         "tags": [
           "pipeline"
         ],
-        "summary": "Get Job Status",
-        "description": "Get pipeline job status and progress.",
-        "operationId": "get_job_status_api_pipeline_jobs__job_id__get",
+        "summary": "List Jobs",
+        "description": "List recent pipeline jobs of all statuses for the current user.\n\nReturns per-job live fields the frontend library needs: progress, retryable,\neta_seconds, retry_after_seconds, is_terminal, is_delayed.",
+        "operationId": "list_jobs_api_pipeline_jobs_get",
         "parameters": [
           {
-            "name": "job_id",
-            "in": "path",
-            "required": true,
+            "name": "limit",
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": "string",
-              "title": "Job Id"
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
             }
           },
           {
@@ -930,7 +995,86 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PipelineJobStatusResponse"
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "pipeline"
+        ],
+        "summary": "Get Job Status",
+        "operationId": "get_job_status_api_pipeline_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
+              "title": "Job Id"
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_PipelineJobStatusResponse_"
                 }
               }
             }
@@ -963,8 +1107,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Job Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "max_steps",
@@ -1015,7 +1164,167 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PipelineSessionCreateResponse"
+                  "$ref": "#/components/schemas/StandardResponse_PipelineSessionCreateResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "pipeline"
+        ],
+        "summary": "Cancel Job",
+        "description": "Request cancellation of a pipeline job.\n\nWorks regardless of pipeline runtime availability so a stuck job can always\nbe cancelled. No-ops when the job has already reached a terminal state.",
+        "operationId": "cancel_job_api_pipeline_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
+              "title": "Job Id"
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline/jobs/{job_id}/retry": {
+      "post": {
+        "tags": [
+          "pipeline"
+        ],
+        "summary": "Retry Job Endpoint",
+        "description": "Retry a terminal, retryable pipeline job by re-fetching its S3 source.",
+        "operationId": "retry_job_endpoint_api_pipeline_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
+              "title": "Job Id"
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
                 }
               }
             }
@@ -1039,7 +1348,6 @@
           "history"
         ],
         "summary": "List Subjects",
-        "description": "List all completed pipeline jobs (= subjects) enriched with mastery stats.",
         "operationId": "list_subjects_api_history_subjects_get",
         "parameters": [
           {
@@ -1093,7 +1401,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SubjectHistoryListResponse"
+                  "$ref": "#/components/schemas/StandardResponse_SubjectHistoryListResponse_"
                 }
               }
             }
@@ -1117,7 +1425,6 @@
           "history"
         ],
         "summary": "List Subject Progress",
-        "description": "List recent subject-level progress records.",
         "operationId": "list_subject_progress_api_history_subjects_progress_get",
         "parameters": [
           {
@@ -1171,7 +1478,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SubjectProgressListResponse"
+                  "$ref": "#/components/schemas/StandardResponse_SubjectProgressListResponse_"
                 }
               }
             }
@@ -1195,7 +1502,6 @@
           "history"
         ],
         "summary": "Get Subject History",
-        "description": "Get subject-level learning history for one pipeline job.",
         "operationId": "get_subject_history_api_history_subjects__job_id__get",
         "parameters": [
           {
@@ -1204,8 +1510,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Job Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -1246,7 +1557,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SubjectHistoryDetailResponse"
+                  "$ref": "#/components/schemas/StandardResponse_SubjectHistoryDetailResponse_"
                 }
               }
             }
@@ -1268,7 +1579,6 @@
           "history"
         ],
         "summary": "Delete Subject",
-        "description": "Delete a subject (pipeline job) and optionally its sessions.",
         "operationId": "delete_subject_api_history_subjects__job_id__delete",
         "parameters": [
           {
@@ -1277,8 +1587,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Job Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "delete_sessions",
@@ -1329,7 +1644,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeleteSubjectResponse"
+                  "$ref": "#/components/schemas/StandardResponse_DeleteSubjectResponse_"
                 }
               }
             }
@@ -1353,7 +1668,6 @@
           "history"
         ],
         "summary": "List Pipeline Jobs",
-        "description": "List recent pipeline jobs.",
         "operationId": "list_pipeline_jobs_api_history_pipeline_jobs_get",
         "parameters": [
           {
@@ -1407,7 +1721,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PipelineJobHistoryListResponse"
+                  "$ref": "#/components/schemas/StandardResponse_PipelineJobHistoryListResponse_"
                 }
               }
             }
@@ -1431,7 +1745,6 @@
           "history"
         ],
         "summary": "Get Pipeline Job",
-        "description": "Get full pipeline job result.",
         "operationId": "get_pipeline_job_api_history_pipeline_jobs__job_id__get",
         "parameters": [
           {
@@ -1440,8 +1753,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Job Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -1481,7 +1799,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           },
@@ -1504,6 +1824,7 @@
           "quiz-drafts"
         ],
         "summary": "Create Quiz Draft",
+        "description": "Create a new quiz draft and enqueue AI processing.",
         "operationId": "create_quiz_draft_api_quiz_drafts_post",
         "parameters": [
           {
@@ -1554,7 +1875,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           },
@@ -1575,6 +1898,7 @@
           "quiz-drafts"
         ],
         "summary": "List Quiz Drafts",
+        "description": "List recent quiz drafts for the authenticated user.",
         "operationId": "list_quiz_drafts_api_quiz_drafts_get",
         "parameters": [
           {
@@ -1627,7 +1951,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           },
@@ -1650,6 +1976,7 @@
           "quiz-drafts"
         ],
         "summary": "Get Quiz Draft",
+        "description": "Retrieve a single quiz draft by ID.",
         "operationId": "get_quiz_draft_api_quiz_drafts__draft_id__get",
         "parameters": [
           {
@@ -1658,8 +1985,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Draft Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -1699,7 +2031,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           },
@@ -1720,6 +2054,7 @@
           "quiz-drafts"
         ],
         "summary": "Patch Quiz Draft",
+        "description": "Update fields of an existing quiz draft.",
         "operationId": "patch_quiz_draft_api_quiz_drafts__draft_id__patch",
         "parameters": [
           {
@@ -1728,8 +2063,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Draft Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -1779,7 +2119,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           },
@@ -1800,6 +2142,7 @@
           "quiz-drafts"
         ],
         "summary": "Delete Quiz Draft",
+        "description": "Delete a quiz draft owned by the authenticated user.",
         "operationId": "delete_quiz_draft_api_quiz_drafts__draft_id__delete",
         "parameters": [
           {
@@ -1808,8 +2151,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Draft Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -1849,7 +2197,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           },
@@ -1872,6 +2222,7 @@
           "quiz-drafts"
         ],
         "summary": "Submit Quiz Draft",
+        "description": "Finalize a quiz draft and persist it as a published quiz.",
         "operationId": "submit_quiz_draft_api_quiz_drafts__draft_id__submit_post",
         "parameters": [
           {
@@ -1880,8 +2231,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
               "title": "Draft Id"
-            }
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
             "name": "x-user-id",
@@ -1931,7 +2287,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                }
               }
             }
           },
@@ -1954,6 +2312,7 @@
           "quiz"
         ],
         "summary": "Ask Ai About Quiz",
+        "description": "Ask an AI tutor for help understanding a quiz question (stream or single response).",
         "operationId": "ask_ai_about_quiz_api_quiz_ask_ai_post",
         "parameters": [
           {
@@ -2005,7 +2364,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/QuizTutorResponse"
+                  "$ref": "#/components/schemas/StandardResponse_QuizTutorResponseData_"
                 }
               }
             }
@@ -2033,7 +2392,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "title": "Response Readiness Api Ready Get"
+                }
               }
             }
           }
@@ -2051,7 +2412,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "title": "Response Health Api Health Get"
+                }
               }
             }
           }
@@ -2068,7 +2431,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "title": "Response Info Api Info Get"
+                }
               }
             }
           }
@@ -2302,14 +2667,12 @@
           "theory": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TheoryResponse"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Theory"
+            ]
           },
           "recommendation_reason": {
             "anyOf": [
@@ -2557,6 +2920,54 @@
         ],
         "title": "PipelineFailedBatchResponse"
       },
+      "PipelineGraphNodeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "definition": {
+            "type": "string",
+            "title": "Definition",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "index",
+          "name"
+        ],
+        "title": "PipelineGraphNodeResponse"
+      },
+      "PipelineGraphResponse": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineGraphNodeResponse"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/PipelinePartialGraphEdgeResponse"
+            },
+            "type": "array",
+            "title": "Edges"
+          }
+        },
+        "type": "object",
+        "title": "PipelineGraphResponse"
+      },
       "PipelineJobHistoryListResponse": {
         "properties": {
           "jobs": {
@@ -2581,7 +2992,7 @@
       "PipelineJobResultResponse": {
         "properties": {
           "graph": {
-            "$ref": "#/components/schemas/KnowledgeGraphResponse"
+            "$ref": "#/components/schemas/PipelineGraphResponse"
           },
           "stats": {
             "additionalProperties": true,
@@ -2614,24 +3025,7 @@
             "default": ""
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "queued",
-              "loading",
-              "chunking",
-              "extracting",
-              "embedding",
-              "merging",
-              "ranking",
-              "verifying",
-              "building_graph",
-              "optimizing",
-              "completed",
-              "failed",
-              "cancelled"
-            ],
-            "title": "Status"
+            "$ref": "#/components/schemas/PipelineStatus"
           },
           "current_step": {
             "type": "string",
@@ -2721,6 +3115,22 @@
             ],
             "title": "User Message"
           },
+          "eta_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds"
+          },
+          "retry_count": {
+            "type": "integer",
+            "title": "Retry Count",
+            "default": 0
+          },
           "retryable": {
             "type": "boolean",
             "title": "Retryable",
@@ -2768,7 +3178,7 @@
           "retry_after_seconds": {
             "type": "integer",
             "title": "Retry After Seconds",
-            "default": 2
+            "default": 3
           },
           "partial_graph": {
             "anyOf": [
@@ -2873,24 +3283,7 @@
             "title": "Subject Id"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "queued",
-              "loading",
-              "chunking",
-              "extracting",
-              "embedding",
-              "merging",
-              "ranking",
-              "verifying",
-              "building_graph",
-              "optimizing",
-              "completed",
-              "failed",
-              "cancelled"
-            ],
-            "title": "Status"
+            "$ref": "#/components/schemas/PipelineStatus"
           },
           "status_url": {
             "type": "string",
@@ -2904,11 +3297,7 @@
           "retry_after_seconds": {
             "type": "integer",
             "title": "Retry After Seconds",
-            "default": 2
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
+            "default": 3
           }
         },
         "type": "object",
@@ -2918,8 +3307,7 @@
           "file_size",
           "subject_id",
           "status",
-          "status_url",
-          "message"
+          "status_url"
         ],
         "title": "PipelineProcessResponse"
       },
@@ -2957,6 +3345,27 @@
         ],
         "title": "PipelineSessionCreateResponse"
       },
+      "PipelineStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "queued",
+          "loading",
+          "chunking",
+          "extracting",
+          "embedding",
+          "merging",
+          "ranking",
+          "verifying",
+          "building_graph",
+          "optimizing",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "PipelineStatus",
+        "description": "Authoritative lifecycle states for content pipeline jobs."
+      },
       "ProcessDocumentRequest": {
         "properties": {
           "file_url": {
@@ -2979,9 +3388,15 @@
             "title": "Subject Id"
           },
           "prs_threshold": {
-            "type": "number",
-            "title": "Prs Threshold",
-            "default": 0.75
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prs Threshold"
           },
           "min_confidence": {
             "type": "number",
@@ -2999,6 +3414,17 @@
             "minimum": 1.0,
             "title": "Page Batch Size",
             "default": 10
+          },
+          "source_s3_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source S3 Key"
           }
         },
         "type": "object",
@@ -3014,17 +3440,20 @@
             "type": "string",
             "maxLength": 200,
             "minLength": 1,
-            "title": "Title"
+            "title": "Title",
+            "description": "Quiz title."
           },
           "s3_key": {
             "type": "string",
             "minLength": 1,
-            "title": "S3 Key"
+            "title": "S3 Key",
+            "description": "S3 object key for the source document."
           },
           "file_name": {
             "type": "string",
             "minLength": 1,
-            "title": "File Name"
+            "title": "File Name",
+            "description": "Original filename of the uploaded document."
           },
           "file_size": {
             "anyOf": [
@@ -3036,7 +3465,8 @@
                 "type": "null"
               }
             ],
-            "title": "File Size"
+            "title": "File Size",
+            "description": "File size in bytes."
           },
           "category_id": {
             "anyOf": [
@@ -3047,7 +3477,8 @@
                 "type": "null"
               }
             ],
-            "title": "Category Id"
+            "title": "Category Id",
+            "description": "Optional category identifier."
           },
           "description": {
             "anyOf": [
@@ -3059,7 +3490,8 @@
                 "type": "null"
               }
             ],
-            "title": "Description"
+            "title": "Description",
+            "description": "Optional quiz description."
           },
           "prompt": {
             "anyOf": [
@@ -3071,7 +3503,8 @@
                 "type": "null"
               }
             ],
-            "title": "Prompt"
+            "title": "Prompt",
+            "description": "Custom AI prompt to guide question generation."
           }
         },
         "type": "object",
@@ -3124,8 +3557,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/QuizDraftQuestion"
                 },
                 "type": "array"
               },
@@ -3138,6 +3570,58 @@
         },
         "type": "object",
         "title": "QuizDraftPatchRequest"
+      },
+      "QuizDraftQuestion": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Question"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "single",
+              "multiple"
+            ],
+            "title": "Type"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 4,
+            "title": "Options"
+          },
+          "correctIndex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correctindex"
+          },
+          "correctIndexes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Correctindexes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "type",
+          "options"
+        ],
+        "title": "QuizDraftQuestion"
       },
       "QuizDraftSubmitRequest": {
         "properties": {
@@ -3251,23 +3735,6 @@
         ],
         "title": "QuizTutorRequest"
       },
-      "QuizTutorResponse": {
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "title": "Success",
-            "default": true
-          },
-          "data": {
-            "$ref": "#/components/schemas/QuizTutorResponseData"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "QuizTutorResponse"
-      },
       "QuizTutorResponseData": {
         "properties": {
           "explanation": {
@@ -3290,16 +3757,16 @@
             "type": "string",
             "title": "Timestamp"
           },
-          "turnCount": {
+          "turn_count": {
             "type": "integer",
-            "title": "Turncount"
+            "title": "Turn Count"
           }
         },
         "type": "object",
         "required": [
           "explanation",
           "timestamp",
-          "turnCount"
+          "turn_count"
         ],
         "title": "QuizTutorResponseData"
       },
@@ -3368,11 +3835,13 @@
             "maximum": 10000.0,
             "minimum": 5.0,
             "title": "Max Steps",
+            "description": "Maximum number of exercise steps in the session.",
             "default": 9999
           },
           "use_default_data": {
             "type": "boolean",
             "title": "Use Default Data",
+            "description": "If true, seeds the session with built-in example concepts.",
             "default": true
           }
         },
@@ -3383,11 +3852,13 @@
         "properties": {
           "session_id": {
             "type": "string",
-            "title": "Session Id"
+            "title": "Session Id",
+            "description": "Unique session identifier."
           },
           "n_concepts": {
             "type": "integer",
-            "title": "N Concepts"
+            "title": "N Concepts",
+            "description": "Number of concepts available in this session."
           },
           "concepts": {
             "items": {
@@ -3395,11 +3866,13 @@
               "type": "object"
             },
             "type": "array",
-            "title": "Concepts"
+            "title": "Concepts",
+            "description": "Ordered list of concept summaries."
           },
           "status": {
             "type": "string",
             "title": "Status",
+            "description": "Session state: active, completed, or cancelled.",
             "default": "active"
           }
         },
@@ -3415,47 +3888,58 @@
         "properties": {
           "session_id": {
             "type": "string",
-            "title": "Session Id"
+            "title": "Session Id",
+            "description": "Session identifier."
           },
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "Current session status."
           },
           "step": {
             "type": "integer",
-            "title": "Step"
+            "title": "Step",
+            "description": "Number of exercises answered so far."
           },
           "max_steps": {
             "type": "integer",
-            "title": "Max Steps"
+            "title": "Max Steps",
+            "description": "Session step limit."
           },
           "concepts_visited": {
             "type": "integer",
-            "title": "Concepts Visited"
+            "title": "Concepts Visited",
+            "description": "Number of distinct concepts encountered."
           },
           "total_concepts": {
             "type": "integer",
-            "title": "Total Concepts"
+            "title": "Total Concepts",
+            "description": "Total concepts in the session curriculum."
           },
           "avg_mastery": {
             "type": "number",
-            "title": "Avg Mastery"
+            "title": "Avg Mastery",
+            "description": "Average BKT mastery across all concepts."
           },
           "coverage": {
             "type": "number",
-            "title": "Coverage"
+            "title": "Coverage",
+            "description": "Fraction of concepts that have been visited at least once."
           },
           "total_correct": {
             "type": "integer",
-            "title": "Total Correct"
+            "title": "Total Correct",
+            "description": "Cumulative count of correct answers."
           },
           "total_answered": {
             "type": "integer",
-            "title": "Total Answered"
+            "title": "Total Answered",
+            "description": "Cumulative count of answered exercises."
           },
           "accuracy": {
             "type": "number",
-            "title": "Accuracy"
+            "title": "Accuracy",
+            "description": "Ratio of correct answers to total answered."
           },
           "exercises": {
             "items": {
@@ -3463,7 +3947,8 @@
               "type": "object"
             },
             "type": "array",
-            "title": "Exercises"
+            "title": "Exercises",
+            "description": "Recent exercise history entries."
           }
         },
         "type": "object",
@@ -3482,6 +3967,588 @@
           "exercises"
         ],
         "title": "SessionStatusResponse"
+      },
+      "StandardResponse_ConceptDetailResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConceptDetailResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[ConceptDetailResponse]"
+      },
+      "StandardResponse_DeleteSubjectResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/DeleteSubjectResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[DeleteSubjectResponse]"
+      },
+      "StandardResponse_ExerciseResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ExerciseResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[ExerciseResponse]"
+      },
+      "StandardResponse_KnowledgeGraphResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/KnowledgeGraphResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[KnowledgeGraphResponse]"
+      },
+      "StandardResponse_MasteryMatrixResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/MasteryMatrixResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[MasteryMatrixResponse]"
+      },
+      "StandardResponse_NextConceptResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/NextConceptResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[NextConceptResponse]"
+      },
+      "StandardResponse_PipelineJobHistoryListResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineJobHistoryListResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineJobHistoryListResponse]"
+      },
+      "StandardResponse_PipelineJobStatusResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineJobStatusResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineJobStatusResponse]"
+      },
+      "StandardResponse_PipelineProcessResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineProcessResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineProcessResponse]"
+      },
+      "StandardResponse_PipelineSessionCreateResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineSessionCreateResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineSessionCreateResponse]"
+      },
+      "StandardResponse_QuizTutorResponseData_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/QuizTutorResponseData"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[QuizTutorResponseData]"
+      },
+      "StandardResponse_SessionCreateResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SessionCreateResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[SessionCreateResponse]"
+      },
+      "StandardResponse_SessionStatusResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SessionStatusResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[SessionStatusResponse]"
+      },
+      "StandardResponse_SubjectHistoryDetailResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SubjectHistoryDetailResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[SubjectHistoryDetailResponse]"
+      },
+      "StandardResponse_SubjectHistoryListResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SubjectHistoryListResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[SubjectHistoryListResponse]"
+      },
+      "StandardResponse_SubjectProgressListResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SubjectProgressListResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[SubjectProgressListResponse]"
+      },
+      "StandardResponse_SubmitAnswerResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SubmitAnswerResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[SubmitAnswerResponse]"
+      },
+      "StandardResponse_TheoryResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/TheoryResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[TheoryResponse]"
+      },
+      "StandardResponse_TutorChatResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/TutorChatResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[TutorChatResponse]"
+      },
+      "StandardResponse_dict_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[dict]"
       },
       "SubjectHistoryDetailResponse": {
         "properties": {
@@ -3900,7 +4967,16 @@
             "title": "Session Completed"
           },
           "stats": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
             "type": "object",
             "title": "Stats"
           }

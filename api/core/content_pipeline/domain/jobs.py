@@ -93,6 +93,13 @@ class PipelineJob:
     updated_at: float = field(default_factory=time.time)
     heartbeat_at: float = field(default_factory=time.time)
     completed_at: float | None = None
+    source_s3_key: str | None = None
+    prs_threshold: float | None = None
+    min_confidence: float = 0.6
+    apply_reduction: bool = True
+    retry_count: int = 0
+    cancel_requested: bool = False
+    eta_seconds: float | None = None
 
     def mark_completed(self) -> None:
         now = time.time()
@@ -115,3 +122,22 @@ class PipelineJob:
         self.error_message = message
         self.updated_at = now
         self.heartbeat_at = now
+
+    def reset_for_retry(self) -> None:
+        now = time.time()
+        self.status = PipelineStatus.QUEUED
+        self.current_step = "Queued for retry"
+        self.progress = 0.0
+        self.error_message = None
+        self.error_code = None
+        self.user_message = None
+        self.retryable = False
+        self.cancel_requested = False
+        self.completed_at = None
+        self.retry_count += 1
+        self.updated_at = now
+        self.heartbeat_at = now
+
+    def request_cancel(self) -> None:
+        self.cancel_requested = True
+        self.updated_at = time.time()

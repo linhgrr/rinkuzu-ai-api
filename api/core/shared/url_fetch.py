@@ -11,6 +11,9 @@ from urllib.parse import urlparse
 import aiofiles
 import httpx
 
+from api.config import get_settings
+from api.core.shared.retry import async_transient_retry
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -51,19 +54,15 @@ def validate_download_url(url: str, allowlist: list[str] | None = None) -> None:
         raise UnsafeURLError(f"Host '{host}' resolves to a private/reserved address")
 
 
-async def stream_download(
-    url: str,
-    dest_path: Path,
-    *,
-    max_bytes: int,
-    allowlist: list[str] | None = None,
-) -> int:
-    """Download *url* to *dest_path*, enforcing safety checks and a size cap.
+async def _fetch_and_write(url: str, dest_path: Path, *, max_bytes: int) -> int:
+    """Perform the actual HTTP GET and write bytes to *dest_path*.
 
-    Returns the number of bytes written.
-    Raises UnsafeURLError for policy violations, httpx.HTTPError for HTTP failures.
+    This inner coroutine is wrapped with transient-retry logic in
+    ``stream_download``.  Any partial file from a failed attempt is removed
+    before the next retry so the size cap remains accurate.
     """
-    validate_download_url(url, allowlist=allowlist)
+    # Remove any partial file left by a previous failed attempt.
+    await asyncio.to_thread(dest_path.unlink, missing_ok=True)
 
     bytes_written = 0
     async with (
@@ -89,3 +88,35 @@ async def stream_download(
                 await fh.write(chunk)
 
     return bytes_written
+
+
+async def stream_download(
+    url: str,
+    dest_path: Path,
+    *,
+    max_bytes: int,
+    allowlist: list[str] | None = None,
+) -> int:
+    """Download *url* to *dest_path*, enforcing safety checks and a size cap.
+
+    Returns the number of bytes written.
+    Raises UnsafeURLError for policy violations, httpx.HTTPError for HTTP failures.
+
+    Transient network errors (connection reset, 5xx, timeout) are retried with
+    exponential backoff.  SSRF validation happens before any retry, so
+    ``UnsafeURLError`` is always raised immediately without retrying.
+    """
+    # SSRF / policy validation — runs once, never inside the retry loop.
+    validate_download_url(url, allowlist=allowlist)
+
+    settings = get_settings()
+
+    @async_transient_retry(
+        label="download source",
+        max_attempts=settings.content_pipeline_llm_retry_attempts,
+        base_delay_sec=settings.content_pipeline_llm_retry_backoff_sec,
+    )
+    async def _retryable() -> int:
+        return await _fetch_and_write(url, dest_path, max_bytes=max_bytes)
+
+    return await _retryable()
