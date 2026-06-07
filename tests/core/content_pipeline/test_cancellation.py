@@ -35,13 +35,16 @@ def test_raise_if_cancelled_raises_when_requested():
 
 
 def test_check_cancelled_sets_flag_and_raises_when_doc_has_cancel_requested():
-    """_check_cancelled should read from _load_job and raise if cancel_requested."""
+    """_check_cancelled should read the cancel flag and raise if cancel_requested."""
     from api.core.content_pipeline.application.pipeline_runner import PipelineRunner
 
     saved: list[PipelineJob] = []
 
     async def load_job(job_id: str):
-        return {"cancel_requested": True}
+        return None
+
+    async def load_cancel_flag(job_id: str):
+        return True
 
     async def save_job(job: PipelineJob):
         saved.append(job)
@@ -52,6 +55,7 @@ def test_check_cancelled_sets_flag_and_raises_when_doc_has_cancel_requested():
 
     runner = PipelineRunner(
         load_job=load_job,
+        load_cancel_flag=load_cancel_flag,
         save_job=save_job,
         persist_job_state=persist_job_state,
     )
@@ -66,11 +70,14 @@ def test_check_cancelled_sets_flag_and_raises_when_doc_has_cancel_requested():
 
 
 def test_check_cancelled_noop_when_doc_has_no_cancel_flag():
-    """_check_cancelled should be silent when cancel_requested is absent/False."""
+    """_check_cancelled should be silent when cancel_requested is False."""
     from api.core.content_pipeline.application.pipeline_runner import PipelineRunner
 
     async def load_job(job_id: str):
-        return {"cancel_requested": False}
+        return None
+
+    async def load_cancel_flag(job_id: str):
+        return False
 
     async def save_job(job: PipelineJob):
         return True
@@ -80,6 +87,7 @@ def test_check_cancelled_noop_when_doc_has_no_cancel_flag():
 
     runner = PipelineRunner(
         load_job=load_job,
+        load_cancel_flag=load_cancel_flag,
         save_job=save_job,
         persist_job_state=persist_job_state,
     )
@@ -89,11 +97,14 @@ def test_check_cancelled_noop_when_doc_has_no_cancel_flag():
 
 
 def test_check_cancelled_noop_when_doc_missing():
-    """_check_cancelled should be silent when load_job returns None."""
+    """_check_cancelled should be silent when the cancel flag read returns False."""
     from api.core.content_pipeline.application.pipeline_runner import PipelineRunner
 
     async def load_job(job_id: str):
         return None
+
+    async def load_cancel_flag(job_id: str):
+        return False
 
     async def save_job(job: PipelineJob):
         return True
@@ -103,6 +114,7 @@ def test_check_cancelled_noop_when_doc_missing():
 
     runner = PipelineRunner(
         load_job=load_job,
+        load_cancel_flag=load_cancel_flag,
         save_job=save_job,
         persist_job_state=persist_job_state,
     )
@@ -125,6 +137,9 @@ def test_persist_cancelled_sets_cancelled_state():
     async def load_job(job_id: str):
         return None
 
+    async def load_cancel_flag(job_id: str):
+        return False
+
     async def save_job(job: PipelineJob):
         saved.append(job)
         return True
@@ -134,6 +149,7 @@ def test_persist_cancelled_sets_cancelled_state():
 
     runner = PipelineRunner(
         load_job=load_job,
+        load_cancel_flag=load_cancel_flag,
         save_job=save_job,
         persist_job_state=persist_job_state,
     )

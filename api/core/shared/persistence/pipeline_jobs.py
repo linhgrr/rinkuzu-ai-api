@@ -19,6 +19,7 @@ from .common import (
 from .document_chunks import delete_chunks_for_job
 from .documents import (
     PipelineJobActiveProjection,
+    PipelineJobCancelProjection,
     PipelineJobDocument,
     PipelineJobListProjection,
     PipelineJobLookupProjection,
@@ -133,6 +134,19 @@ async def load_pipeline_job(job_id: str) -> dict[str, Any] | None:
         logger.exception("[PipelineStore] load failed job_id={}", job_id)
         return None
     return None if doc is None else _document_to_runtime_payload(doc)
+
+
+async def load_pipeline_job_cancel_requested(job_id: str) -> bool:
+    """Lightweight projection read of just the cancel flag (hot path)."""
+    try:
+        row = await PipelineJobDocument.find_one(
+            PipelineJobDocument.job_id == job_id,
+            projection_model=PipelineJobCancelProjection,
+        )
+    except Exception:
+        logger.exception("[PipelineStore] load_cancel_flag failed job_id={}", job_id)
+        return False
+    return bool(row.cancel_requested) if row else False
 
 
 async def load_pipeline_job_for_user(job_id: str, user_id: str) -> dict[str, Any] | None:

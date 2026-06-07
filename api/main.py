@@ -38,7 +38,11 @@ from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import Chu
 from .core.learning.exercise_service import ExerciseService
 from .core.learning.session import SessionManager
 from .core.shared import mongo_store
-from .core.shared.persistence import load_pipeline_job, save_pipeline_job
+from .core.shared.persistence import (
+    load_pipeline_job,
+    load_pipeline_job_cancel_requested,
+    save_pipeline_job,
+)
 from .core.shared.persistence.pipeline_jobs import list_active_pipeline_jobs
 from .exceptions import error_json_response, register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
@@ -109,6 +113,7 @@ def _init_pipeline(app: FastAPI) -> None:
 
     pipeline_runner = PipelineRunner(
         load_job=load_pipeline_job,
+        load_cancel_flag=load_pipeline_job_cancel_requested,
         save_job=save_pipeline_job,
         persist_job_state=persist_pipeline_job_state,
         chunk_chroma_store=app.state.chunk_chroma_store,
