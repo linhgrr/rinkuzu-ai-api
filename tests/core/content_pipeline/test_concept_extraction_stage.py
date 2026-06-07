@@ -85,7 +85,9 @@ def test_extract_concepts_from_chunks_updates_job_metrics_and_progress():
         )
     )
 
-    assert [concept.concept_id for concept in extracted] == ["c2", "c1"]
+    assert [concept.concept_id for concept in extracted.concepts] == ["c2", "c1"]
+    assert extracted.failed_batches == [{"batch_index": 2, "reason": "Error: boom"}]
+    assert extracted.warnings == ["Error: boom"]
     assert extraction_chain.calls == [("/tmp/lesson.pdf", "algebra", 10, None, "job-1")]
     assert job.batch_count == 3
     assert job.failed_batch_count == 1

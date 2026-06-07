@@ -14,6 +14,7 @@ PersistJobStateFn = Callable[
 ]
 SaveJobFn = Callable[[PipelineJob], Awaitable[bool]]
 LoadJobFn = Callable[[str], Awaitable[dict | None]]
+LoadCancelFlagFn = Callable[[str], Awaitable[bool]]
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,7 @@ from api.core.content_pipeline.infrastructure.runtime import (
 )
 
 from .cancellation import JobCancelledError, raise_if_cancelled
-from .ports import LoadJobFn, PersistJobStateFn, SaveJobFn  # noqa: TC001
+from .ports import LoadCancelFlagFn, LoadJobFn, PersistJobStateFn, SaveJobFn  # noqa: TC001
 from .stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
@@ -108,11 +108,13 @@ class PipelineRunner:
         self,
         *,
         load_job: LoadJobFn,
+        load_cancel_flag: LoadCancelFlagFn,
         save_job: SaveJobFn,
         persist_job_state: PersistJobStateFn,
         chunk_chroma_store: Any = None,
     ) -> None:
         self._load_job = load_job
+        self._load_cancel_flag = load_cancel_flag
         self._save_job = save_job
         self._persist_job_state = persist_job_state
         self._chunk_chroma_store = chunk_chroma_store
@@ -121,10 +123,12 @@ class PipelineRunner:
         """Re-read the job document from Mongo and raise if cancel was requested.
 
         The in-memory ``job`` object is not updated by a concurrent API write,
-        so we must fetch the latest document here before checking the flag.
+        so we must fetch the latest cancel flag here before checking it. The
+        projection read fetches only ``cancel_requested`` instead of the full
+        document (graph + embeddings + partial_graph), keeping this hot-path
+        checkpoint cheap.
         """
-        doc = await self._load_job(job.job_id)
-        if doc and doc.get("cancel_requested"):
+        if await self._load_cancel_flag(job.job_id):
             job.cancel_requested = True
         raise_if_cancelled(job)
 
@@ -151,6 +155,21 @@ class PipelineRunner:
                 logger.debug("[PipelineRunner] Deleted upload {}", file_path)
         except OSError as exc:
             logger.warning("[PipelineRunner] Failed to delete upload {}: {}", file_path, exc)
+
+    async def _rebuild_reusable_chunks(self, job: PipelineJob, *, file_path: str) -> None:
+        """Reload + persist document chunks for a cache-restored job (RAG reuse)."""
+        chunks = await load_document_chunks(
+            job,
+            file_path=file_path,
+            persist_job_state=self._persist_job_state,
+        )
+        await persist_document_chunks(
+            job,
+            chunks=chunks,
+            chunk_chroma_store=self._chunk_chroma_store,
+            persist_job_state=self._persist_job_state,
+        )
+        await complete_pipeline_job(job, persist_job_state=self._persist_job_state)
 
     async def run(
         self,
@@ -193,21 +212,7 @@ class PipelineRunner:
                 )
                 if job.status == PipelineStatus.COMPLETED:
                     try:
-                        chunks = await load_document_chunks(
-                            job,
-                            file_path=file_path,
-                            persist_job_state=self._persist_job_state,
-                        )
-                        await persist_document_chunks(
-                            job,
-                            chunks=chunks,
-                            chunk_chroma_store=self._chunk_chroma_store,
-                            persist_job_state=self._persist_job_state,
-                        )
-                        await complete_pipeline_job(
-                            job,
-                            persist_job_state=self._persist_job_state,
-                        )
+                        await self._rebuild_reusable_chunks(job, file_path=file_path)
                     except Exception:
                         logger.exception(
                             "[Pipeline] Failed to rebuild reusable chunks for cached job {}",
@@ -238,7 +243,7 @@ class PipelineRunner:
                 relation_engine = bindings.relation_engine_factory(
                     extraction_chain=extraction_chain,
                 )
-                all_concepts = await extract_concepts_from_chunks(
+                outcome = await extract_concepts_from_chunks(
                     job,
                     file_path=file_path,
                     extraction_chain=extraction_chain,
@@ -246,6 +251,7 @@ class PipelineRunner:
                     persist_job_state=self._persist_job_state,
                     document_text=document_text_holder.get("document_text"),
                 )
+                all_concepts = outcome.concepts
 
                 # Checkpoint 2: after concept extraction
                 await self._check_cancelled(job)
@@ -356,14 +362,8 @@ class PipelineRunner:
                 )
                 job.result["page_batch_size"] = job.page_batch_size
                 job.result["batch_count"] = job.batch_count
-                job.result["failed_batches"] = list(
-                    getattr(extraction_chain, "last_failed_batches", [])
-                )
-                job.result["warnings"] = [
-                    item["reason"]
-                    for item in getattr(extraction_chain, "last_failed_batches", [])
-                    if item.get("reason")
-                ]
+                job.result["failed_batches"] = outcome.failed_batches
+                job.result["warnings"] = outcome.warnings
                 job.result["partial_success"] = job.partial_success
                 populate_job_metrics_from_result(job)
 

@@ -149,6 +149,10 @@ class PipelineJobLookupProjection(BaseModel):
     subject_id: str = ""
 
 
+class PipelineJobCancelProjection(BaseModel):
+    cancel_requested: bool = False
+
+
 class PipelineJobActiveProjection(BaseModel):
     job_id: str
     filename: str

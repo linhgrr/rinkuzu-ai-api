@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass, field
 import math
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,13 @@ from .execution import resolve_timeout_policy, run_process_stage
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+@dataclass
+class ConceptExtractionOutcome:
+    concepts: list[Any]
+    failed_batches: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 def build_partial_concept_graph(concepts: list[Any]) -> dict[str, list[dict[str, str]]]:
@@ -41,7 +49,7 @@ async def extract_concepts_from_chunks(
     postprocess_concepts: Callable[[list[Any]], list[Any]],
     persist_job_state: PersistJobStateFn,
     document_text: Any = None,
-) -> list[Any]:
+) -> ConceptExtractionOutcome:
     """Extract concepts from loaded document chunks and persist stage progress."""
     await persist_job_state(
         job,
@@ -88,6 +96,7 @@ async def extract_concepts_from_chunks(
 
     all_concepts = postprocess_concepts(all_concepts)
     failed_batch_details = list(getattr(extraction_chain, "last_failed_batches", []))
+    warnings = [item["reason"] for item in failed_batch_details if item.get("reason")]
     job.batch_count = len(getattr(extraction_chain, "last_batches", [])) or len(extractions)
     job.failed_batch_count = failed_batch_count or len(failed_batch_details)
     job.concepts_extracted = len(all_concepts)
@@ -104,7 +113,11 @@ async def extract_concepts_from_chunks(
         "Extracting concepts with LLM...",
         PipelineProgress.CONCEPT_EXTRACTION_DONE,
     )
-    return all_concepts
+    return ConceptExtractionOutcome(
+        concepts=all_concepts,
+        failed_batches=failed_batch_details,
+        warnings=warnings,
+    )
 
 
 def _read_pdf_page_count(file_path: str) -> int:

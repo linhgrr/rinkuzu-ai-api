@@ -34,6 +34,9 @@ def test_pipeline_runner_keeps_constructor_dependencies():
     async def load_job(job_id: str):
         return None
 
+    async def load_cancel_flag(job_id: str):
+        return False
+
     async def save_job(job):
         return True
 
@@ -42,11 +45,13 @@ def test_pipeline_runner_keeps_constructor_dependencies():
 
     runner = PipelineRunner(
         load_job=load_job,
+        load_cancel_flag=load_cancel_flag,
         save_job=save_job,
         persist_job_state=persist_job_state,
     )
 
     assert runner._load_job is load_job
+    assert runner._load_cancel_flag is load_cancel_flag
     assert runner._save_job is save_job
     assert runner._persist_job_state is persist_job_state
 
@@ -75,7 +80,7 @@ def test_resolve_effective_job_timeout_exceeds_extraction_timeout(monkeypatch):
 
     timeout = asyncio.run(
         _resolve_effective_job_timeout(
-            file_path="/tmp/lesson.pdf",  # noqa: S108
+            file_path="/tmp/lesson.pdf",
             job=job,
             settings=SimpleNamespace(),
         )
