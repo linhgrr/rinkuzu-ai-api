@@ -18,7 +18,7 @@ jobs:
           lfs: true
 
       - name: Sync to Hugging Face Space
-        uses: huggingface/hub-sync@v0.1.0
+        uses: huggingface/hub-sync@v0.2.0
         with:
           github_repo_id: ${{ github.repository }}
           huggingface_repo_id: linhdzqua148/rinkuzu-ai-api
