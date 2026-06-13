@@ -284,6 +284,13 @@ content fields.
 `ExercisePayload.model_validate(entry.payload)` (strict) and rebuilding the runtime
 `ExerciseRecord`. No flat fallback.
 
+**Rehydrate runtime records** (`session._restore_exercise_records`,
+`session.py:399-427`): this is the SECOND place (besides `exercise_service`) that builds
+an `ExerciseRecord` from a loaded dict. With D2 it constructs
+`ExerciseRecord(payload=ExercisePayload.model_validate(ex["payload"]), ...)` (strict)
+instead of mapping the 11 flat content fields. The loaded dict comes from
+`_document_to_legacy_payload`, so each entry already carries a nested `payload`.
+
 ## Migration
 
 A standalone, idempotent script: `scripts/migrate_exercise_payload.py` (mirrors the
