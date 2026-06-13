@@ -291,6 +291,31 @@ def _extract_response_content(response: object) -> object:
     return _extract_choice_content(choices[0])
 
 
+def _extract_stream_delta_text(content: object) -> str:
+    """Extract a streaming delta WITHOUT stripping whitespace.
+
+    Unlike ``extract_llm_text`` (used for full-message extraction), inter-token
+    spaces must be preserved during streaming, and a ``None``/missing delta must
+    map to an empty string rather than the literal ``"None"``.
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return ""
+
+
 def _thinking_kwargs(thinking_enabled: bool) -> dict[str, Any]:  # noqa: FBT001
     if not thinking_enabled:
         return {}
@@ -399,7 +424,7 @@ class LiteLLMClient(LLMClient):
             if choices is None and isinstance(chunk, dict):
                 choices = chunk.get("choices", [])
             for choice in choices or []:
-                text = extract_llm_text(_extract_choice_content(choice))
+                text = _extract_stream_delta_text(_extract_choice_content(choice))
                 if text:
                     yield text
 

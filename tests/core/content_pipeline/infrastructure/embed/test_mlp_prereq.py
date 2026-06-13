@@ -1,6 +1,6 @@
 """Unit tests for MLPPrerequisiteRanker.
 
-Mocks transformers + torch.load so CI never downloads xlm-roberta-base
+Mocks sentence-transformers + torch.load so CI never downloads BAAI/bge-m3
 or touches the actual MLP weights file.
 """
 
@@ -37,23 +37,12 @@ def _make_loaded_ranker(monkeypatch, weights_path: Path, prob_for_pair):
     """Build a ranker with mocked encoder, tokenizer, model, and weight loader."""
     weights_path.write_bytes(b"")  # placeholder so existence check passes
 
-    fake_tokenizer = MagicMock(name="tokenizer")
-    fake_tokenizer.return_value = MagicMock(
-        to=lambda _device: {
-            "input_ids": torch.zeros(1, 4, dtype=torch.long),
-            "attention_mask": torch.ones(1, 4, dtype=torch.long),
-        },
-    )
     fake_encoder = MagicMock(name="encoder")
     fake_encoder.eval.return_value = fake_encoder
     fake_encoder.to.return_value = fake_encoder
 
     monkeypatch.setattr(
-        "transformers.AutoTokenizer.from_pretrained",
-        lambda *_a, **_kw: fake_tokenizer,
-    )
-    monkeypatch.setattr(
-        "transformers.AutoModel.from_pretrained",
+        "sentence_transformers.SentenceTransformer",
         lambda *_a, **_kw: fake_encoder,
     )
 
@@ -74,9 +63,9 @@ def _make_loaded_ranker(monkeypatch, weights_path: Path, prob_for_pair):
 
     monkeypatch.setattr(torch, "load", lambda *_a, **_kw: {"model_state_dict": {}})
 
-    # Patch _encode to bypass the tokenizer/encoder pipeline
+    # Patch _encode to bypass the SentenceTransformer pipeline (BGE-M3 = 1024-d)
     def _fake_encode(self, texts):
-        return torch.eye(len(texts), 768)
+        return torch.eye(len(texts), 1024)
 
     monkeypatch.setattr(ranker_mod.MLPPrerequisiteRanker, "_encode", _fake_encode)
 

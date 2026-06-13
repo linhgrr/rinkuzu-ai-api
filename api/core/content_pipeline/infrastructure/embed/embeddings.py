@@ -16,7 +16,7 @@ def compute_embedding_for_concepts(concepts: list[Concept], client: EmbeddingCli
     - definition_embedding: embedding of definition (averaged across duplicates during merge)
 
     Note: prerequisite ranking is now performed by MLPPrerequisiteRanker, which
-    computes its own XLM-RoBERTa encodings of concept names and does not consume
+    computes its own BGE-M3 encodings of concept names and does not consume
     these vietnamese-sbert embeddings.
 
     Args:

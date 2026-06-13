@@ -2,7 +2,7 @@
 
 Originally produced ``Concept.name_embedding`` and ``Concept.definition_embedding``
 via vietnamese-sbert for the legacy PRS ranker. After the swap to
-``MLPPrerequisiteRanker`` (which carries its own XLM-RoBERTa encoder), nothing
+``MLPPrerequisiteRanker`` (which carries its own BGE-M3 encoder), nothing
 else in the pipeline reads those embeddings. The stage is now a no-op kept
 only so existing callers in ``pipeline_runner`` and the dependency-injection
 graph don't break.

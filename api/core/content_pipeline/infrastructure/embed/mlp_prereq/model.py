@@ -1,9 +1,10 @@
 """PrerequisiteClassifier — MLP for prerequisite link prediction.
 
-Architecture: [emb_A || emb_B] (1536-d) -> 512 -> 256 -> 1 logit.
+Architecture: [emb_A || emb_B] (2048-d) -> 512 -> 256 -> 1 logit.
 
-Mirrors the network used in module1_update training (LectureBank, F1=0.825,
-AUC=0.908). Output is a raw logit; apply torch.sigmoid for probability.
+Mirrors the network used in module1_update training (LectureBank, BGE-M3
+embeddings, multi-seed F1=0.834, AUC=0.914). Output is a raw logit; apply
+torch.sigmoid for probability.
 """
 
 import torch
@@ -13,7 +14,7 @@ from torch import Tensor, nn
 class PrerequisiteClassifier(nn.Module):
     def __init__(
         self,
-        embedding_dim: int = 768,
+        embedding_dim: int = 1024,
         hidden_dim: int = 512,
         dropout: float = 0.3,
     ) -> None:

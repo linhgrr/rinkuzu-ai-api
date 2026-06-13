@@ -1,8 +1,14 @@
 """MLPPrerequisiteRanker — drop-in replacement for the legacy PRS ranker.
 
-Encodes concept names with xlm-roberta-base (mean-pooled), runs the
-PrerequisiteClassifier on every ordered pair, and returns pairs whose
+Encodes concept names with BAAI/bge-m3 (SentenceTransformer, L2-normalized),
+runs the PrerequisiteClassifier on every ordered pair, and returns pairs whose
 predicted probability is above the threshold.
+
+The encoding path mirrors module1_update training EXACTLY: the MLP was trained
+on SentenceTransformer("BAAI/bge-m3").encode(..., normalize_embeddings=True)
+embeddings, so inference must use the same encoder + normalization. Using a
+different pooling/normalization would shift the embedding distribution and the
+trained decision boundary would silently misfire.
 
 Singleton: encoder + MLP weights load once per process (lazy on first
 ``rank()`` call). CPU-only by default — works on servers without a GPU.
@@ -21,15 +27,15 @@ from .model import PrerequisiteClassifier
 
 logger = logging.getLogger(__name__)
 
-ENCODER_NAME = "xlm-roberta-base"
-MAX_LENGTH = 64
-ENCODE_BATCH = 32
+ENCODER_NAME = "BAAI/bge-m3"
+EMBED_DIM = 1024  # BGE-M3 hidden size (XLM-RoBERTa-large backbone)
+ENCODE_BATCH = 16
 PREDICT_BATCH = 1024
 MIN_CONCEPT_COUNT = 2
 
 
 def _concept_to_text(concept: Any) -> str:
-    """Build the text encoded by XLM-R for a concept.
+    """Build the text encoded by BGE-M3 for a concept.
 
     The MLP was trained on LectureBank with name-only embeddings; we keep that
     contract at inference time. Empirically, concatenating the definition shifts
@@ -50,7 +56,6 @@ class MLPPrerequisiteRanker:
     def __init__(self, weights_path: Path, device: str = "cpu") -> None:
         self._weights_path = Path(weights_path)
         self._device = torch.device(device)
-        self._tokenizer: Any | None = None
         self._encoder: Any | None = None
         self._model: PrerequisiteClassifier | None = None
 
@@ -68,7 +73,7 @@ class MLPPrerequisiteRanker:
         cls._instance = None
 
     def _load_components(self) -> None:
-        from transformers import AutoModel, AutoTokenizer
+        from sentence_transformers import SentenceTransformer
 
         if not self._weights_path.exists():
             raise FileNotFoundError(
@@ -76,11 +81,8 @@ class MLPPrerequisiteRanker:
                 f"Expected file copied from bc_with_code/results/results/best_model.pth."
             )
 
-        logger.info("Loading XLM-RoBERTa tokenizer/encoder for MLP ranker.")
-        self._tokenizer = AutoTokenizer.from_pretrained(ENCODER_NAME)
-        encoder = AutoModel.from_pretrained(ENCODER_NAME)
-        encoder.eval()
-        encoder.to(self._device)
+        logger.info("Loading BGE-M3 SentenceTransformer encoder for MLP ranker.")
+        encoder = SentenceTransformer(ENCODER_NAME, device=str(self._device))
         self._encoder = encoder
 
         logger.info("Loading MLP weights from %s", self._weights_path)
@@ -91,41 +93,27 @@ class MLPPrerequisiteRanker:
         )
         state = ckpt.get("model_state_dict", ckpt)
 
-        model = PrerequisiteClassifier(embedding_dim=768, hidden_dim=512, dropout=0.3)
+        model = PrerequisiteClassifier(embedding_dim=EMBED_DIM, hidden_dim=512, dropout=0.3)
         model.load_state_dict(state)
         model.eval()
         model.to(self._device)
         self._model = model
 
     def _ensure_loaded(self) -> None:
-        if self._model is None or self._encoder is None or self._tokenizer is None:
+        if self._model is None or self._encoder is None:
             self._load_components()
 
-    @staticmethod
-    def _mean_pool(last_hidden: Tensor, attention_mask: Tensor) -> Tensor:
-        mask = attention_mask.unsqueeze(-1).float()
-        summed = (last_hidden * mask).sum(dim=1)
-        counts = mask.sum(dim=1).clamp(min=1e-9)
-        return summed / counts
-
     def _encode(self, texts: list[str]) -> Tensor:
-        assert self._tokenizer is not None
         assert self._encoder is not None
-        outs: list[Tensor] = []
-        with torch.no_grad():
-            for i in range(0, len(texts), ENCODE_BATCH):
-                batch = texts[i : i + ENCODE_BATCH]
-                tok = self._tokenizer(
-                    batch,
-                    padding=True,
-                    truncation=True,
-                    max_length=MAX_LENGTH,
-                    return_tensors="pt",
-                ).to(self._device)
-                enc_out = self._encoder(**tok)
-                pooled = self._mean_pool(enc_out.last_hidden_state, tok["attention_mask"])
-                outs.append(pooled.cpu())
-        return torch.cat(outs, dim=0)
+        # Mirror training: SentenceTransformer.encode with L2-normalization.
+        vecs = self._encoder.encode(
+            texts,
+            batch_size=ENCODE_BATCH,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return torch.as_tensor(vecs).float()
 
     def rank(
         self,

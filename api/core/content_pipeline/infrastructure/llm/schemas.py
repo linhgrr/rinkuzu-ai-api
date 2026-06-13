@@ -77,7 +77,7 @@ class Concept(StrictSchemaModel):
             "DEPRECATED. Vietnamese-sbert embedding of the concept name. Kept "
             "optional for backward compatibility with existing MongoDB documents; "
             "no longer populated by the live pipeline (MLPPrerequisiteRanker "
-            "carries its own XLM-RoBERTa encoder)."
+            "carries its own BGE-M3 encoder)."
         ),
     )
     definition_embedding: list[float] | None = Field(
