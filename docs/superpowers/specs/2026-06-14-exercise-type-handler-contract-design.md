@@ -6,7 +6,7 @@
 
 ## Problem
 
-The "contract" for an exercise type is currently scattered across six places, each
+The "contract" for an exercise type is currently scattered across seven places, each
 re-implementing the same `exercise_type` branch:
 
 1. `exercise_types.py` — enum + Pydantic output models + `serialize_exercise_result` (isinstance chain)
@@ -15,8 +15,11 @@ re-implementing the same `exercise_type` branch:
 4. `exercise_service.py` — builds `ExerciseRecord` from a flat dict (maps ~15 fields)
 5. `history_formatter.py` — a flat list of optional fields
 6. `prompts/registry.py` — per-type generation instructions
+7. `subject_progress_snapshot.py` — `build_subject_progress_snapshot` reads 10 flat
+   content fields off each `ExerciseRecord` to build the persistence dict; removing those
+   fields breaks it, so it must serialize through `to_persistence_dict` instead.
 
-Adding a new exercise type means touching all six and silently missing one is easy —
+Adding a new exercise type means touching all seven and silently missing one is easy —
 exactly how the `true_false` tutor bug arose (the `statement` field was never surfaced
 to the chatbot because the tutor-display branch was forgotten).
 
@@ -68,15 +71,24 @@ class TrueFalsePayload(BaseModel):
 
 # ... one payload per type (fill_blank, multi_correct, ordering, matching, short_answer)
 #
-# IMPORTANT — freeze display order at creation. `ordering`/`matching` currently
-# shuffle inside serialize_exercise_result, which runs once at create time. The
-# payload MUST store the already-shuffled display fields so they are stable across
-# every later read:
-#   OrderingPayload:  items (shuffled display, frozen) + correct_order
-#   MatchingPayload:  pairs + left_items + right_items (shuffled display, frozen)
-# Shuffling happens once in `payload_from_output`; `to_response_dict` only reads.
-# Otherwise the displayed order would change between the generate call, the tutor
-# call, and submit — desyncing the learner's view from the graded answer.
+# IMPORTANT — shuffle is a LOGIC-LAYER concern; the DB always stores canonical order.
+# Two distinct concerns for `ordering`/`matching`:
+#
+#   1. Display order (shuffled): frozen ONCE in `payload_from_output` and held in the
+#      in-memory runtime payload. Stable across the whole live session — the generate
+#      call, every tutor call, and submit all read the SAME frozen shuffle, so the
+#      learner's view never desyncs from the graded answer.
+#        OrderingPayload:  display_items (shuffled, frozen) + correct_order (canonical)
+#        MatchingPayload:  display_right_items (shuffled, frozen) + pairs/left_items
+#                          + canonical mapping
+#
+#   2. Persisted order (canonical): `to_persistence_dict` writes ONLY the canonical
+#      order to the DB — never the shuffle. History is for review, so the stored row
+#      reflects the ground-truth order. `to_response_dict` is the only path that emits
+#      the shuffled display.
+#
+# So shuffling happens once in `payload_from_output`; `to_response_dict` reads the
+# frozen display; `to_persistence_dict` ignores the shuffle and emits canonical.
 
 ExercisePayload = Annotated[
     Union[MCQPayload, TrueFalsePayload, FillBlankPayload, MultiCorrectPayload,
@@ -230,8 +242,31 @@ This is where the `true_false`/`fill_blank`/`ordering`/`matching` content is now
 guaranteed surfaced — the ABC forces every handler to implement it.
 
 **Persist / history**:
-`to_persistence_dict` emits the current flat shape; `history_formatter` reads through the
-payload (or the flat dict via `payload_from_record_dict` for legacy entries).
+`to_persistence_dict` emits the current flat shape but **always writes canonical order**
+for `ordering`/`matching` (i.e. `items` = `correct_order`, `right_items` = the in-order
+matches) — never the shuffled display order. Shuffle is a logic-layer/display concern
+that lives only in the runtime payload; the DB always carries the standard order.
+`history_formatter` reads through the payload (or the flat dict via
+`payload_from_record_dict` for legacy entries).
+
+This means `to_response_dict` and `to_persistence_dict` **intentionally diverge** for
+`ordering`/`matching`: the response carries the frozen shuffled display order (stable
+across generate→tutor→submit within the live session), while persistence carries the
+canonical order. All other types produce identical dicts from both methods.
+
+The single persistence callsite is `build_subject_progress_snapshot`
+(`subject_progress_snapshot.py:15-44`), which today reads ~10 flat fields off each record
+(`ex.sentence`, `ex.options`, `ex.statement`, `ex.items`, `ex.pairs`, `ex.right_items`,
+`ex.rubric`, `ex.correct_option`, `ex.correct_answer`, `ex.hint`). Removing those fields
+from `ExerciseRecord` breaks this function, so it must switch to
+`get_handler(ex.payload.exercise_type).to_persistence_dict(ex.payload, ...)` per record.
+
+**Safety of the canonical-only-in-DB invariant:** only `exercise_history` is ever
+persisted, and a record lands there only after `submit_answer` grades it.
+`current_exercise` (the in-flight, unanswered exercise) never reaches the DB. So the
+shuffled display order an `ordering`/`matching` learner sees lives entirely in the live
+session payload; by the time anything persists, the answer is already submitted and the
+canonical order is exactly what review needs. No display order is ever lost.
 
 **Read legacy record** (D1): any flat dict (old DB row or in-flight session) →
 `payload_from_record_dict(data)` → payload. Accepts both the old flat shape and the new
@@ -266,6 +301,13 @@ one, so no migration and no broken live sessions.
   (correct + incorrect), `tutor_question` / `tutor_options`, `serialize_answer`.
 - **Round-trip test** — output model → payload → response dict matches the current
   `serialize_exercise_result` output exactly (lock the no-frontend-change invariant).
+- **Canonical-order-in-persistence test** — for `ordering`/`matching`, assert
+  `to_persistence_dict` emits the canonical order (`items` == `correct_order`,
+  `right_items` in-order) even when the payload's frozen display order is shuffled, i.e.
+  `to_response_dict` and `to_persistence_dict` diverge as designed.
+- **Snapshot test** — `build_subject_progress_snapshot` over a mixed-type
+  `exercise_history` produces the same flat per-exercise dict shape as today (it now
+  routes through `to_persistence_dict`), and carries canonical order for ordering/matching.
 - **Legacy decode test** — a hand-written old flat dict (pre-refactor shape) decodes via
   `payload_from_record_dict` for every type.
 - **Registry test** — every `ExerciseType` enum value has a registered handler (guards
