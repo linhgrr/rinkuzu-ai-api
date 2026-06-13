@@ -2,7 +2,7 @@
 
 **Status:** Approved (brainstorming) — pending implementation plan
 **Date:** 2026-06-14
-**Scope:** `rinkuzu-ai-api` backend only. No frontend changes, no DB migration.
+**Scope:** `rinkuzu-ai-api` backend only. No frontend changes. **One-time DB migration.**
 
 ## Problem
 
@@ -14,10 +14,10 @@ re-implementing the same `exercise_type` branch:
 3. `routers/session.py` — `_resolve_exercise_question` + `_resolve_exercise_options`
 4. `exercise_service.py` — builds `ExerciseRecord` from a flat dict (maps ~15 fields)
 5. `history_formatter.py` — a flat list of optional fields
-6. `prompts/registry.py` — per-type generation instructions
+6. `prompts/registry.py` — per-type generation config (`instruction`, `negative_constraints`,
+   `explanation_guidance`, `serializer`)
 7. `subject_progress_snapshot.py` — `build_subject_progress_snapshot` reads 10 flat
-   content fields off each `ExerciseRecord` to build the persistence dict; removing those
-   fields breaks it, so it must serialize through `to_persistence_dict` instead.
+   content fields off each `ExerciseRecord` to build the persistence dict.
 
 Adding a new exercise type means touching all seven and silently missing one is easy —
 exactly how the `true_false` tutor bug arose (the `statement` field was never surfaced
@@ -35,60 +35,67 @@ Two root causes:
 ## Goal
 
 A single contract — `ExerciseTypeHandler` — that owns every per-type behaviour, plus a
-typed `payload` replacing the optional-bag. Adding a future exercise type must touch
-**exactly three things in one package**: one output model, one payload model, one
-handler class. `ExerciseRecord`, the router, the service, persistence, and the frontend
-stay untouched.
+typed `payload` replacing the optional-bag, persisted **nested** in the DB. Adding a
+future exercise type must touch **exactly three things in one package**: one output
+model, one payload model, one handler class. `ExerciseRecord`, the router, the service,
+and the frontend stay untouched.
 
 ## Decisions (locked during brainstorming)
 
 | # | Decision | Choice |
 |---|----------|--------|
 | Approach | Strategy + Registry vs typed payload vs per-type record | **Typed payload + handler codec (Y)** |
-| A1 | Which behaviours the handler owns | **All five** (generate, serialize, evaluate, tutor-context, answer-history) |
+| A1 | Which behaviours the handler owns | **All** (generate-config, serialize, evaluate, tutor-context, answer-history) |
 | B1 | Handler owns the LM output model | **Yes** — `output_model` is a ClassVar on the handler |
 | C1 | Runtime input for evaluate/tutor/history | **Keep `ExerciseRecord`** as the shared runtime envelope |
 | Grader | How `short_answer` gets its LM grader | **Injected via handler constructor** |
-| D1 | Old DB/session records | **Read-compatible codec** (`payload_from_record_dict`), no migration |
+| P1 | How much prompt config the handler absorbs | **All four** — instruction, negative_constraints, explanation_guidance, output_model. `PROMPT_REGISTRY` is removed. |
+| D2 | Old DB records | **Migrate** — DB stores nested `payload`; a one-time idempotent script rewrites old flat rows |
+| Read-path | How runtime loads persisted exercises | **Strict** `ExercisePayload.model_validate` — no legacy-flat fallback in the hot path |
+| Shuffle | Display order for `ordering`/`matching` | **Deterministic, seeded by `exercise_id`** — never stored; DB holds canonical only |
 
 ## Architecture
 
-### Data model
+### Data model — typed payloads (canonical only)
 
-Discriminated union of typed payloads — each payload holds only the fields its type needs:
+Discriminated union of typed payloads. Each payload holds only the fields its type needs,
+and **stores canonical order only** — no shuffled display order is ever persisted.
 
 ```python
 # exercise_types/payloads.py
 class MCQPayload(BaseModel):
-    exercise_type: Literal[ExerciseType.MCQ]
+    exercise_type: Literal[ExerciseType.MCQ] = ExerciseType.MCQ
     options: dict[str, str]
     correct_option: str
 
 class TrueFalsePayload(BaseModel):
-    exercise_type: Literal[ExerciseType.TRUE_FALSE]
+    exercise_type: Literal[ExerciseType.TRUE_FALSE] = ExerciseType.TRUE_FALSE
     statement: str
     correct_answer: bool
 
-# ... one payload per type (fill_blank, multi_correct, ordering, matching, short_answer)
-#
-# IMPORTANT — shuffle is a LOGIC-LAYER concern; the DB always stores canonical order.
-# Two distinct concerns for `ordering`/`matching`:
-#
-#   1. Display order (shuffled): frozen ONCE in `payload_from_output` and held in the
-#      in-memory runtime payload. Stable across the whole live session — the generate
-#      call, every tutor call, and submit all read the SAME frozen shuffle, so the
-#      learner's view never desyncs from the graded answer.
-#        OrderingPayload:  display_items (shuffled, frozen) + correct_order (canonical)
-#        MatchingPayload:  display_right_items (shuffled, frozen) + pairs/left_items
-#                          + canonical mapping
-#
-#   2. Persisted order (canonical): `to_persistence_dict` writes ONLY the canonical
-#      order to the DB — never the shuffle. History is for review, so the stored row
-#      reflects the ground-truth order. `to_response_dict` is the only path that emits
-#      the shuffled display.
-#
-# So shuffling happens once in `payload_from_output`; `to_response_dict` reads the
-# frozen display; `to_persistence_dict` ignores the shuffle and emits canonical.
+class FillBlankPayload(BaseModel):
+    exercise_type: Literal[ExerciseType.FILL_BLANK] = ExerciseType.FILL_BLANK
+    sentence: str
+    hint: str
+    blank_answers: list[str]            # accepted answers; [0] is canonical
+
+class MultiCorrectPayload(BaseModel):
+    exercise_type: Literal[ExerciseType.MULTI_CORRECT] = ExerciseType.MULTI_CORRECT
+    options: dict[str, str]             # A..E
+    correct_options: list[str]          # sorted
+
+class OrderingPayload(BaseModel):
+    exercise_type: Literal[ExerciseType.ORDERING] = ExerciseType.ORDERING
+    correct_order: list[str]            # canonical; display order derived at serve time
+
+class MatchingPayload(BaseModel):
+    exercise_type: Literal[ExerciseType.MATCHING] = ExerciseType.MATCHING
+    pairs: list[dict[str, str]]         # [{"left":..,"right":..}] canonical, in-order
+
+class ShortAnswerPayload(BaseModel):
+    exercise_type: Literal[ExerciseType.SHORT_ANSWER] = ExerciseType.SHORT_ANSWER
+    rubric: list[str]
+    sample_answer: str
 
 ExercisePayload = Annotated[
     Union[MCQPayload, TrueFalsePayload, FillBlankPayload, MultiCorrectPayload,
@@ -96,6 +103,27 @@ ExercisePayload = Annotated[
     Field(discriminator="exercise_type"),
 ]
 ```
+
+### Deterministic display shuffle
+
+`ordering` and `matching` need a shuffled display order, but the DB stores only the
+canonical order. The shuffle is **derived deterministically from `exercise_id`**, so it
+is stable across every serve/tutor/refetch without storing any state:
+
+```python
+# exercise_types/shuffle.py
+import random
+
+def deterministic_shuffle(items: list[str], seed: str) -> list[str]:
+    out = list(items)
+    random.Random(seed).shuffle(out)   # seeded PRNG -> same seed, same order
+    return out
+```
+
+This is also a strict improvement over today: the current `serialize_exercise_result`
+shuffles with `SystemRandom` (non-deterministic), so a refetch reorders the display. With
+a per-`exercise_id` seed, the learner sees the same order on generate, on every tutor
+call, and on submit — and the graded canonical order never moves.
 
 ### Envelope: `ExerciseRecord`
 
@@ -110,7 +138,7 @@ class ExerciseRecord:
     concept_name: str
     bloom_level: int
     question: str
-    payload: ExercisePayload          # replaces 8+ optional content fields
+    payload: ExercisePayload          # replaces 10 optional content fields
     explanation: str = ""
     explanation_correct: str = ""
     explanation_incorrect: str = ""
@@ -120,9 +148,9 @@ class ExerciseRecord:
     timestamp: float = field(default_factory=time.time)
 ```
 
-Removed from `ExerciseRecord`: `sentence`, `options`, `statement`, `hint`, `items`,
-`pairs`, `right_items`, `rubric`, `correct_option`, `correct_answer`. These are now
-reached through `record.payload` (typed) via the handler.
+Removed from `ExerciseRecord`: `exercise_type` (now `payload.exercise_type`), `sentence`,
+`options`, `statement`, `hint`, `items`, `pairs`, `right_items`, `rubric`,
+`correct_option`, `correct_answer`. All reached through `record.payload` via the handler.
 
 ### Contract: `ExerciseTypeHandler`
 
@@ -135,27 +163,21 @@ class ExerciseTypeHandler(ABC):
     def __init__(self, *, short_answer_grader: Callable[..., dict] | None = None) -> None:
         self._grader = short_answer_grader
 
-    # 1. generation
+    # 1. generation config (P1 — replaces PROMPT_REGISTRY entry)
     @abstractmethod
     def prompt_instruction(self) -> str: ...
+    @abstractmethod
+    def negative_constraints(self) -> str: ...
+    @abstractmethod
+    def explanation_guidance(self) -> str: ...
 
-    # 2a. LM output model -> payload (new exercise)
+    # 2. LM output model -> payload (canonical; no shuffle)
     @abstractmethod
     def payload_from_output(self, result: ExerciseBaseOutput) -> BaseModel: ...
 
-    # 2b. D1: legacy/new flat record dict -> payload (read-compatible)
+    # 3. ExerciseRecord -> API response dict (SAME shape as today; shuffle from exercise_id)
     @abstractmethod
-    def payload_from_record_dict(self, data: dict[str, Any]) -> BaseModel: ...
-
-    # 3a. payload (+ explanations) -> API response dict (SAME shape as today -> frontend unchanged)
-    @abstractmethod
-    def to_response_dict(self, payload: BaseModel) -> dict[str, Any]: ...
-
-    # 3b. payload (+ explanations) -> persistence dict (SAME flat shape as today -> no DB migration)
-    @abstractmethod
-    def to_persistence_dict(
-        self, payload: BaseModel, explanations: dict[str, str]
-    ) -> dict[str, Any]: ...
+    def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]: ...
 
     # 4. grading (short_answer uses self._grader; others ignore it)
     @abstractmethod
@@ -172,15 +194,19 @@ class ExerciseTypeHandler(ABC):
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None: ...
 ```
 
-**Input convention (removes payload-vs-record ambiguity):**
+**No `payload_from_record_dict` and no `to_persistence_dict` in the hot path.** D2 makes
+both unnecessary:
 
-- **Pure-data methods** take a `payload` (+ explanations dict where needed) and nothing
-  else: `to_response_dict`, `to_persistence_dict`. They are total functions of the
-  payload — easy to unit-test in isolation, no `ExerciseRecord` required.
-- **Behaviour methods** take the full `ExerciseRecord` because they read shared envelope
-  fields (`question`, `concept_name`, `correct_answer` via payload, mutate
-  `explanation_*` for short_answer): `evaluate`, `tutor_question`, `tutor_options`,
-  `serialize_answer`. Each reaches the typed content through `exercise.payload`.
+- **Persistence is `payload.model_dump()` nested** — the DB stores the typed payload
+  directly, so there is no flat-shape codec to write.
+- **Read-path is strict** — `ExercisePayload.model_validate(stored_payload)` reconstructs
+  the typed payload in one line. No per-type flat decode at runtime.
+- The only place that understands the **old flat shape** is the one-time migration script
+  (see below), which converts legacy rows once and is then irrelevant to the running app.
+
+**Input convention:** every method takes the full `ExerciseRecord` and reaches content via
+`exercise.payload`. `to_response_dict` and `tutor_options` need `exercise.exercise_id` to
+derive the deterministic shuffle, so they require the envelope, not just the payload.
 
 ### Registry
 
@@ -211,76 +237,83 @@ type raises `KeyError` — caught at the single entry points and surfaced as a c
 api/core/learning/exercise_types/
   __init__.py      # re-exports so `from api.core.learning.exercise_types import X` keeps working
   models.py        # ExerciseType enum + LM output models (MCQOutput, ...) + ExerciseBaseOutput
-  payloads.py      # payload discriminated union
-  handlers.py      # one handler class per type, each @register-ed
+  payloads.py      # payload discriminated union (ExercisePayload)
+  shuffle.py       # deterministic_shuffle(items, seed)
+  handlers.py      # one handler class per type, each @register-ed; owns prompt text via constants
   registry.py      # register / get_handler
   selection.py     # select_exercise_type + EXERCISE_WEIGHTS + BLOOM_VERBS (unchanged logic)
 ```
 
 `__init__.py` must re-export every name currently imported from `exercise_types` so no
-external import breaks: `ExerciseType`, all `*Output` models, `serialize_exercise_result`
-(kept as a thin shim delegating to the registry), `select_exercise_type`,
+external import breaks: `ExerciseType`, all `*Output` models, `select_exercise_type`,
 `EXERCISE_WEIGHTS`, `BLOOM_VERBS`, `join_lines`, `shuffle_ordering_items`,
-`ShortAnswerEvaluationOutput`.
+`ShortAnswerEvaluationOutput`, and a `serialize_exercise_result` shim (see compat below).
 
 ## Data flow
 
-**Create exercise** (`exercise_service.generate_exercise`):
+**Create exercise** (`exercise_service.generate_exercise` → service builds the record):
 LM returns output model → `get_handler(type).payload_from_output(result)` → build
 `ExerciseRecord(payload=...)`. (Replaces the ~15-field dict mapping.)
 
 **Serve to API** (`routers/session.py` generate endpoint):
-`get_handler(type).to_response_dict(exercise.payload)` → same `ExerciseResponse` shape as
-today.
+`get_handler(type).to_response_dict(exercise)` → same `ExerciseResponse` shape as today,
+with `ordering`/`matching` display order derived from `exercise_id`.
 
 **Submit/grade** (`exercise_service.submit_answer` → `answer_eval`):
 `get_handler(type, short_answer_grader=evaluate_short_answer).evaluate(exercise, answer)`.
 
 **Tutor chat** (`routers/session.py` chat endpoint):
 `h = get_handler(type)`; `h.tutor_question(exercise)`, `h.tutor_options(exercise)`.
-This is where the `true_false`/`fill_blank`/`ordering`/`matching` content is now
-guaranteed surfaced — the ABC forces every handler to implement it.
+This is where `true_false`/`fill_blank`/`ordering`/`matching` content is now guaranteed
+surfaced — the ABC forces every handler to implement it.
 
-**Persist / history**:
-`to_persistence_dict` emits the current flat shape but **always writes canonical order**
-for `ordering`/`matching` (i.e. `items` = `correct_order`, `right_items` = the in-order
-matches) — never the shuffled display order. Shuffle is a logic-layer/display concern
-that lives only in the runtime payload; the DB always carries the standard order.
-`history_formatter` reads through the payload (or the flat dict via
-`payload_from_record_dict` for legacy entries).
+**Prompt generation** (`exercise_gen` / `prompts`):
+`get_prompt_spec(type)` is rebuilt from the handler: `schema = handler.output_model`,
+`instruction = handler.prompt_instruction()`, `negative_constraints =
+handler.negative_constraints()`, `explanation_guidance = handler.explanation_guidance()`.
+`PROMPT_REGISTRY` is deleted.
 
-This means `to_response_dict` and `to_persistence_dict` **intentionally diverge** for
-`ordering`/`matching`: the response carries the frozen shuffled display order (stable
-across generate→tutor→submit within the live session), while persistence carries the
-canonical order. All other types produce identical dicts from both methods.
+**Persist** (`subject_progress_snapshot.build_subject_progress_snapshot` →
+`persistence/subject_progress.py`): each history entry serializes the envelope shared
+fields plus `payload = exercise.payload.model_dump()` (nested, canonical). `ExerciseEntry`
+(the Beanie document) is restructured to carry `payload: dict` instead of the 11 flat
+content fields.
 
-The single persistence callsite is `build_subject_progress_snapshot`
-(`subject_progress_snapshot.py:15-44`), which today reads ~10 flat fields off each record
-(`ex.sentence`, `ex.options`, `ex.statement`, `ex.items`, `ex.pairs`, `ex.right_items`,
-`ex.rubric`, `ex.correct_option`, `ex.correct_answer`, `ex.hint`). Removing those fields
-from `ExerciseRecord` breaks this function, so it must switch to
-`get_handler(ex.payload.exercise_type).to_persistence_dict(ex.payload, ...)` per record.
+**Read persisted** (`persistence/subject_progress.py` load path):
+`_document_to_legacy_payload` reconstructs each history entry by validating
+`ExercisePayload.model_validate(entry.payload)` (strict) and rebuilding the runtime
+`ExerciseRecord`. No flat fallback.
 
-**Safety of the canonical-only-in-DB invariant:** only `exercise_history` is ever
-persisted, and a record lands there only after `submit_answer` grades it.
-`current_exercise` (the in-flight, unanswered exercise) never reaches the DB. So the
-shuffled display order an `ordering`/`matching` learner sees lives entirely in the live
-session payload; by the time anything persists, the answer is already submitted and the
-canonical order is exactly what review needs. No display order is ever lost.
+## Migration
 
-**Read legacy record** (D1): any flat dict (old DB row or in-flight session) →
-`payload_from_record_dict(data)` → payload. Accepts both the old flat shape and the new
-one, so no migration and no broken live sessions.
+A standalone, idempotent script: `scripts/migrate_exercise_payload.py` (mirrors the
+existing `scripts/reset_persistence_for_beanie_cutover.py` bootstrap: `sys.path` insert,
+`AsyncMongoClient`, `argparse`, `--force` guard, plus a `--dry-run` default).
+
+- Iterates every `al_subject_progress` document.
+- For each `exercise_history` entry still in the **old flat shape** (detected by the
+  ABSENCE of a `payload` key), converts flat fields → nested payload using a one-shot
+  `flat_to_payload(entry)` converter (the only code that understands the legacy shape),
+  then rewrites the entry as `{<shared fields>, "payload": <nested>}` and drops the old
+  flat content keys.
+- **Idempotent:** an entry that already has a `payload` key is left untouched, so re-runs
+  are safe.
+- `--dry-run` (default) reports how many documents/entries would change without writing;
+  `--force` performs the update.
+- Documented run order in the plan: deploy code that can *read* both shapes is NOT
+  required because the read-path is strict — therefore the migration must run **before**
+  the new code serves traffic (or during a short maintenance window). The plan calls this
+  out explicitly.
 
 ## Backwards-compatibility invariants
 
 - `ExerciseResponse` (API schema) shape is **unchanged** — frontend untouched.
-- Persistence dict shape is **unchanged** — no DB migration; old rows still load via D1.
-- `serialize_exercise_result(result)` remains importable as a thin shim that composes
-  the new methods: `h = get_handler(result.exercise_type)`,
-  `payload = h.payload_from_output(result)`, then
-  `h.to_persistence_dict(payload, explanations_from(result))`. Output equals today's flat
-  dict exactly, so any external caller keeps working.
+- `serialize_exercise_result(result)` remains importable as a thin shim that composes the
+  new methods so any external caller keeps working:
+  `h = get_handler(result.exercise_type)`, `payload = h.payload_from_output(result)`,
+  then return the flat dict the old serializer produced (the shim is the one remaining
+  flat emitter, kept only for callers that still expect the old return shape; internal
+  callers move to `payload_from_output` + `to_response_dict`).
 
 ## Error handling
 
@@ -289,36 +322,40 @@ one, so no migration and no broken live sessions.
   chat path) rather than leaking `KeyError`.
 - `short_answer` handler with no grader injected and asked to `evaluate` → raises
   `RuntimeError("short_answer_grader is required ...")`, matching today's behaviour.
-- `payload_from_record_dict` on a malformed/partial legacy dict → fills sensible defaults
-  where the old code did (e.g. empty options) rather than raising, to keep old sessions
-  alive.
+- **Strict read-path:** `ExercisePayload.model_validate` on a malformed stored payload
+  raises `ValidationError`. Because the migration runs first and is idempotent, persisted
+  payloads are well-formed; a validation error therefore signals real corruption and
+  should surface (logged) rather than be silently defaulted.
 
 ## Testing strategy
 
 - **Per-handler unit tests** — for each of the 7 types: `payload_from_output`,
-  `payload_from_record_dict` (legacy flat dict + new dict), `to_response_dict` /
-  `to_persistence_dict` shape equals the current serializer output (golden), `evaluate`
-  (correct + incorrect), `tutor_question` / `tutor_options`, `serialize_answer`.
+  `to_response_dict` shape equals the current serializer output (golden), `evaluate`
+  (correct + incorrect), `tutor_question` / `tutor_options`, `serialize_answer`,
+  `prompt_instruction` / `negative_constraints` / `explanation_guidance` return the
+  expected per-type constant text.
+- **Deterministic shuffle test** — `to_response_dict` / `tutor_options` for the same
+  `exercise_id` produce the SAME display order across repeated calls; different
+  `exercise_id`s generally differ; the canonical order in the payload is never mutated.
 - **Round-trip test** — output model → payload → response dict matches the current
-  `serialize_exercise_result` output exactly (lock the no-frontend-change invariant).
-- **Canonical-order-in-persistence test** — for `ordering`/`matching`, assert
-  `to_persistence_dict` emits the canonical order (`items` == `correct_order`,
-  `right_items` in-order) even when the payload's frozen display order is shuffled, i.e.
-  `to_response_dict` and `to_persistence_dict` diverge as designed.
-- **Snapshot test** — `build_subject_progress_snapshot` over a mixed-type
-  `exercise_history` produces the same flat per-exercise dict shape as today (it now
-  routes through `to_persistence_dict`), and carries canonical order for ordering/matching.
-- **Legacy decode test** — a hand-written old flat dict (pre-refactor shape) decodes via
-  `payload_from_record_dict` for every type.
+  `serialize_exercise_result` output for non-shuffled types exactly (lock the
+  no-frontend-change invariant); for `ordering`/`matching` the response `items`/`pairs`
+  are a permutation of canonical and the `correct_answer` field is canonical.
+- **Persistence round-trip test** — `ExerciseRecord` → snapshot entry (nested payload) →
+  `ExercisePayload.model_validate` → equal payload. Strict validate succeeds on a
+  freshly-written entry.
+- **Migration test** — a hand-written OLD flat document converts to the nested shape;
+  running the migration twice is a no-op the second time (idempotency); a document already
+  in the new shape is untouched.
 - **Registry test** — every `ExerciseType` enum value has a registered handler (guards
   against adding an enum value without a handler).
-- **Regression** — existing `test_session_router_chat.py`, `test_tutor_chat.py`, and any
-  exercise/answer tests stay green; the `true_false` tutor content now appears in the
-  prompt (explicit assertion).
+- **Regression** — existing `test_session_router_chat.py`, `test_tutor_chat.py`,
+  `test_exercise_types.py`, `test_exercise_service.py` stay green (updated where they
+  asserted the old flat `ExerciseRecord` fields); the `true_false` tutor content now
+  appears in the prompt (explicit assertion).
 
 ## Out of scope
 
 - Frontend changes (none needed).
-- DB migration (none — D1 read-compatibility instead).
 - Changing the RL environment, mastery, or selection weights.
 - Adding new exercise types (the point is to make that easy *later*).
