@@ -277,6 +277,23 @@ async def submit_answer(
     return ok(SubmitAnswerResponse(**result).model_dump())
 
 
+def _resolve_exercise_question(exercise: Any) -> str:
+    """Return the full question text the tutor should reason about.
+
+    For several exercise types the human-readable ``question`` field only holds a
+    generic instruction (e.g. "Đánh giá phát biểu sau là đúng hay sai.") while the
+    content the learner is judging lives in a separate field — ``statement`` for
+    true_false, ``sentence`` for fill_blank. Without appending it the tutor only
+    sees the instruction and cannot explain anything.
+    """
+    question = (exercise.question or "").strip()
+    if exercise.exercise_type == "true_false" and exercise.statement:
+        return f"{question}\n\nPhát biểu: {exercise.statement}".strip()
+    if exercise.exercise_type == "fill_blank" and exercise.sentence:
+        return f"{question}\n\nCâu cần điền: {exercise.sentence}".strip()
+    return question
+
+
 def _resolve_exercise_options(exercise: Any) -> list[str]:
     """Return the display options list for a given exercise."""
     option_keys = sorted(exercise.options.keys())
@@ -316,6 +333,7 @@ async def chat_about_exercise(
     if not exercise:
         raise ExerciseGenerationError("No exercise context available for chat")
 
+    question = _resolve_exercise_question(exercise)
     options = _resolve_exercise_options(exercise)
 
     chat_history = await _get_tutor_chat_history(session, exercise.exercise_id)
@@ -340,7 +358,7 @@ async def chat_about_exercise(
                 )
 
             stream = await create_tutor_chat_stream(
-                question=exercise.question,
+                question=question,
                 options=options,
                 user_question=req.user_question,
                 chat_history=chat_history,
@@ -357,7 +375,7 @@ async def chat_about_exercise(
 
         explanation = await asyncio.to_thread(
             generate_tutor_chat_response,
-            question=exercise.question,
+            question=question,
             options=options,
             user_question=req.user_question,
             chat_history=chat_history,

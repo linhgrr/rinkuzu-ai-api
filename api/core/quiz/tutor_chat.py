@@ -18,7 +18,7 @@ from api.core.shared.llm import (
     invoke_text_completion,
     serialize_responses_sse_event,
 )
-from api.core.shared.retry import llm_retry_call
+from api.core.shared.retry import llm_async_retry, llm_retry_call
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -252,6 +252,40 @@ async def _open_tutor_chat_stream(
     )
 
 
+async def _prime_tutor_chat_stream(
+    *,
+    model: str,
+    prompt: str,
+    timeout_sec: float,
+) -> tuple[str, AsyncIterator[object]]:
+    """Open the stream and drain it to the first non-empty delta.
+
+    The whole open→first-token phase is wrapped in ``llm_async_retry`` so a
+    transient provider failure OR an empty completion (stream closes before any
+    token) is retried before a single byte reaches the client. Once the first
+    token is buffered the stream is committed: any later failure is surfaced
+    mid-stream as ``response.failed`` (cannot restart a partially-sent reply).
+
+    Returns ``(first_delta, stream)`` where ``stream`` is the still-open source
+    to keep draining. Raises ``RuntimeError`` if every attempt yields an empty
+    completion.
+    """
+
+    async def _attempt() -> tuple[str, AsyncIterator[object]]:
+        stream = await _open_tutor_chat_stream(
+            model=model,
+            prompt=prompt,
+            timeout_sec=timeout_sec,
+        )
+        async for chunk in stream:
+            delta = _extract_stream_chunk_text(chunk)
+            if delta:
+                return delta, stream
+        raise RuntimeError("Tutor chat returned an empty completion")
+
+    return await llm_async_retry(label="tutor chat stream")(_attempt)()
+
+
 async def create_tutor_chat_stream(
     *,
     question: str,
@@ -276,19 +310,20 @@ async def create_tutor_chat_stream(
         bloom_level=bloom_level,
         rag_context=rag_context,
     )
-    stream = await _open_tutor_chat_stream(
+    first_delta, stream = await _prime_tutor_chat_stream(
         model=_resolve_tutor_model(),
         prompt=prompt,
         timeout_sec=get_settings().llm_timeout_sec,
     )
 
     async def iterator() -> AsyncIterator[bytes]:
-        full_response = ""
-        started_stream = False
+        full_response = first_delta
+        yield serialize_responses_sse_event(
+            {"type": "response.output_text.delta", "delta": first_delta}
+        )
 
         try:
             async for chunk in stream:
-                started_stream = True
                 delta = _extract_stream_chunk_text(chunk)
                 if delta:
                     full_response += delta
@@ -296,8 +331,6 @@ async def create_tutor_chat_stream(
                         {"type": "response.output_text.delta", "delta": delta}
                     )
         except Exception as exc:
-            if not started_stream:
-                raise RuntimeError("Tutor chat service is temporarily unavailable") from exc
             yield serialize_responses_sse_event(
                 {
                     "type": "response.failed",
