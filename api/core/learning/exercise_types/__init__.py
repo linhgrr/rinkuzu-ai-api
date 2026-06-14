@@ -44,3 +44,10 @@ __all__ = [
     "serialize_exercise_result",
     "shuffle_ordering_items",
 ]
+
+
+from . import handlers  # noqa: F401  (import for @register side effects)
+from .base import ExerciseTypeHandler
+from .registry import get_handler, register
+
+__all__ += ["ExerciseTypeHandler", "get_handler", "register"]
