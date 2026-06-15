@@ -370,18 +370,7 @@ class ExerciseService:
             bloom_level=bloom_level,
             question=exercise_data["question"],
             payload=payload,
-            correct_option=exercise_data.get("correct_option", ""),
             explanation="",
-            exercise_type=exercise_data.get("exercise_type", ExerciseType.MCQ),
-            sentence=exercise_data.get("sentence"),
-            options=exercise_data.get("options", {}),
-            statement=exercise_data.get("statement"),
-            hint=exercise_data.get("hint"),
-            items=exercise_data.get("items", []),
-            pairs=exercise_data.get("pairs", []),
-            right_items=exercise_data.get("right_items", []),
-            rubric=exercise_data.get("rubric", []),
-            correct_answer=exercise_data.get("correct_answer"),
             explanation_correct=exercise_data.get("explanation_correct", ""),
             explanation_incorrect=exercise_data.get("explanation_incorrect", ""),
             theory=None,
@@ -432,7 +421,7 @@ class ExerciseService:
                 return None
 
             exercise = session.current_exercise
-            if exercise.exercise_type == ExerciseType.SHORT_ANSWER:
+            if exercise.payload.exercise_type == ExerciseType.SHORT_ANSWER:
                 is_correct, answer_summary = cast(
                     "tuple[bool, str]",
                     await self._run_llm_call(
@@ -449,7 +438,7 @@ class ExerciseService:
             logger.info(
                 "[Exercise] 📝 {} | Type: {} | Answer: {} → {}",
                 exercise.concept_name,
-                exercise.exercise_type,
+                exercise.payload.exercise_type,
                 answer_summary,
                 verdict,
             )
@@ -460,6 +449,13 @@ class ExerciseService:
             )
 
             exercise.explanation = explanation
+            from .exercise_types.registry import get_handler
+
+            correct_option = (
+                get_handler(exercise.payload.exercise_type)
+                .to_response_dict(exercise)
+                .get("correct_option", "")
+            )
             exercise.user_answer = self._serialize_answer_for_history(exercise, answer)
             exercise.is_correct = is_correct
             session.exercise_history.append(exercise)
@@ -505,7 +501,7 @@ class ExerciseService:
         return {
             "is_correct": is_correct,
             "explanation": explanation,
-            "correct_option": exercise.correct_option,
+            "correct_option": correct_option,
             "concept_name": exercise.concept_name,
             "bloom_level": exercise.bloom_level,
             "mastery_after": mastery_val,

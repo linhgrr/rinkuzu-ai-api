@@ -30,7 +30,6 @@ from api.core.shared.persistence import (
 )
 
 from .environment import AdaptiveLearningEnv
-from .exercise_types import ExerciseType
 from .exercise_types.payloads import ExercisePayload
 from .models import DuelingQNetwork, load_dqn_model, load_saint_model
 from .subject_progress_snapshot import build_subject_progress_snapshot
@@ -47,19 +46,8 @@ class ExerciseRecord:
     concept_name: str
     bloom_level: int
     question: str
-    correct_option: str = ""
+    payload: ExercisePayload
     explanation: str = ""
-    payload: ExercisePayload | None = None
-    exercise_type: ExerciseType = ExerciseType.MCQ
-    sentence: str | None = None
-    options: dict[str, str] = field(default_factory=dict)
-    statement: str | None = None
-    hint: str | None = None
-    items: list[str] = field(default_factory=list)
-    pairs: list[dict[str, str]] = field(default_factory=list)
-    right_items: list[str] = field(default_factory=list)
-    rubric: list[str] = field(default_factory=list)
-    correct_answer: Any = None
     explanation_correct: str = ""
     explanation_incorrect: str = ""
     theory: dict[str, str | list[str]] | None = None
