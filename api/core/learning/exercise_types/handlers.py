@@ -91,7 +91,6 @@ class MCQHandler(ExerciseTypeHandler):
             "question": exercise.question,
             "options": dict(payload.options),
             "correct_option": payload.correct_option,
-            "correct_answer": payload.correct_option,
             "explanation_correct": exercise.explanation_correct,
             "explanation_incorrect": exercise.explanation_incorrect,
         }
@@ -109,7 +108,10 @@ class MCQHandler(ExerciseTypeHandler):
         return [payload.options[k] for k in sorted(payload.options) if payload.options.get(k)]
 
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:  # noqa: ARG002 — contract parity
-        return (answer.get("choice") or "").strip().upper() or None
+        choices = answer.get("choices") or []
+        if choices:
+            return ", ".join(sorted(choices))
+        return answer.get("choice")
 
 
 # ---- True/False ---------------------------------------------------------

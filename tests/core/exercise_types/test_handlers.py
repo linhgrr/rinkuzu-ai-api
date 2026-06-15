@@ -59,6 +59,24 @@ def test_mcq_payload_from_output_and_evaluate():
     assert h.tutor_options(rec) == ["a", "b", "c", "d"]
 
 
+def test_mcq_serialize_answer_matches_legacy_shape():
+    h = get_handler(ExerciseType.MCQ)
+    rec = _record(MCQPayload(options={"A": "a", "B": "b", "C": "c", "D": "d"}, correct_option="B"))
+    # raw choice preserved (no upper/strip), matching legacy serialize_answer_for_history
+    assert h.serialize_answer(rec, {"choice": "b"}) == "b"
+    # choices list path: sorted join
+    assert h.serialize_answer(rec, {"choices": ["B", "A"]}) == "A, B"
+
+
+def test_mcq_response_dict_has_no_correct_answer_key():
+    h = get_handler(ExerciseType.MCQ)
+    rec = _record(MCQPayload(options={"A": "a", "B": "b", "C": "c", "D": "d"}, correct_option="B"))
+    resp = h.to_response_dict(rec)
+    # legacy MCQ serialization never emitted a "correct_answer" key
+    assert "correct_answer" not in resp
+    assert resp["correct_option"] == "B"
+
+
 def test_true_false_tutor_surfaces_statement():
     h = get_handler(ExerciseType.TRUE_FALSE)
     payload = TrueFalsePayload(statement="Trời xanh", correct_answer=True)
