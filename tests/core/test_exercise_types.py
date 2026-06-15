@@ -50,27 +50,31 @@ def test_select_exercise_type_uses_correct_weights_for_mastery():
 
 
 def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_ordering():
+    from api.core.learning.exercise_types.payloads import (
+        FillBlankPayload,
+        MatchingPayload,
+        MultiCorrectPayload,
+        OrderingPayload,
+        TrueFalsePayload,
+    )
+
     service = ExerciseService()
     try:
         true_false = SimpleNamespace(
-            exercise_type=ExerciseType.TRUE_FALSE,
-            correct_answer=True,
-            correct_option="True",
+            payload=TrueFalsePayload(statement="S", correct_answer=True),
             concept_name="Concept",
             question="Question",
-            rubric=[],
             explanation_correct="",
             explanation_incorrect="",
         )
         assert service._evaluate_answer(true_false, {"boolean": True}) == (True, "True")
 
         fill_blank = SimpleNamespace(
-            exercise_type=ExerciseType.FILL_BLANK,
-            correct_answer=["động năng", "dong nang"],
-            correct_option="động năng",
+            payload=FillBlankPayload(
+                sentence="S", hint="H", blank_answers=["động năng", "dong nang"]
+            ),
             concept_name="Concept",
             question="Question",
-            rubric=[],
             explanation_correct="",
             explanation_incorrect="",
         )
@@ -80,24 +84,21 @@ def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_orderin
         )
 
         multi_correct = SimpleNamespace(
-            exercise_type=ExerciseType.MULTI_CORRECT,
-            correct_answer=["A", "C"],
-            correct_option="A, C",
+            payload=MultiCorrectPayload(
+                options={"A": "a", "B": "b", "C": "c", "D": "d", "E": "e"},
+                correct_options=["A", "C"],
+            ),
             concept_name="Concept",
             question="Question",
-            rubric=[],
             explanation_correct="",
             explanation_incorrect="",
         )
         assert service._evaluate_answer(multi_correct, {"choices": ["C", "A"]}) == (True, "A, C")
 
         ordering = SimpleNamespace(
-            exercise_type=ExerciseType.ORDERING,
-            correct_answer=["Bước 1", "Bước 2", "Bước 3"],
-            correct_option="",
+            payload=OrderingPayload(correct_order=["Bước 1", "Bước 2", "Bước 3"]),
             concept_name="Concept",
             question="Question",
-            rubric=[],
             explanation_correct="",
             explanation_incorrect="",
         )
@@ -107,12 +108,14 @@ def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_orderin
         )
 
         matching = SimpleNamespace(
-            exercise_type=ExerciseType.MATCHING,
-            correct_answer={"Khái niệm A": "Định nghĩa A", "Khái niệm B": "Định nghĩa B"},
-            correct_option="",
+            payload=MatchingPayload(
+                pairs=[
+                    {"left": "Khái niệm A", "right": "Định nghĩa A"},
+                    {"left": "Khái niệm B", "right": "Định nghĩa B"},
+                ]
+            ),
             concept_name="Concept",
             question="Question",
-            rubric=[],
             explanation_correct="",
             explanation_incorrect="",
         )
@@ -193,6 +196,8 @@ def test_serialize_exercise_result_normalizes_ordering_payload_from_correct_orde
 
 
 def test_evaluate_answer_updates_short_answer_feedback(monkeypatch):
+    from api.core.learning.exercise_types.payloads import ShortAnswerPayload
+
     service = ExerciseService()
     monkeypatch.setattr(
         exercise_service_module,
@@ -205,12 +210,9 @@ def test_evaluate_answer_updates_short_answer_feedback(monkeypatch):
     )
 
     short_answer = SimpleNamespace(
-        exercise_type=ExerciseType.SHORT_ANSWER,
-        correct_answer="Mẫu trả lời",
-        correct_option="Mẫu trả lời",
+        payload=ShortAnswerPayload(rubric=["Ý chính", "Lập luận"], sample_answer="Mẫu trả lời"),
         concept_name="Concept",
         question="Question",
-        rubric=["Ý chính", "Lập luận"],
         explanation_correct="",
         explanation_incorrect="",
     )
