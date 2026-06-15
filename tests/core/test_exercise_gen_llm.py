@@ -48,7 +48,7 @@ def test_generate_exercise_retries_and_serializes(monkeypatch):
     assert attempts["count"] == 2
     assert result is not None
     assert result["exercise_type"] == ExerciseType.MCQ
-    assert result["correct_option"] == "A"
+    assert result["payload"]["correct_option"] == "A"
 
 
 def test_evaluate_short_answer_returns_model_dump(monkeypatch):

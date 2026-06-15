@@ -4,7 +4,7 @@ exercise_gen.py — LLM-powered exercise generation and answer evaluation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from loguru import logger
 from pydantic import BaseModel
@@ -16,6 +16,7 @@ from api.core.shared.llm import (
 from api.core.shared.retry import llm_retry_call
 
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
+from .exercise_types.registry import get_handler
 from .prompts import (
     TheoryOutput,
     build_exercise_messages,
@@ -49,7 +50,7 @@ def _build_generation_spec(
         recent_exercises=recent_same_concept_exercises,
         subject_context=subject_context,
     )
-    return spec.schema, messages, spec.serializer
+    return spec.schema, messages
 
 
 def _invoke_structured_llm(
@@ -85,7 +86,7 @@ def generate_exercise(
         mastery,
     )
 
-    schema, messages, serializer = _build_generation_spec(
+    schema, messages = _build_generation_spec(
         concept_name=concept_name,
         concept_definition=concept_definition,
         bloom_level=bloom_level,
@@ -98,10 +99,14 @@ def generate_exercise(
         label="generate_exercise",
         fn=lambda: _invoke_structured_llm(schema=schema, messages=messages),
     )
-    return cast(
-        "dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None",
-        serializer(result),
-    )
+    payload = get_handler(exercise_type).payload_from_output(result)
+    return {
+        "exercise_type": result.exercise_type,
+        "question": result.question,
+        "explanation_correct": result.explanation_correct,
+        "explanation_incorrect": result.explanation_incorrect,
+        "payload": payload.model_dump(mode="json"),
+    }
 
 
 def evaluate_short_answer(

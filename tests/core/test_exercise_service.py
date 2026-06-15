@@ -52,6 +52,11 @@ async def test_eager_prefetch_uses_prefetch_timeout(monkeypatch):
             "correct_option": "A",
             "explanation_correct": "ok",
             "explanation_incorrect": "no",
+            "payload": {
+                "exercise_type": "mcq",
+                "options": {"A": "1", "B": "2", "C": "3", "D": "4"},
+                "correct_option": "A",
+            },
         }
 
     monkeypatch.setattr(service, "_generate_exercise_dedup", fake_generate_exercise_dedup)

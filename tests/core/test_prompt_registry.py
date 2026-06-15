@@ -8,11 +8,12 @@ from api.core.learning.exercise_types import (
     ShortAnswerOutput,
     TrueFalseOutput,
 )
-from api.core.learning.prompts.registry import PROMPT_REGISTRY, get_prompt_spec
+from api.core.learning.prompts.registry import get_prompt_spec
 
 
-def test_all_exercise_types_registered():
-    assert set(PROMPT_REGISTRY.keys()) == set(ExerciseType)
+def test_all_exercise_types_have_spec():
+    for exercise_type in ExerciseType:
+        assert get_prompt_spec(exercise_type) is not None
 
 
 def test_get_prompt_spec_returns_correct_schema():

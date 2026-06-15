@@ -62,18 +62,8 @@ class ExerciseEntry(BaseModel):
     concept_name: str
     bloom_level: int
     question: str
-    correct_option: str
     explanation: str
-    exercise_type: str = "mcq"
-    sentence: str | None = None
-    options: dict[str, str] = Field(default_factory=dict)
-    statement: str | None = None
-    hint: str | None = None
-    items: list[str] = Field(default_factory=list)
-    pairs: list[dict[str, str]] = Field(default_factory=list)
-    right_items: list[str] = Field(default_factory=list)
-    rubric: list[str] = Field(default_factory=list)
-    correct_answer: Any = None
+    payload: dict[str, Any] = Field(default_factory=dict)
     explanation_correct: str = ""
     explanation_incorrect: str = ""
     theory: dict[str, Any] | None = None

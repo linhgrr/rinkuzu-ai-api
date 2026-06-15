@@ -1,10 +1,9 @@
-from typing import Any
-
 """
 Session router — Session lifecycle endpoints.
 """
 
 import asyncio
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -231,6 +230,9 @@ async def generate_exercise(
 
     env_stats = session.env.get_session_stats()
 
+    from api.core.learning.exercise_types.registry import get_handler
+
+    content = get_handler(exercise.payload.exercise_type).to_response_dict(exercise)
     return ok(
         ExerciseResponse(
             exercise_id=exercise.exercise_id,
@@ -238,15 +240,15 @@ async def generate_exercise(
             concept_idx=exercise.concept_idx,
             bloom_level=exercise.bloom_level,
             bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
-            exercise_type=exercise.exercise_type,
+            exercise_type=exercise.payload.exercise_type,
             question=exercise.question,
-            sentence=exercise.sentence,
-            options=exercise.options,
-            statement=exercise.statement,
-            hint=exercise.hint,
-            items=exercise.items,
-            pairs=exercise.pairs,
-            right_items=exercise.right_items,
+            sentence=content.get("sentence"),
+            options=content.get("options", {}),
+            statement=content.get("statement"),
+            hint=content.get("hint"),
+            items=content.get("items", []),
+            pairs=content.get("pairs", []),
+            right_items=content.get("right_items", []),
             step=env_stats["step"],
             max_steps=env_stats["max_steps"],
             theory=exercise.theory,
@@ -278,40 +280,15 @@ async def submit_answer(
 
 
 def _resolve_exercise_question(exercise: Any) -> str:
-    """Return the full question text the tutor should reason about.
+    from api.core.learning.exercise_types.registry import get_handler
 
-    For several exercise types the human-readable ``question`` field only holds a
-    generic instruction (e.g. "Đánh giá phát biểu sau là đúng hay sai.") while the
-    content the learner is judging lives in a separate field — ``statement`` for
-    true_false, ``sentence`` for fill_blank. Without appending it the tutor only
-    sees the instruction and cannot explain anything.
-    """
-    question = (exercise.question or "").strip()
-    if exercise.exercise_type == "true_false" and exercise.statement:
-        return f"{question}\n\nPhát biểu: {exercise.statement}".strip()
-    if exercise.exercise_type == "fill_blank" and exercise.sentence:
-        return f"{question}\n\nCâu cần điền: {exercise.sentence}".strip()
-    return question
+    return get_handler(exercise.payload.exercise_type).tutor_question(exercise)
 
 
 def _resolve_exercise_options(exercise: Any) -> list[str]:
-    """Return the display options list for a given exercise."""
-    option_keys = sorted(exercise.options.keys())
-    options = [exercise.options[key] for key in option_keys if exercise.options.get(key)]
-    if options:
-        return options
-    fallbacks: dict[str, list[str] | None] = {
-        "true_false": ["True", "False"],
-        "ordering": exercise.items,
-        "matching": exercise.right_items,
-    }
-    if exercise.exercise_type in fallbacks:
-        return fallbacks[exercise.exercise_type] or []
-    if exercise.exercise_type == "fill_blank" and exercise.hint:
-        return [f"Gợi ý: {exercise.hint}"]
-    if exercise.exercise_type == "short_answer":
-        return exercise.rubric or ["Trả lời ngắn gọn, bám sát câu hỏi."]
-    return ["Xem lại yêu cầu của bài tập hiện tại."]
+    from api.core.learning.exercise_types.registry import get_handler
+
+    return get_handler(exercise.payload.exercise_type).tutor_options(exercise)
 
 
 @router.post("/{session_id}/chat", response_model=StandardResponse[TutorChatResponse])
