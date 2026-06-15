@@ -94,6 +94,32 @@ class SessionState:
     tutor_chat_history: list[dict[str, str]] = field(default_factory=list)
     tutor_chat_exercise_id: str | None = None
 
+    @staticmethod
+    def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
+        from pydantic import TypeAdapter
+
+        from api.core.learning.exercise_types.payloads import ExercisePayload
+
+        adapter: TypeAdapter[ExercisePayload] = TypeAdapter(ExercisePayload)
+        for ex in prev_history:
+            session.exercise_history.append(
+                ExerciseRecord(
+                    exercise_id=ex.get("exercise_id", ""),
+                    concept_idx=ex["concept_idx"],
+                    concept_name=ex.get("concept_name", ""),
+                    bloom_level=ex["bloom_level"],
+                    question=ex.get("question", ""),
+                    payload=adapter.validate_python(ex["payload"]),
+                    explanation=ex.get("explanation", ""),
+                    explanation_correct=ex.get("explanation_correct", ""),
+                    explanation_incorrect=ex.get("explanation_incorrect", ""),
+                    theory=ex.get("theory"),
+                    user_answer=ex.get("user_answer"),
+                    is_correct=ex.get("is_correct"),
+                    timestamp=ex.get("timestamp", 0),
+                )
+            )
+
 
 class SessionManager:
     """Session lifecycle management and knowledge graph queries.
@@ -398,36 +424,6 @@ class SessionManager:
         logger.info("[Session] No saved subject progress for job {}, starting fresh", job_id)
         return [], 0, 0
 
-    @staticmethod
-    def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
-        for ex in prev_history:
-            session.exercise_history.append(
-                ExerciseRecord(
-                    exercise_id=ex.get("exercise_id", ""),
-                    concept_idx=ex["concept_idx"],
-                    concept_name=ex.get("concept_name", ""),
-                    bloom_level=ex["bloom_level"],
-                    question=ex.get("question", ""),
-                    correct_option=ex.get("correct_option", ""),
-                    explanation=ex.get("explanation", ""),
-                    exercise_type=ExerciseType(ex.get("exercise_type", ExerciseType.MCQ.value)),
-                    sentence=ex.get("sentence"),
-                    options=ex.get("options", {}),
-                    statement=ex.get("statement"),
-                    hint=ex.get("hint"),
-                    items=ex.get("items", []),
-                    pairs=ex.get("pairs", []),
-                    right_items=ex.get("right_items", []),
-                    rubric=ex.get("rubric", []),
-                    correct_answer=ex.get("correct_answer"),
-                    explanation_correct=ex.get("explanation_correct", ""),
-                    explanation_incorrect=ex.get("explanation_incorrect", ""),
-                    user_answer=ex.get("user_answer"),
-                    is_correct=ex.get("is_correct"),
-                    timestamp=ex.get("timestamp", 0),
-                )
-            )
-
     async def create_session_from_pipeline(
         self,
         concepts_data: dict[str, Any],
@@ -493,7 +489,7 @@ class SessionManager:
             status=(history_source_doc or {}).get("status", "active"),
             concept_theories=theories,
         )
-        self._restore_exercise_records(session, prev_history)
+        SessionState._restore_exercise_records(session, prev_history)
 
         self._register_session(session)
         if not await self.persist_subject_progress(session):
