@@ -54,7 +54,7 @@ def _snapshot_to_document_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
     for entry in snapshot.get("exercise_history") or []:
         payload = dict(entry)
         payload["timestamp"] = epoch_to_utc(payload.get("timestamp"))
-        payload["correct_answer"] = normalize_for_bson(payload.get("correct_answer"))
+        payload["payload"] = normalize_for_bson(payload.get("payload") or {})
         payload["theory"] = normalize_for_bson(payload.get("theory"))
         exercise_history.append(ExerciseEntry(**payload))
 
