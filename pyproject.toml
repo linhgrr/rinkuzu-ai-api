@@ -141,6 +141,7 @@ ignore = [
     "N803",
     "PLR2004",
     "RET501",
+    "INP001",
 ]
 "scripts/**/*.py" = [
     "ARG001",
