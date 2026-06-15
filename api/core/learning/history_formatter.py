@@ -11,16 +11,19 @@ def _normalize_history_item(item: Any) -> dict[str, Any]:
     if isinstance(item, dict):
         return item
 
-    payload: dict[str, Any] = {
+    from api.core.learning.exercise_types.registry import get_handler
+
+    payload = getattr(item, "payload", None)
+    base: dict[str, Any] = {
         "question": getattr(item, "question", ""),
-        "exercise_type": getattr(
-            getattr(item, "exercise_type", None),
-            "value",
-            getattr(item, "exercise_type", None),
-        ),
         "bloom_level": getattr(item, "bloom_level", None),
     }
-    optional_fields = (
+    if payload is None:
+        return base
+
+    content = get_handler(payload.exercise_type).to_response_dict(item)
+    base["exercise_type"] = payload.exercise_type.value
+    for key in (
         "statement",
         "sentence",
         "hint",
@@ -31,12 +34,11 @@ def _normalize_history_item(item: Any) -> dict[str, Any]:
         "rubric",
         "correct_option",
         "correct_answer",
-    )
-    for field in optional_fields:
-        value = getattr(item, field, None)
+    ):
+        value = content.get(key)
         if value not in (None, "", [], {}):
-            payload[field] = value
-    return payload
+            base[key] = value
+    return base
 
 
 def format_exercise_history(history: Sequence[Any]) -> str:
