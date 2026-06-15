@@ -17,9 +17,8 @@ from .models import (
 from .selection import (
     EXERCISE_WEIGHTS,
     join_lines,
+    normalize_text,
     select_exercise_type,
-    serialize_exercise_result,
-    shuffle_ordering_items,
 )
 from .selection import _rng as _rng  # noqa: PLC0414  # re-export: tests patch exercise_types._rng
 
@@ -40,9 +39,8 @@ __all__ = [
     "ShortAnswerOutput",
     "TrueFalseOutput",
     "join_lines",
+    "normalize_text",
     "select_exercise_type",
-    "serialize_exercise_result",
-    "shuffle_ordering_items",
 ]
 
 

@@ -4,7 +4,7 @@ exercise_gen.py — LLM-powered exercise generation and answer evaluation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from loguru import logger
 from pydantic import BaseModel
@@ -50,7 +50,7 @@ def _build_generation_spec(
         recent_exercises=recent_same_concept_exercises,
         subject_context=subject_context,
     )
-    return spec.schema, messages, spec.serializer
+    return spec.schema, messages
 
 
 def _invoke_structured_llm(
@@ -86,7 +86,7 @@ def generate_exercise(
         mastery,
     )
 
-    schema, messages, serializer = _build_generation_spec(
+    schema, messages = _build_generation_spec(
         concept_name=concept_name,
         concept_definition=concept_definition,
         bloom_level=bloom_level,
@@ -99,13 +99,14 @@ def generate_exercise(
         label="generate_exercise",
         fn=lambda: _invoke_structured_llm(schema=schema, messages=messages),
     )
-    serialized = serializer(result)
     payload = get_handler(exercise_type).payload_from_output(result)
-    serialized["payload"] = payload.model_dump(mode="json")
-    return cast(
-        "dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None",
-        serialized,
-    )
+    return {
+        "exercise_type": result.exercise_type,
+        "question": result.question,
+        "explanation_correct": result.explanation_correct,
+        "explanation_incorrect": result.explanation_incorrect,
+        "payload": payload.model_dump(mode="json"),
+    }
 
 
 def evaluate_short_answer(

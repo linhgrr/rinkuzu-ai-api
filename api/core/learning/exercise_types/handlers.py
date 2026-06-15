@@ -31,21 +31,11 @@ from .payloads import (
     TrueFalsePayload,
 )
 from .registry import register
-from .selection import join_lines
+from .selection import join_lines, normalize_text
 from .shuffle import deterministic_shuffle
 
 if TYPE_CHECKING:
     from api.core.learning.session import ExerciseRecord
-
-
-def _normalize(value: str) -> str:
-    return " ".join(value.strip().casefold().split())
-
-
-def _payload_of(exercise: ExerciseRecord) -> Any:
-    # ExerciseRecord gains a typed ``payload`` field in a later task; until then
-    # read it dynamically so this module type-checks against the current record.
-    return cast("Any", exercise).payload
 
 
 # ---- MCQ ----------------------------------------------------------------
@@ -85,7 +75,7 @@ class MCQHandler(ExerciseTypeHandler):
         )
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
-        payload: MCQPayload = _payload_of(exercise)
+        payload = cast("MCQPayload", exercise.payload)
         return {
             "exercise_type": self.exercise_type.value,
             "question": exercise.question,
@@ -96,7 +86,7 @@ class MCQHandler(ExerciseTypeHandler):
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
-        payload: MCQPayload = _payload_of(exercise)
+        payload = cast("MCQPayload", exercise.payload)
         selected = (answer.get("choice") or "").strip().upper()
         return selected == payload.correct_option.strip().upper(), selected
 
@@ -104,7 +94,7 @@ class MCQHandler(ExerciseTypeHandler):
         return exercise.question
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:
-        payload: MCQPayload = _payload_of(exercise)
+        payload = cast("MCQPayload", exercise.payload)
         return [payload.options[k] for k in sorted(payload.options) if payload.options.get(k)]
 
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:  # noqa: ARG002 — contract parity
@@ -143,7 +133,7 @@ class TrueFalseHandler(ExerciseTypeHandler):
         return TrueFalsePayload(statement=out.statement, correct_answer=out.correct_answer)
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
-        payload: TrueFalsePayload = _payload_of(exercise)
+        payload = cast("TrueFalsePayload", exercise.payload)
         return {
             "exercise_type": self.exercise_type.value,
             "question": exercise.question,
@@ -155,7 +145,7 @@ class TrueFalseHandler(ExerciseTypeHandler):
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
-        payload: TrueFalsePayload = _payload_of(exercise)
+        payload = cast("TrueFalsePayload", exercise.payload)
         selected = answer.get("boolean")
         return (
             selected is not None and bool(selected) == bool(payload.correct_answer),
@@ -163,7 +153,7 @@ class TrueFalseHandler(ExerciseTypeHandler):
         )
 
     def tutor_question(self, exercise: ExerciseRecord) -> str:
-        payload: TrueFalsePayload = _payload_of(exercise)
+        payload = cast("TrueFalsePayload", exercise.payload)
         return f"{exercise.question}\n\nPhát biểu: {payload.statement}".strip()
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:  # noqa: ARG002 — contract parity
@@ -209,7 +199,7 @@ class FillBlankHandler(ExerciseTypeHandler):
         )
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
-        payload: FillBlankPayload = _payload_of(exercise)
+        payload = cast("FillBlankPayload", exercise.payload)
         canonical = payload.blank_answers[0] if payload.blank_answers else ""
         return {
             "exercise_type": self.exercise_type.value,
@@ -224,18 +214,18 @@ class FillBlankHandler(ExerciseTypeHandler):
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
-        payload: FillBlankPayload = _payload_of(exercise)
-        user = [_normalize(b) for b in (answer.get("blanks") or []) if b and b.strip()]
-        accepted = [_normalize(a) for a in payload.blank_answers]
+        payload = cast("FillBlankPayload", exercise.payload)
+        user = [normalize_text(b) for b in (answer.get("blanks") or []) if b and b.strip()]
+        accepted = [normalize_text(a) for a in payload.blank_answers]
         ok = bool(user and accepted and user[0] in accepted)
         return ok, ", ".join(answer.get("blanks") or [])
 
     def tutor_question(self, exercise: ExerciseRecord) -> str:
-        payload: FillBlankPayload = _payload_of(exercise)
+        payload = cast("FillBlankPayload", exercise.payload)
         return f"{exercise.question}\n\nCâu cần điền: {payload.sentence}".strip()
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:
-        payload: FillBlankPayload = _payload_of(exercise)
+        payload = cast("FillBlankPayload", exercise.payload)
         return [f"Gợi ý: {payload.hint}"] if payload.hint else []
 
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:  # noqa: ARG002 — contract parity
@@ -282,7 +272,7 @@ class MultiCorrectHandler(ExerciseTypeHandler):
         )
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
-        payload: MultiCorrectPayload = _payload_of(exercise)
+        payload = cast("MultiCorrectPayload", exercise.payload)
         correct = sorted(set(payload.correct_options))
         return {
             "exercise_type": self.exercise_type.value,
@@ -295,7 +285,7 @@ class MultiCorrectHandler(ExerciseTypeHandler):
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
-        payload: MultiCorrectPayload = _payload_of(exercise)
+        payload = cast("MultiCorrectPayload", exercise.payload)
         selected = sorted(
             {c.strip().upper() for c in (answer.get("choices") or []) if c and c.strip()}
         )
@@ -306,7 +296,7 @@ class MultiCorrectHandler(ExerciseTypeHandler):
         return exercise.question
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:
-        payload: MultiCorrectPayload = _payload_of(exercise)
+        payload = cast("MultiCorrectPayload", exercise.payload)
         return [payload.options[k] for k in sorted(payload.options) if payload.options.get(k)]
 
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:  # noqa: ARG002 — contract parity
@@ -344,7 +334,7 @@ class OrderingHandler(ExerciseTypeHandler):
         return OrderingPayload(correct_order=[i.strip() for i in out.correct_order if i.strip()])
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
-        payload: OrderingPayload = _payload_of(exercise)
+        payload = cast("OrderingPayload", exercise.payload)
         display = deterministic_shuffle(payload.correct_order, exercise.exercise_id)
         return {
             "exercise_type": self.exercise_type.value,
@@ -357,16 +347,16 @@ class OrderingHandler(ExerciseTypeHandler):
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
-        payload: OrderingPayload = _payload_of(exercise)
-        selected = [_normalize(i) for i in (answer.get("ordering") or []) if i and i.strip()]
-        expected = [_normalize(i) for i in payload.correct_order]
+        payload = cast("OrderingPayload", exercise.payload)
+        selected = [normalize_text(i) for i in (answer.get("ordering") or []) if i and i.strip()]
+        expected = [normalize_text(i) for i in payload.correct_order]
         return bool(selected) and selected == expected, " → ".join(answer.get("ordering") or [])
 
     def tutor_question(self, exercise: ExerciseRecord) -> str:
         return exercise.question
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:
-        payload: OrderingPayload = _payload_of(exercise)
+        payload = cast("OrderingPayload", exercise.payload)
         return deterministic_shuffle(payload.correct_order, exercise.exercise_id)
 
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:  # noqa: ARG002 — contract parity
@@ -405,7 +395,7 @@ class MatchingHandler(ExerciseTypeHandler):
         )
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
-        payload: MatchingPayload = _payload_of(exercise)
+        payload = cast("MatchingPayload", exercise.payload)
         left_items = [p["left"] for p in payload.pairs]
         right_canonical = [p["right"] for p in payload.pairs]
         right_items = deterministic_shuffle(right_canonical, exercise.exercise_id)
@@ -422,13 +412,13 @@ class MatchingHandler(ExerciseTypeHandler):
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
-        payload: MatchingPayload = _payload_of(exercise)
+        payload = cast("MatchingPayload", exercise.payload)
         selected = {
-            _normalize(left): _normalize(right)
+            normalize_text(left): normalize_text(right)
             for left, right in (answer.get("matching") or {}).items()
             if left and right
         }
-        expected = {_normalize(p["left"]): _normalize(p["right"]) for p in payload.pairs}
+        expected = {normalize_text(p["left"]): normalize_text(p["right"]) for p in payload.pairs}
         summary = ", ".join(
             f"{left} -> {right}" for left, right in (answer.get("matching") or {}).items()
         )
@@ -438,7 +428,7 @@ class MatchingHandler(ExerciseTypeHandler):
         return exercise.question
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:
-        payload: MatchingPayload = _payload_of(exercise)
+        payload = cast("MatchingPayload", exercise.payload)
         right_canonical = [p["right"] for p in payload.pairs]
         return deterministic_shuffle(right_canonical, exercise.exercise_id)
 
@@ -479,7 +469,7 @@ class ShortAnswerHandler(ExerciseTypeHandler):
         return ShortAnswerPayload(rubric=list(out.rubric), sample_answer=out.sample_answer)
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
-        payload: ShortAnswerPayload = _payload_of(exercise)
+        payload = cast("ShortAnswerPayload", exercise.payload)
         return {
             "exercise_type": self.exercise_type.value,
             "question": exercise.question,
@@ -494,7 +484,7 @@ class ShortAnswerHandler(ExerciseTypeHandler):
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
         if self._grader is None:
             raise RuntimeError("short_answer_grader is required for short_answer exercises")
-        payload: ShortAnswerPayload = _payload_of(exercise)
+        payload = cast("ShortAnswerPayload", exercise.payload)
         student = (answer.get("text") or "").strip()
         grading = self._grader(
             concept_name=exercise.concept_name,
@@ -511,7 +501,7 @@ class ShortAnswerHandler(ExerciseTypeHandler):
         return exercise.question
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:
-        payload: ShortAnswerPayload = _payload_of(exercise)
+        payload = cast("ShortAnswerPayload", exercise.payload)
         return list(payload.rubric) or ["Trả lời ngắn gọn, bám sát câu hỏi."]
 
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:  # noqa: ARG002 — contract parity

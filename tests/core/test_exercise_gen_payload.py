@@ -25,5 +25,3 @@ def test_generate_exercise_includes_nested_payload(monkeypatch):
         "statement": "Số 2 là số nguyên tố.",
         "correct_answer": True,
     }
-    # Legacy flat fields still present during the transition.
-    assert data["statement"] == "Số 2 là số nguyên tố."
