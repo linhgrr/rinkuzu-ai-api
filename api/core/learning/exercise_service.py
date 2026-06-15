@@ -14,6 +14,7 @@ import uuid
 
 from loguru import logger
 import numpy as np
+from pydantic import TypeAdapter
 
 from api.config import settings
 from api.exceptions import ExerciseGenerationError
@@ -22,8 +23,11 @@ from .agent import decode_action, select_action
 from .answer_eval import evaluate_answer, normalize_text, serialize_answer_for_history
 from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from .exercise_types import ExerciseType
+from .exercise_types.payloads import ExercisePayload
 from .history_formatter import format_exercise_history
 from .session import ExerciseRecord
+
+_PAYLOAD_ADAPTER: TypeAdapter[ExercisePayload] = TypeAdapter(ExercisePayload)
 
 BLOOM_LABELS = {
     1: "Remember",
@@ -358,12 +362,14 @@ class ExerciseService:
                 logger.error("[Exercise] ✗ Generation returned None")
                 return None
 
+        payload = _PAYLOAD_ADAPTER.validate_python(exercise_data["payload"])
         exercise = ExerciseRecord(
             exercise_id=str(uuid.uuid4())[:8],
             concept_idx=concept_idx,
             concept_name=concept_name,
             bloom_level=bloom_level,
             question=exercise_data["question"],
+            payload=payload,
             correct_option=exercise_data.get("correct_option", ""),
             explanation="",
             exercise_type=exercise_data.get("exercise_type", ExerciseType.MCQ),
