@@ -16,6 +16,7 @@ from api.core.shared.llm import (
 from api.core.shared.retry import llm_retry_call
 
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
+from .exercise_types.registry import get_handler
 from .prompts import (
     TheoryOutput,
     build_exercise_messages,
@@ -98,9 +99,12 @@ def generate_exercise(
         label="generate_exercise",
         fn=lambda: _invoke_structured_llm(schema=schema, messages=messages),
     )
+    serialized = serializer(result)
+    payload = get_handler(exercise_type).payload_from_output(result)
+    serialized["payload"] = payload.model_dump(mode="json")
     return cast(
         "dict[str, str | bool | list[str] | dict[str, str] | list[dict[str, str]]] | None",
-        serializer(result),
+        serialized,
     )
 
 
