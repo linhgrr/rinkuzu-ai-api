@@ -98,8 +98,6 @@ class SessionState:
     def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
         from pydantic import TypeAdapter
 
-        from api.core.learning.exercise_types.payloads import ExercisePayload
-
         adapter: TypeAdapter[ExercisePayload] = TypeAdapter(ExercisePayload)
         for ex in prev_history:
             session.exercise_history.append(
