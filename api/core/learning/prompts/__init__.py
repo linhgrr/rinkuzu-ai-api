@@ -11,7 +11,7 @@ from .constants import (
 from .few_shots import FEW_SHOT_EXAMPLES, FEW_SHOT_HIGH_BLOOM, FEW_SHOT_NON_STEM
 from .grading import TheoryOutput, build_grading_messages, build_theory_messages
 from .parser import OutputParser, OutputParsingError
-from .registry import PROMPT_REGISTRY, ExercisePromptSpec, get_prompt_spec
+from .registry import ExercisePromptSpec, get_prompt_spec
 
 __all__ = [
     "BLOOM_LEVEL_GUIDANCE",
@@ -23,7 +23,6 @@ __all__ = [
     "FEW_SHOT_NON_STEM",
     "MATH_FORMAT_RULES",
     "META_VALIDATION_CHECKLIST",
-    "PROMPT_REGISTRY",
     "SCORE_ANCHORS",
     "THEORY_EXAMPLES_CONSTRAINT",
     "ExercisePromptSpec",
