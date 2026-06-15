@@ -1,10 +1,9 @@
-from typing import Any
-
 """
 Session router — Session lifecycle endpoints.
 """
 
 import asyncio
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import StreamingResponse
