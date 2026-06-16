@@ -12,7 +12,6 @@ from loguru import logger
 
 from api.config import get_settings
 from api.core.quiz.extraction import (
-    MAX_PDF_BYTES,
     build_extraction_prompt,
     invoke_document_text_extract_llm,
     validate_quiz_extract_dependencies,
@@ -54,6 +53,10 @@ class QuizDraftValidationError(QuizDraftServiceError):
 
 class QuizDraftDependencyError(QuizDraftServiceError):
     """Raised when external services required by draft processing are unavailable."""
+
+
+def _pdf_too_large_message(max_pdf_bytes: int) -> str:
+    return f"Source PDF exceeds {max_pdf_bytes // (1024 * 1024)}MB limit."
 
 
 def public_draft(doc: dict[str, Any]) -> dict[str, Any]:
@@ -101,6 +104,9 @@ class QuizDraftService:
         if not bucket_name:
             raise QuizDraftDependencyError("Object storage bucket is not configured.")
 
+        max_pdf_bytes = int(settings.quiz_extract_max_pdf_bytes)
+        max_pdf_mb = max_pdf_bytes // (1024 * 1024)
+
         normalized_key = self._normalize_and_validate_s3_key(req.s3_key, user_id)
         object_size = await asyncio.to_thread(
             self._head_pdf_object,
@@ -110,12 +116,10 @@ class QuizDraftService:
         )
         if object_size <= 0:
             raise QuizDraftValidationError("Source PDF is empty.")
-        if object_size > MAX_PDF_BYTES:
-            raise QuizDraftValidationError(
-                "Source PDF exceeds 50MB limit. Please split the file before upload."
-            )
-        if req.file_size and req.file_size > MAX_PDF_BYTES:
-            raise QuizDraftValidationError("Invalid file size (max 50MB).")
+        if object_size > max_pdf_bytes:
+            raise QuizDraftValidationError(_pdf_too_large_message(max_pdf_bytes))
+        if req.file_size and req.file_size > max_pdf_bytes:
+            raise QuizDraftValidationError(f"Invalid file size (max {max_pdf_mb}MB).")
 
         page_count = await asyncio.to_thread(
             self._count_pdf_pages,
@@ -200,6 +204,12 @@ class QuizDraftService:
 
     async def mark_submitted(self, draft_id: str, user_id: str, quiz_id: str) -> dict[str, Any]:
         existing = await self.get_draft(draft_id, user_id)
+        # Idempotent: a draft that was already submitted keeps its original
+        # quiz mapping. A retried submit must not overwrite submitted_quiz_id
+        # nor re-delete the (already gone) source PDF — the caller reads the
+        # returned submitted_quiz_id to avoid creating a duplicate quiz.
+        if existing.get("status") == "submitted" and existing.get("submitted_quiz_id"):
+            return existing
         updated = await update_quiz_draft_for_user(
             draft_id,
             user_id,
@@ -209,9 +219,9 @@ class QuizDraftService:
                 "error": None,
             },
         )
-        await asyncio.to_thread(self._delete_pdf_best_effort, existing.get("pdf", {}).get("s3_key"))
         if not updated:
             raise QuizDraftNotFoundError("Draft not found.")
+        await asyncio.to_thread(self._delete_pdf_best_effort, existing.get("pdf", {}).get("s3_key"))
         return updated
 
     async def process_draft(self, draft_id: str, user_id: str) -> None:
@@ -343,10 +353,9 @@ class QuizDraftService:
             raise QuizDraftValidationError("Unable to read PDF for extraction.") from exc
         if not pdf_bytes:
             raise QuizDraftValidationError("PDF is empty.")
-        if len(pdf_bytes) > MAX_PDF_BYTES:
-            raise QuizDraftValidationError(
-                "Source PDF exceeds 50MB limit. Please split the file before upload."
-            )
+        max_pdf_bytes = int(get_settings().quiz_extract_max_pdf_bytes)
+        if len(pdf_bytes) > max_pdf_bytes:
+            raise QuizDraftValidationError(_pdf_too_large_message(max_pdf_bytes))
         return pdf_bytes
 
     @staticmethod

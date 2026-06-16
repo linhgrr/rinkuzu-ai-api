@@ -66,7 +66,7 @@ def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypat
     monkeypatch.setattr(
         extraction,
         "get_settings",
-        lambda: SimpleNamespace(content_pipeline_pdf_page_batch_size=1),
+        lambda: SimpleNamespace(quiz_extract_max_chars=200_000),
     )
 
     result = extraction._extract_questions_from_pdf_bytes_sync(
@@ -78,10 +78,49 @@ def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypat
     )
 
     assert result[0]["correctIndex"] == 2
-    assert len(captured) == 2
+    assert len(captured) == 1
     first_request = captured[0]
     assert first_request["schema"] is ExtractedQuizQuestionBatch
     messages = first_request["messages"]
     assert messages[1]["role"] == "user"
-    assert "<document_text>" in messages[1]["content"]
-    assert "Tên file: sample.pdf" in messages[1]["content"]
+    content = messages[1]["content"]
+    assert "<document_text>" in content
+    assert "Tên file: sample.pdf" in content
+    # Single call carries the full OCR text, both pages in one request.
+    assert "Câu 1" in content
+    assert "Câu 2" in content
+
+
+def test_extract_questions_clamps_oversized_document_text(monkeypatch):
+    captured: list[dict[str, object]] = []
+
+    def fake_invoke_structured_completion(**kwargs):
+        captured.append(kwargs)
+        return ExtractedQuizQuestionBatch(questions=[])
+
+    long_text = "x" * 500
+    monkeypatch.setattr(
+        extraction, "invoke_structured_completion", fake_invoke_structured_completion
+    )
+    monkeypatch.setattr(
+        extraction,
+        "get_settings",
+        lambda: SimpleNamespace(quiz_extract_max_chars=100),
+    )
+
+    extraction._extract_questions_from_document_text_sync(
+        ExtractedDocumentText(
+            text=long_text,
+            pages=[DocumentPageText(page_number=1, text=long_text)],
+            metadata={"file_name": "big.pdf", "page_count": 1},
+        ),
+        "big.pdf",
+        "extract quiz",
+        "quiz-model",
+        5.0,
+    )
+
+    assert len(captured) == 1
+    content = captured[0]["messages"][1]["content"]
+    assert "x" * 100 in content
+    assert "x" * 101 not in content

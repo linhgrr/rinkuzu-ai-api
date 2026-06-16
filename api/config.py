@@ -175,6 +175,16 @@ class Settings(BaseSettings):
     ocr_api_key: str | None = Field(default=None, validation_alias="OCR_API_KEY")
     ocr_timeout_sec: float = Field(default=120, validation_alias="OCR_TIMEOUT_SEC")
 
+    # ── Quiz extraction ────────────────────────────────────
+    quiz_extract_max_pdf_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        validation_alias="QUIZ_EXTRACT_MAX_PDF_BYTES",
+    )
+    quiz_extract_max_chars: int = Field(
+        default=200_000,
+        validation_alias="QUIZ_EXTRACT_MAX_CHARS",
+    )
+
     # ── S3 Cache ────────────────────────────────────────────
     object_storage_region: str = "ap-southeast-1"
     object_storage_endpoint_internal: str | None = None

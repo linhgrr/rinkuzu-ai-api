@@ -128,6 +128,65 @@ async def test_load_or_extract_document_text_persists_on_cache_miss(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_mark_submitted_is_idempotent_for_already_submitted_draft(monkeypatch):
+    service = QuizDraftService()
+    already = {
+        "draft_id": "draft-1",
+        "status": "submitted",
+        "submitted_quiz_id": "quiz-original",
+        "pdf": {"s3_key": "uploads/quiz_extract/user-1/file.pdf"},
+    }
+
+    async def fake_get_draft(draft_id: str, user_id: str):
+        return already
+
+    def _fail_update(*_args, **_kwargs):
+        raise AssertionError("update must not run for an already-submitted draft")
+
+    def _fail_delete(*_args, **_kwargs):
+        raise AssertionError("PDF must not be re-deleted for an already-submitted draft")
+
+    monkeypatch.setattr(service, "get_draft", fake_get_draft)
+    monkeypatch.setattr(draft_service_module, "update_quiz_draft_for_user", _fail_update)
+    monkeypatch.setattr(service, "_delete_pdf_best_effort", _fail_delete)
+
+    result = await service.mark_submitted("draft-1", "user-1", "quiz-retry")
+
+    assert result["submitted_quiz_id"] == "quiz-original"
+
+
+@pytest.mark.asyncio
+async def test_mark_submitted_persists_quiz_id_on_first_submit(monkeypatch):
+    service = QuizDraftService()
+    draft = {
+        "draft_id": "draft-1",
+        "status": "completed",
+        "submitted_quiz_id": None,
+        "pdf": {"s3_key": "uploads/quiz_extract/user-1/file.pdf"},
+    }
+    updates: list[dict[str, object]] = []
+    deleted_keys: list[str | None] = []
+
+    async def fake_get_draft(draft_id: str, user_id: str):
+        return draft
+
+    async def fake_update(_draft_id: str, _user_id: str, payload: dict[str, object]):
+        updates.append(payload)
+        return {**draft, **payload}
+
+    monkeypatch.setattr(service, "get_draft", fake_get_draft)
+    monkeypatch.setattr(draft_service_module, "update_quiz_draft_for_user", fake_update)
+    monkeypatch.setattr(service, "_delete_pdf_best_effort", lambda key: deleted_keys.append(key))
+
+    result = await service.mark_submitted("draft-1", "user-1", "quiz-new")
+
+    assert updates[0]["status"] == "submitted"
+    assert updates[0]["submitted_quiz_id"] == "quiz-new"
+    assert result["submitted_quiz_id"] == "quiz-new"
+    assert deleted_keys == ["uploads/quiz_extract/user-1/file.pdf"]
+
+
+@pytest.mark.asyncio
 async def test_process_draft_uses_document_text_flow(monkeypatch):
     service = QuizDraftService()
     updates: list[dict[str, object]] = []

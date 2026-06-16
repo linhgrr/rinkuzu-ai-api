@@ -14,13 +14,10 @@ from api.core.shared.document_text import (
     DocumentTextConfigurationError,
     ExtractedDocumentText,
     build_ocr_api_config,
-    build_text_batches,
     extract_document_text_from_bytes,
 )
 from api.core.shared.llm import invoke_structured_completion, resolve_llm_api_key
 from api.core.shared.retry import llm_retry_call
-
-MAX_PDF_BYTES = 50 * 1024 * 1024
 
 EXTRACTION_PROMPT = """
 You are given educational content that may include questions, explanations, and references to images or diagrams.
@@ -145,6 +142,18 @@ def _extract_questions_from_pdf_bytes_sync(
     )
 
 
+def _clamp_document_text(text: str, max_chars: int) -> str:
+    """Trim full document text to the single-call budget, warning on overflow."""
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    logger.warning(
+        "[quiz_extract] document_text_truncated original_chars={} max_chars={}",
+        len(text),
+        max_chars,
+    )
+    return text[:max_chars]
+
+
 def _extract_questions_from_document_text_sync(
     document_text: ExtractedDocumentText,
     filename: str,
@@ -152,43 +161,34 @@ def _extract_questions_from_document_text_sync(
     model: str,
     timeout_sec: float,
 ) -> list[dict[str, str | int | list[str] | list[int]]]:
-    batch_size = max(1, int(get_settings().content_pipeline_pdf_page_batch_size))
-    batches = build_text_batches(document_text.pages, batch_size=batch_size)
+    max_chars = int(get_settings().quiz_extract_max_chars)
+    full_text = _clamp_document_text(document_text.text, max_chars)
+    page_count = document_text.metadata.get("page_count", len(document_text.pages))
 
-    collected_questions: list[ExtractedQuizQuestion] = []
-    for batch in batches:
-        batch_start = int(batch["page_start"])
-        batch_end = int(batch["page_end"])
-        batch_text = str(batch["text"])
+    def _invoke() -> ExtractedQuizQuestionBatch:
+        return invoke_structured_completion(
+            schema=ExtractedQuizQuestionBatch,
+            model=model,
+            temperature=0.0,
+            timeout=timeout_sec,
+            messages=[
+                {"role": "system", "content": prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        f"## FILE\nTên file: {filename}\n"
+                        f"Số trang: {page_count}\n\n"
+                        "<document_text>\n"
+                        f"{full_text}\n"
+                        "</document_text>\n\n"
+                        "Hãy trích xuất câu hỏi theo JSON/schema đã chỉ định."
+                    ),
+                },
+            ],
+        )
 
-        def _invoke(
-            text: str = batch_text, start: int = batch_start, end: int = batch_end
-        ) -> ExtractedQuizQuestionBatch:
-            return invoke_structured_completion(
-                schema=ExtractedQuizQuestionBatch,
-                model=model,
-                temperature=0.0,
-                timeout=timeout_sec,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"## FILE\nTên file: {filename}\n"
-                            f"Trang: {start}-{end}\n\n"
-                            "<document_text>\n"
-                            f"{text}\n"
-                            "</document_text>\n\n"
-                            "Hãy trích xuất câu hỏi theo JSON/schema đã chỉ định."
-                        ),
-                    },
-                ],
-            )
-
-        payload = llm_retry_call(label="quiz extraction", fn=_invoke)
-        collected_questions.extend(payload.questions)
-
-    return [question.to_public_dict() for question in collected_questions]
+    payload = llm_retry_call(label="quiz extraction", fn=_invoke)
+    return [question.to_public_dict() for question in payload.questions]
 
 
 def validate_quiz_extract_dependencies(settings: Settings, s3_client: object) -> None:
