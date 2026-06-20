@@ -100,33 +100,15 @@ class QuizDraftService:
             validate_quiz_extract_dependencies(settings, s3_client)
         except ValueError as exc:
             raise QuizDraftDependencyError(str(exc)) from exc
-        bucket_name = settings.object_storage_bucket
-        if not bucket_name:
+        if not settings.object_storage_bucket:
             raise QuizDraftDependencyError("Object storage bucket is not configured.")
 
         max_pdf_bytes = int(settings.quiz_extract_max_pdf_bytes)
         max_pdf_mb = max_pdf_bytes // (1024 * 1024)
 
         normalized_key = self._normalize_and_validate_s3_key(req.s3_key, user_id)
-        object_size = await asyncio.to_thread(
-            self._head_pdf_object,
-            s3_client,
-            bucket_name,
-            normalized_key,
-        )
-        if object_size <= 0:
-            raise QuizDraftValidationError("Source PDF is empty.")
-        if object_size > max_pdf_bytes:
-            raise QuizDraftValidationError(_pdf_too_large_message(max_pdf_bytes))
         if req.file_size and req.file_size > max_pdf_bytes:
             raise QuizDraftValidationError(f"Invalid file size (max {max_pdf_mb}MB).")
-
-        page_count = await asyncio.to_thread(
-            self._count_pdf_pages,
-            s3_client,
-            bucket_name,
-            normalized_key,
-        )
 
         now = datetime.now(UTC)
         doc: dict[str, Any] = {
@@ -139,8 +121,8 @@ class QuizDraftService:
             "pdf": {
                 "s3_key": normalized_key,
                 "file_name": req.file_name.strip(),
-                "file_size": object_size,
-                "page_count": page_count,
+                "file_size": req.file_size,
+                "page_count": None,
             },
             "status": "queued",
             "progress": {"processed": 0, "total": TOTAL_STEPS, "percent": 0},
@@ -227,6 +209,7 @@ class QuizDraftService:
     async def process_draft(self, draft_id: str, user_id: str) -> None:
         """Run extraction in the background and persist final draft state."""
         try:
+            logger.info("[quiz_draft] processing_started draft_id={} user_id={}", draft_id, user_id)
             draft = await self.get_draft(draft_id, user_id)
             if draft.get("status") in {"cancelled", "submitted", "completed"}:
                 return
@@ -247,6 +230,24 @@ class QuizDraftService:
                 get_s3_client(),
                 bucket_name,
                 s3_key,
+            )
+            page_count = await asyncio.to_thread(self._count_pdf_pages, pdf_bytes)
+            logger.info(
+                "[quiz_draft] source_loaded draft_id={} bytes={} pages={}",
+                draft_id,
+                len(pdf_bytes),
+                page_count,
+            )
+            await update_quiz_draft_for_user(
+                draft_id,
+                user_id,
+                {
+                    "pdf": {
+                        **(draft.get("pdf") or {}),
+                        "file_size": len(pdf_bytes),
+                        "page_count": page_count,
+                    }
+                },
             )
             filename = draft.get("pdf", {}).get("file_name") or "quiz-source.pdf"
             document_text = await self._load_or_extract_document_text(
@@ -322,21 +323,8 @@ class QuizDraftService:
         return normalized_key
 
     @staticmethod
-    def _head_pdf_object(s3_client: Any, bucket_name: str, s3_key: str) -> int:
+    def _count_pdf_pages(pdf_bytes: bytes) -> int:
         try:
-            response = s3_client.head_object(Bucket=bucket_name, Key=s3_key)
-        except Exception as exc:
-            raise QuizDraftValidationError("Unable to inspect PDF from s3_key.") from exc
-        return int(response.get("ContentLength", 0))
-
-    @staticmethod
-    def _count_pdf_pages(s3_client: Any, bucket_name: str, s3_key: str) -> int:
-        try:
-            response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
-            body = response.get("Body")
-            pdf_bytes = body.read() if body else b""
-            if not pdf_bytes:
-                raise ValueError("empty PDF body")
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 page_count = int(doc.page_count)
         except Exception as exc:

@@ -41,6 +41,60 @@ def test_public_draft_uses_safe_defaults():
 
 
 @pytest.mark.asyncio
+async def test_create_draft_enqueues_without_reading_object_storage(monkeypatch):
+    service = QuizDraftService()
+    persisted: list[dict[str, object]] = []
+    settings = SimpleNamespace(
+        object_storage_bucket="bucket",
+        llm_model="quiz-model",
+        quiz_extract_max_pdf_bytes=10 * 1024 * 1024,
+    )
+    req = SimpleNamespace(
+        title="Quiz",
+        s3_key="uploads/quiz_extract/user-1/file.pdf",
+        file_name="file.pdf",
+        file_size=1024,
+        category_id="category-1",
+        description=None,
+        prompt=None,
+    )
+
+    def fake_get_s3_client():
+        return object()
+
+    monkeypatch.setattr(draft_service_module.mongo_store, "is_available", lambda: True)
+    monkeypatch.setattr(draft_service_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(draft_service_module, "get_s3_client", fake_get_s3_client)
+    monkeypatch.setattr(
+        draft_service_module,
+        "validate_quiz_extract_dependencies",
+        lambda _settings, _client: None,
+    )
+
+    async def fake_create(doc: dict[str, object]):
+        persisted.append(doc)
+        return doc
+
+    monkeypatch.setattr(draft_service_module, "create_quiz_draft", fake_create)
+    monkeypatch.setattr(
+        service,
+        "_read_pdf_bytes",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("must run in background only")),
+    )
+
+    created = await service.create_draft(req, "user-1")
+
+    assert created["status"] == "queued"
+    assert created["pdf"] == {
+        "s3_key": "uploads/quiz_extract/user-1/file.pdf",
+        "file_name": "file.pdf",
+        "file_size": 1024,
+        "page_count": None,
+    }
+    assert persisted == [created]
+
+
+@pytest.mark.asyncio
 async def test_load_or_extract_document_text_reuses_cached_ocr_record(monkeypatch):
     service = QuizDraftService()
     cached_text = ExtractedDocumentText(
@@ -174,9 +228,12 @@ async def test_mark_submitted_persists_quiz_id_on_first_submit(monkeypatch):
         updates.append(payload)
         return {**draft, **payload}
 
+    def fake_delete(key: str | None):
+        deleted_keys.append(key)
+
     monkeypatch.setattr(service, "get_draft", fake_get_draft)
     monkeypatch.setattr(draft_service_module, "update_quiz_draft_for_user", fake_update)
-    monkeypatch.setattr(service, "_delete_pdf_best_effort", lambda key: deleted_keys.append(key))
+    monkeypatch.setattr(service, "_delete_pdf_best_effort", fake_delete)
 
     result = await service.mark_submitted("draft-1", "user-1", "quiz-new")
 
@@ -240,6 +297,7 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
 
     monkeypatch.setattr(draft_service_module, "get_s3_client", _get_s3_client)
     monkeypatch.setattr(service, "_read_pdf_bytes", lambda *_args: b"%PDF-demo")
+    monkeypatch.setattr(service, "_count_pdf_pages", lambda _bytes: 1)
 
     async def fake_load_or_extract_document_text(**_kwargs):
         return extracted
@@ -271,4 +329,6 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
     await service.process_draft("draft-1", "user-1")
 
     assert updates[0]["status"] == "processing"
+    assert updates[1]["pdf"]["file_size"] == len(b"%PDF-demo")
+    assert updates[1]["pdf"]["page_count"] == 1
     assert updates[-1]["status"] == "completed"
