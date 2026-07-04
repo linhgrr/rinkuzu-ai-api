@@ -32,6 +32,7 @@ from api.core.shared.persistence import (
 from .environment import AdaptiveLearningEnv
 from .exercise_types.payloads import ExercisePayload
 from .models import DuelingQNetwork, load_dqn_model, load_saint_model
+from .progress_metrics import summarize_mastery_progress
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
 _MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
@@ -667,6 +668,13 @@ class SessionManager:
             return None
 
         env_stats = session.env.get_session_stats()
+        concept_mastery = session.env.get_concept_mastery()
+        unlocked_mask = session.env.get_prereq_ok_mask(threshold=self._mastery_threshold)
+        progress_metrics = summarize_mastery_progress(
+            concept_mastery=concept_mastery,
+            unlocked_mask=unlocked_mask,
+            threshold=self._mastery_threshold,
+        )
 
         return {
             "session_id": session_id,
@@ -674,8 +682,12 @@ class SessionManager:
             "step": env_stats["step"],
             "max_steps": env_stats["max_steps"],
             "concepts_visited": env_stats["concepts_visited"],
-            "total_concepts": env_stats["total_concepts"],
-            "avg_mastery": env_stats["avg_mastery"],
+            "total_concepts": progress_metrics["total_concepts"],
+            "unlocked_concepts": progress_metrics["unlocked_concepts"],
+            "locked_concepts": progress_metrics["locked_concepts"],
+            "mastered_concepts": progress_metrics["mastered_concepts"],
+            "avg_mastery": progress_metrics["avg_mastery"],
+            "progress_percent": progress_metrics["progress_percent"],
             "coverage": env_stats["coverage"],
             "total_correct": session.total_correct,
             "total_answered": session.total_answered,

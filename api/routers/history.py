@@ -7,6 +7,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, Request
 
 from api.config import get_settings
+from api.core.learning.progress_metrics import (
+    build_prereq_graph_from_edges,
+    compute_unlocked_mask,
+    summarize_mastery_progress,
+)
 from api.core.shared.persistence import (
     delete_pipeline_job_for_user,
     list_recent_pipeline_jobs,
@@ -46,6 +51,51 @@ def _count_mastered_concepts(
     return int(sum(1 for value in concept_mastery if value >= threshold))
 
 
+def _coerce_concept_map(
+    progress_doc: dict[str, Any] | None,
+    job_doc: dict[str, Any] | None,
+    concept_count: int,
+) -> dict[str, int]:
+    result = (job_doc or {}).get("result") or {}
+    raw_map = result.get("concept_map") or (progress_doc or {}).get("concept_indices") or {}
+    if isinstance(raw_map, dict) and raw_map:
+        return {str(concept_id): int(index) for concept_id, index in raw_map.items()}
+    return {str(idx): idx for idx in range(concept_count)}
+
+
+def _build_unlocked_progress_metrics(
+    progress_doc: dict[str, Any] | None,
+    job_doc: dict[str, Any] | None,
+) -> dict[str, int | float]:
+    result = (job_doc or {}).get("result") or {}
+    concept_mastery = list((progress_doc or {}).get("concept_mastery") or [])
+    concept_count = (
+        len(concept_mastery)
+        or len(result.get("concept_map") or {})
+        or int((job_doc or {}).get("concepts_after_merge") or 0)
+        or int((job_doc or {}).get("concepts_extracted") or 0)
+    )
+    if not concept_mastery:
+        concept_mastery = [0.0] * concept_count
+
+    bloom_mastery = (progress_doc or {}).get("bloom_mastery") or [
+        [0.0] * 6 for _ in range(concept_count)
+    ]
+    concept_map = _coerce_concept_map(progress_doc, job_doc, concept_count)
+    prereq_graph = build_prereq_graph_from_edges(result.get("prereq_edges") or [], concept_map)
+    unlocked_mask = compute_unlocked_mask(
+        concept_count=concept_count,
+        bloom_mastery=bloom_mastery,
+        prereq_graph=prereq_graph,
+        threshold=_MASTERED_THRESHOLD,
+    )
+    return summarize_mastery_progress(
+        concept_mastery=concept_mastery,
+        unlocked_mask=unlocked_mask,
+        threshold=_MASTERED_THRESHOLD,
+    )
+
+
 def _build_subject_progress_detail(
     job_doc: dict[str, Any],
     progress_doc: dict[str, Any] | None,
@@ -57,6 +107,7 @@ def _build_subject_progress_detail(
         for cid, cdata in (result.get("concepts_data") or {}).items()
     }
     concept_count = len(concept_map)
+    progress_metrics = _build_unlocked_progress_metrics(progress_doc, job_doc)
 
     if progress_doc:
         return {
@@ -69,7 +120,11 @@ def _build_subject_progress_detail(
             "accuracy": progress_doc.get("accuracy", 0.0),
             "step": progress_doc.get("step", 0),
             "max_steps": progress_doc.get("max_steps", 9999),
-            "avg_mastery": progress_doc.get("avg_mastery", 0.0),
+            "avg_mastery": progress_metrics["avg_mastery"],
+            "unlocked_concepts": progress_metrics["unlocked_concepts"],
+            "locked_concepts": progress_metrics["locked_concepts"],
+            "mastered_concepts": progress_metrics["mastered_concepts"],
+            "progress_percent": progress_metrics["progress_percent"],
             "concept_names": concept_names,
             "concept_mastery": progress_doc.get("concept_mastery", []),
             "bloom_mastery": progress_doc.get("bloom_mastery", []),
@@ -89,7 +144,11 @@ def _build_subject_progress_detail(
         "accuracy": 0.0,
         "step": 0,
         "max_steps": 9999,
-        "avg_mastery": 0.0,
+        "avg_mastery": progress_metrics["avg_mastery"],
+        "unlocked_concepts": progress_metrics["unlocked_concepts"],
+        "locked_concepts": progress_metrics["locked_concepts"],
+        "mastered_concepts": progress_metrics["mastered_concepts"],
+        "progress_percent": progress_metrics["progress_percent"],
         "concept_names": concept_names,
         "concept_mastery": [0.0] * concept_count,
         "bloom_mastery": [[0.0] * 6 for _ in range(concept_count)],
@@ -104,6 +163,7 @@ def _build_subject_progress_summary(
     progress_doc: dict[str, Any],
     job_doc: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    progress_metrics = _build_unlocked_progress_metrics(progress_doc, job_doc)
     return {
         "job_id": progress_doc.get("job_id") or "",
         "filename": (job_doc or {}).get("filename", ""),
@@ -112,7 +172,11 @@ def _build_subject_progress_summary(
         "total_correct": progress_doc.get("total_correct", 0),
         "total_answered": progress_doc.get("total_answered", 0),
         "accuracy": progress_doc.get("accuracy", 0.0),
-        "avg_mastery": progress_doc.get("avg_mastery", 0.0),
+        "avg_mastery": progress_metrics["avg_mastery"],
+        "unlocked_concepts": progress_metrics["unlocked_concepts"],
+        "locked_concepts": progress_metrics["locked_concepts"],
+        "mastered_concepts": progress_metrics["mastered_concepts"],
+        "progress_percent": progress_metrics["progress_percent"],
         "step": progress_doc.get("step", 0),
         "max_steps": progress_doc.get("max_steps", 9999),
         "created_at": progress_doc.get("created_at", 0),
@@ -141,22 +205,20 @@ async def list_subjects(
 
     job_ids = [s["job_id"] for s in subjects]
     progress_map = await load_many_subject_progress_for_user(job_ids, user_id)
+    full_job_map = await load_many_pipeline_jobs_for_user(job_ids, user_id)
 
     for subj in subjects:
         jid = subj["job_id"]
         progress_doc = progress_map.get(jid, {})
-        concept_mastery = progress_doc.get("concept_mastery") or []
-        all_c = (
-            len(concept_mastery)
-            or subj.get("concepts_after_merge")
-            or subj.get("concepts_extracted")
-            or 0
+        progress_metrics = _build_unlocked_progress_metrics(
+            progress_doc, full_job_map.get(jid, subj)
         )
-        mastered_c = _count_mastered_concepts(concept_mastery)
 
-        subj["all_concept"] = all_c
-        subj["mastered_concept"] = mastered_c
-        subj["progress_percent"] = _to_progress_percent(mastered_c, all_c)
+        subj["all_concept"] = progress_metrics["total_concepts"]
+        subj["unlocked_concept"] = progress_metrics["unlocked_concepts"]
+        subj["locked_concept"] = progress_metrics["locked_concepts"]
+        subj["mastered_concept"] = progress_metrics["mastered_concepts"]
+        subj["progress_percent"] = progress_metrics["progress_percent"]
 
     return ok({"subjects": subjects, "count": len(subjects)})
 
@@ -172,7 +234,7 @@ async def list_subject_progress(
     """List recent subject-level progress records."""
     progress_docs = await list_recent_subject_progress(limit=limit, user_id=user_id)
     job_ids = [job_id for doc in progress_docs if isinstance((job_id := doc.get("job_id")), str)]
-    job_map = await load_many_pipeline_jobs_for_user(job_ids, user_id, summary_only=True)
+    job_map = await load_many_pipeline_jobs_for_user(job_ids, user_id)
     items = []
     for progress_doc in progress_docs:
         job_id = progress_doc.get("job_id")

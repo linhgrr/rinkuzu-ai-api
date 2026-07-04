@@ -23,6 +23,8 @@ class SubjectHistoryResponse(BaseModel):
     completed_at: float
     mastered_concept: int
     all_concept: int
+    unlocked_concept: int
+    locked_concept: int
     progress_percent: int
 
 
@@ -45,6 +47,10 @@ class SubjectProgressSummaryResponse(BaseModel):
     total_answered: int
     accuracy: float
     avg_mastery: float
+    unlocked_concepts: int
+    locked_concepts: int
+    mastered_concepts: int
+    progress_percent: int
     step: int
     max_steps: int
     created_at: float
@@ -68,6 +74,10 @@ class SubjectHistoryDetailResponse(BaseModel):
     step: int
     max_steps: int
     avg_mastery: float
+    unlocked_concepts: int
+    locked_concepts: int
+    mastered_concepts: int
+    progress_percent: int
     concept_names: dict[str, str]
     concept_mastery: list[float]
     bloom_mastery: list[list[float]]

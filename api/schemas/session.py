@@ -45,7 +45,17 @@ class SessionStatusResponse(BaseModel):
     max_steps: int = Field(description="Session step limit.")
     concepts_visited: int = Field(description="Number of distinct concepts encountered.")
     total_concepts: int = Field(description="Total concepts in the session curriculum.")
-    avg_mastery: float = Field(description="Average BKT mastery across all concepts.")
+    unlocked_concepts: int = Field(
+        description="Concepts whose prerequisites are currently satisfied."
+    )
+    locked_concepts: int = Field(description="Concepts still locked by prerequisite mastery.")
+    mastered_concepts: int = Field(
+        description="Unlocked concepts at or above the mastery threshold."
+    )
+    avg_mastery: float = Field(description="Average BKT mastery across unlocked concepts.")
+    progress_percent: int = Field(
+        description="Percentage of unlocked concepts mastered; locked concepts are excluded."
+    )
     coverage: float = Field(
         description="Fraction of concepts that have been visited at least once."
     )

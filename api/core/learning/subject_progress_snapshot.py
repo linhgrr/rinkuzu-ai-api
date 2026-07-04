@@ -4,13 +4,23 @@ subject_progress_snapshot.py — Shared helpers for serializing subject progress
 
 from typing import Any
 
-import numpy as np
+from api.config import get_settings
+
+from .progress_metrics import summarize_mastery_progress
+
+_MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
 
 
 def build_subject_progress_snapshot(session: Any) -> dict[str, Any]:
     env_stats = session.env.get_session_stats()
     concept_mastery = session.env.get_concept_mastery()
     bloom_mastery = session.env.get_mastery_matrix()
+    unlocked_mask = session.env.get_prereq_ok_mask(threshold=_MASTERY_THRESHOLD)
+    progress_metrics = summarize_mastery_progress(
+        concept_mastery=concept_mastery,
+        unlocked_mask=unlocked_mask,
+        threshold=_MASTERY_THRESHOLD,
+    )
 
     history = [
         {
@@ -41,7 +51,11 @@ def build_subject_progress_snapshot(session: Any) -> dict[str, Any]:
         "accuracy": session.total_correct / max(session.total_answered, 1),
         "step": env_stats.get("step", 0),
         "max_steps": env_stats.get("max_steps", 9999),
-        "avg_mastery": float(np.mean(concept_mastery)),
+        "avg_mastery": progress_metrics["avg_mastery"],
+        "unlocked_concepts": progress_metrics["unlocked_concepts"],
+        "locked_concepts": progress_metrics["locked_concepts"],
+        "mastered_concepts": progress_metrics["mastered_concepts"],
+        "progress_percent": progress_metrics["progress_percent"],
         "concept_indices": session.concept_map,
         "concept_mastery": concept_mastery.tolist(),
         "bloom_mastery": bloom_mastery.tolist(),
