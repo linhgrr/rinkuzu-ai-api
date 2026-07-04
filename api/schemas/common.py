@@ -35,3 +35,21 @@ class ErrorDetail(BaseStandardModel):
 class StandardErrorResponse(BaseStandardModel):
     success: bool = False
     error: ErrorDetail
+
+
+class ReadinessResponse(BaseStandardModel):
+    status: str
+    ready: bool
+    mongo_available: bool
+    models_enabled: bool
+    models_loaded: bool
+    content_pipeline_available: bool
+    content_pipeline_service_ready: bool
+
+
+class InfoResponse(BaseStandardModel):
+    models_enabled: bool
+    models_loaded: bool
+    n_concepts: int
+    mongo_available: bool
+    content_pipeline_available: bool

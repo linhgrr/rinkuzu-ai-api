@@ -4,6 +4,8 @@ schemas — Re-export all Pydantic models for backward compatibility.
 
 from .common import (
     ErrorDetail,
+    InfoResponse,
+    ReadinessResponse,
     StandardErrorResponse,
     StandardResponse,
 )
@@ -39,13 +41,23 @@ from .knowledge import (
 )
 from .pipeline import (
     PipelineFailedBatchResponse,
+    PipelineJobCancelResponse,
+    PipelineJobListItemResponse,
+    PipelineJobListResponse,
     PipelineJobResultResponse,
+    PipelineJobRetryResponse,
     PipelineJobStatusResponse,
     PipelinePartialGraphEdgeResponse,
     PipelinePartialGraphNodeResponse,
     PipelinePartialGraphResponse,
     PipelineProcessResponse,
+    PipelineRuntimeStatusResponse,
     PipelineSessionCreateResponse,
+)
+from .quiz_draft import (
+    QuizDraftListResponse,
+    QuizDraftResponseData,
+    QuizDraftSingleResponse,
 )
 from .quiz_tutor import (
     QuizTutorChatMessage,
@@ -65,6 +77,7 @@ __all__ = [
     "ErrorDetail",
     "ExerciseOption",
     "ExerciseResponse",
+    "InfoResponse",
     "KnowledgeEdgeResponse",
     "KnowledgeGraphResponse",
     "KnowledgeNodeResponse",
@@ -72,17 +85,26 @@ __all__ = [
     "MasteryRow",
     "NextConceptResponse",
     "PipelineFailedBatchResponse",
+    "PipelineJobCancelResponse",
     "PipelineJobHistoryListResponse",
+    "PipelineJobListItemResponse",
+    "PipelineJobListResponse",
     "PipelineJobResultResponse",
+    "PipelineJobRetryResponse",
     "PipelineJobStatusResponse",
     "PipelinePartialGraphEdgeResponse",
     "PipelinePartialGraphNodeResponse",
     "PipelinePartialGraphResponse",
     "PipelineProcessResponse",
+    "PipelineRuntimeStatusResponse",
     "PipelineSessionCreateResponse",
+    "QuizDraftListResponse",
+    "QuizDraftResponseData",
+    "QuizDraftSingleResponse",
     "QuizTutorChatMessage",
     "QuizTutorRequest",
     "QuizTutorResponseData",
+    "ReadinessResponse",
     "SessionCreateRequest",
     "SessionCreateResponse",
     "SessionStatusResponse",

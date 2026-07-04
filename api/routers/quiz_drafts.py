@@ -17,7 +17,9 @@ from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.quiz_draft import (
     QuizDraftCreateRequest,
+    QuizDraftListResponse,
     QuizDraftPatchRequest,
+    QuizDraftSingleResponse,
     QuizDraftSubmitRequest,
 )
 from api.schemas.validators import PathID
@@ -35,7 +37,7 @@ def _service_error_to_http(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail="Quiz draft operation failed.")
 
 
-@router.post("", response_model=StandardResponse[dict])
+@router.post("", response_model=StandardResponse[QuizDraftSingleResponse])
 @limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def create_quiz_draft(
     request: Request,
@@ -55,7 +57,7 @@ async def create_quiz_draft(
     return ok({"draft": public_draft(draft)})
 
 
-@router.get("", response_model=StandardResponse[dict])
+@router.get("", response_model=StandardResponse[QuizDraftListResponse])
 @limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def list_quiz_drafts(
     request: Request,
@@ -69,7 +71,7 @@ async def list_quiz_drafts(
     return ok({"drafts": [public_draft(draft) for draft in drafts]})
 
 
-@router.get("/{draft_id}", response_model=StandardResponse[dict])
+@router.get("/{draft_id}", response_model=StandardResponse[QuizDraftSingleResponse])
 @limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def get_quiz_draft(
     request: Request,
@@ -86,7 +88,7 @@ async def get_quiz_draft(
     return ok({"draft": public_draft(draft)})
 
 
-@router.patch("/{draft_id}", response_model=StandardResponse[dict])
+@router.patch("/{draft_id}", response_model=StandardResponse[QuizDraftSingleResponse])
 @limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def patch_quiz_draft(
     request: Request,
@@ -104,7 +106,7 @@ async def patch_quiz_draft(
     return ok({"draft": public_draft(draft)})
 
 
-@router.delete("/{draft_id}", response_model=StandardResponse[dict])
+@router.delete("/{draft_id}", response_model=StandardResponse[QuizDraftSingleResponse])
 @limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def delete_quiz_draft(
     request: Request,
@@ -121,7 +123,7 @@ async def delete_quiz_draft(
     return ok({"draft": public_draft(draft)})
 
 
-@router.post("/{draft_id}/submit", response_model=StandardResponse[dict])
+@router.post("/{draft_id}/submit", response_model=StandardResponse[QuizDraftSingleResponse])
 @limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
 async def submit_quiz_draft(
     request: Request,

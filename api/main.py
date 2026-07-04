@@ -54,7 +54,7 @@ from .routers import pipeline as pipeline_router
 from .routers import quiz_drafts as quiz_drafts_router
 from .routers import quiz_tutor as quiz_tutor_router
 from .routers import session as session_router
-from .schemas.common import ok
+from .schemas.common import InfoResponse, ReadinessResponse, StandardResponse, ok
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 _UPLOAD_MAX_AGE_SECS = 86400
@@ -418,7 +418,7 @@ def _build_readiness_payload() -> tuple[dict, bool]:
     return payload, ready
 
 
-@app.get("/api/ready")
+@app.get("/api/ready", response_model=StandardResponse[ReadinessResponse])
 async def readiness() -> Any:
     """Kubernetes readiness probe — 503 until all dependencies are up."""
     payload, ready = _build_readiness_payload()
@@ -433,7 +433,7 @@ async def readiness() -> Any:
     return ok(payload)
 
 
-@app.get("/api/health")
+@app.get("/api/health", response_model=StandardResponse[ReadinessResponse])
 async def health() -> Any:
     """Backwards-compat alias for /api/ready."""
     payload, ready = _build_readiness_payload()
@@ -448,7 +448,7 @@ async def health() -> Any:
     return ok(payload)
 
 
-@app.get("/api/info")
+@app.get("/api/info", response_model=StandardResponse[InfoResponse])
 async def info() -> Any:
     cfg = get_settings()
     manager = getattr(app.state, "session_manager", None)

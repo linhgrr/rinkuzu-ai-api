@@ -20,6 +20,11 @@ class PipelineProcessResponse(BaseModel):
     retry_after_seconds: int = 3
 
 
+class PipelineRuntimeStatusResponse(BaseModel):
+    available: bool
+    service_initialized: bool
+
+
 class PipelineFailedBatchResponse(BaseModel):
     batch_index: int
     page_start: int
@@ -94,6 +99,51 @@ class PipelineJobStatusResponse(BaseModel):
     retry_after_seconds: int = 3
     partial_graph: PipelinePartialGraphResponse | None = None
     result: PipelineJobResultResponse | None = None
+
+
+class PipelineJobListItemResponse(BaseModel):
+    job_id: str
+    filename: str = ""
+    subject_id: str = ""
+    status: PipelineStatus
+    current_step: str = ""
+    progress: float = 0.0
+    page_batch_size: int = 10
+    batch_count: int = 0
+    failed_batch_count: int = 0
+    partial_success: bool = False
+    concepts_extracted: int = 0
+    concepts_after_merge: int = 0
+    relations_verified: int = 0
+    error_code: str | None = None
+    user_message: str | None = None
+    retryable: bool = False
+    retry_count: int = 0
+    eta_seconds: float | None = None
+    created_at: float = 0.0
+    updated_at: float = 0.0
+    heartbeat_at: float = 0.0
+    completed_at: float | None = None
+    is_terminal: bool = False
+    is_delayed: bool = False
+    retry_after_seconds: int = 3
+
+
+class PipelineJobListResponse(BaseModel):
+    jobs: list[PipelineJobListItemResponse] = Field(default_factory=list)
+    count: int = 0
+
+
+class PipelineJobCancelResponse(BaseModel):
+    job_id: str
+    status: PipelineStatus | Literal["cancelling"]
+
+
+class PipelineJobRetryResponse(BaseModel):
+    job_id: str
+    status: PipelineStatus
+    status_url: str
+    retry_count: int = 0
 
 
 class PipelineSessionCreateResponse(BaseModel):

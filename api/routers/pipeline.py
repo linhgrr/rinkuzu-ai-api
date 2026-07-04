@@ -39,8 +39,12 @@ from api.exceptions import (
 )
 from api.rate_limit import is_admin_request, limiter
 from api.schemas import (
+    PipelineJobCancelResponse,
+    PipelineJobListResponse,
+    PipelineJobRetryResponse,
     PipelineJobStatusResponse,
     PipelineProcessResponse,
+    PipelineRuntimeStatusResponse,
     PipelineSessionCreateResponse,
 )
 from api.schemas.common import StandardResponse, ok
@@ -105,7 +109,7 @@ def _resolve_pipeline_retry_after_seconds(
     return settings.content_pipeline_default_retry_after_sec
 
 
-@router.get("/status", response_model=StandardResponse[dict])
+@router.get("/status", response_model=StandardResponse[PipelineRuntimeStatusResponse])
 @limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def pipeline_status(
     request: Request,
@@ -254,7 +258,7 @@ async def process_document(  # noqa: C901
     )
 
 
-@router.get("/jobs", response_model=StandardResponse[dict])
+@router.get("/jobs", response_model=StandardResponse[PipelineJobListResponse])
 @limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def list_jobs(
     request: Request,
@@ -448,7 +452,11 @@ async def create_session_from_pipeline(
     )
 
 
-@router.post("/jobs/{job_id}/cancel", response_model=StandardResponse[dict], status_code=202)
+@router.post(
+    "/jobs/{job_id}/cancel",
+    response_model=StandardResponse[PipelineJobCancelResponse],
+    status_code=202,
+)
 @limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def cancel_job(
     request: Request,
@@ -483,7 +491,11 @@ async def cancel_job(
     )
 
 
-@router.post("/jobs/{job_id}/retry", response_model=StandardResponse[dict], status_code=202)
+@router.post(
+    "/jobs/{job_id}/retry",
+    response_model=StandardResponse[PipelineJobRetryResponse],
+    status_code=202,
+)
 @limiter.limit(get_settings().rate_limit_pipeline, exempt_when=is_admin_request)
 async def retry_job_endpoint(
     request: Request,

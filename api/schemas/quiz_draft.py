@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from datetime import datetime  # noqa: TC003 - Pydantic resolves this at runtime for OpenAPI.
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 
 class QuizDraftQuestion(BaseModel):
@@ -68,10 +66,10 @@ class QuizDraftSubmitRequest(BaseModel):
 
 
 class QuizDraftPdfInfo(BaseModel):
-    s3_key: str | None = None
-    file_name: str | None = None
-    file_size: int | None = None
-    page_count: int | None = None
+    s3_key: str | None
+    file_name: str | None
+    file_size: int | None
+    page_count: int | None
 
 
 class QuizDraftProgress(BaseModel):
@@ -81,27 +79,33 @@ class QuizDraftProgress(BaseModel):
 
 
 class QuizDraftResponseData(BaseModel):
-    draft_id: str | None = None
-    title: str | None = None
-    description: str | None = None
-    category_id: str | None = None
-    prompt: str | None = None
-    pdf: QuizDraftPdfInfo = Field(default_factory=QuizDraftPdfInfo)
-    status: str | None = None
-    progress: QuizDraftProgress = Field(default_factory=QuizDraftProgress)
-    questions: list[QuizDraftQuestion] = Field(default_factory=list)
-    error: str | None = None
-    submitted_quiz_id: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-    expires_at: datetime | None = None
+    draft_id: str
+    title: str
+    description: str
+    category_id: str | None
+    prompt: str | None
+    pdf: QuizDraftPdfInfo
+    status: Literal[
+        "queued",
+        "processing",
+        "completed",
+        "failed",
+        "cancelled",
+        "submitted",
+        "expired",
+    ]
+    progress: QuizDraftProgress
+    questions: list[QuizDraftQuestion]
+    error: str | None
+    submitted_quiz_id: str | None
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
 
 
 class QuizDraftSingleResponse(BaseModel):
-    success: bool = True
     draft: QuizDraftResponseData
 
 
 class QuizDraftListResponse(BaseModel):
-    success: bool = True
-    drafts: list[QuizDraftResponseData] = Field(default_factory=list)
+    drafts: list[QuizDraftResponseData]

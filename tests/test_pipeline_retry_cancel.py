@@ -102,6 +102,22 @@ def test_cancel_running_job_requests_cancellation(monkeypatch):
     assert len(service.request_cancel_calls) == 1
 
 
+def test_retry_cancel_openapi_schemas_are_not_untyped_dict():
+    """Retry/cancel must export concrete contracts for generated clients."""
+    client = _build_client(FakePipelineService())
+
+    schema = client.app.openapi()
+    cancel_schema = schema["paths"]["/api/pipeline/jobs/{job_id}/cancel"]["post"]["responses"][
+        "202"
+    ]["content"]["application/json"]["schema"]
+    retry_schema = schema["paths"]["/api/pipeline/jobs/{job_id}/retry"]["post"]["responses"]["202"][
+        "content"
+    ]["application/json"]["schema"]
+
+    assert cancel_schema["$ref"].endswith("StandardResponse_PipelineJobCancelResponse_")
+    assert retry_schema["$ref"].endswith("StandardResponse_PipelineJobRetryResponse_")
+
+
 def test_cancel_terminal_job_is_noop(monkeypatch):
     service = FakePipelineService()
     _patch_load(

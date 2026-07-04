@@ -125,6 +125,18 @@ def test_list_jobs_returns_200_with_jobs(monkeypatch):
     assert data["count"] == 2
 
 
+def test_list_jobs_openapi_schema_is_not_untyped_dict():
+    """GET /api/pipeline/jobs must export a concrete contract for generated clients."""
+    client = _build_client()
+
+    schema = client.app.openapi()
+    response_schema = schema["paths"]["/api/pipeline/jobs"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+
+    assert response_schema["$ref"].endswith("StandardResponse_PipelineJobListResponse_")
+
+
 def test_list_jobs_each_job_has_live_fields(monkeypatch):
     """Every job in the listing must include is_terminal, is_delayed, retry_after_seconds."""
 
