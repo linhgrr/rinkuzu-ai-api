@@ -5,22 +5,28 @@ Tests for GET /api/pipeline/jobs/{job_id} — verifies that eta_seconds and
 retry_count are present in the response payload.
 """
 
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from api.dependencies import get_current_user
+from api.dependencies import get_current_user, get_session_manager, get_session_service
 from api.exceptions import register_exception_handlers
 from api.rate_limit import limiter
 from api.routers import pipeline
 
 
-def _build_client() -> TestClient:
+def _build_client(*, manager=None, exercise_svc=None) -> TestClient:
     app = FastAPI()
     register_exception_handlers(app)
     app.state.limiter = limiter
     app.include_router(pipeline.router)
     app.dependency_overrides[get_current_user] = lambda: "user-1"
+    if manager is not None:
+        app.dependency_overrides[get_session_manager] = lambda: manager
+    if exercise_svc is not None:
+        app.dependency_overrides[get_session_service] = lambda: exercise_svc
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -43,6 +49,18 @@ def _patch_load(monkeypatch, doc):
         return doc
 
     monkeypatch.setattr(pipeline, "load_pipeline_job_for_user", _fake_load)
+
+
+def _completed_job_doc(job_id: str = "job-1"):
+    return {
+        "job_id": job_id,
+        "status": "completed",
+        "result": {
+            "concepts_data": {},
+            "concept_map": {"c1": 0},
+            "prereq_edges": [],
+        },
+    }
 
 
 def test_get_job_status_returns_404_when_not_found(monkeypatch):
@@ -112,3 +130,76 @@ def test_get_job_status_retry_count_defaults_to_zero(monkeypatch):
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["retry_count"] == 0
+
+
+def test_create_session_reuses_existing_active_session(monkeypatch):
+    """POST /create-session should be idempotent for an active saved subject session."""
+    _patch_load(monkeypatch, _completed_job_doc())
+
+    async def _fake_load_subject_progress(job_id, user_id):
+        assert (job_id, user_id) == ("job-1", "user-1")
+        return {"last_session_id": "session-1"}
+
+    monkeypatch.setattr(pipeline, "load_subject_progress_for_user", _fake_load_subject_progress)
+
+    class FakeManager:
+        def __init__(self):
+            self.create_calls = 0
+
+        def get_active_pipeline_session(self, user_id, job_id):
+            assert (user_id, job_id) == ("user-1", "job-1")
+
+        async def get_or_create_pipeline_session(self, **kwargs):
+            assert kwargs["job_doc"]["job_id"] == "job-1"
+            assert kwargs["subject_progress"]["last_session_id"] == "session-1"
+            assert kwargs["user_id"] == "user-1"
+            self.create_calls += 1
+            return (
+                SimpleNamespace(session_id="session-1", job_id="job-1", status="active"),
+                False,
+            )
+
+    class FakeExerciseService:
+        def __init__(self):
+            self.prefetch_calls = 0
+
+        async def eager_generate_first_exercise(self, session):
+            del session
+            self.prefetch_calls += 1
+
+    manager = FakeManager()
+    exercise_svc = FakeExerciseService()
+    client = _build_client(manager=manager, exercise_svc=exercise_svc)
+
+    response = client.post("/api/pipeline/jobs/job-1/create-session")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["session_id"] == "session-1"
+    assert data["source"] == "existing_session"
+    assert manager.create_calls == 1
+    assert exercise_svc.prefetch_calls == 0
+
+
+def test_create_session_active_fast_path_skips_persistence_reads(monkeypatch):
+    async def _unexpected_load(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("active session fast path should not read persistence")
+
+    monkeypatch.setattr(pipeline, "load_pipeline_job_for_user", _unexpected_load)
+    monkeypatch.setattr(pipeline, "load_subject_progress_for_user", _unexpected_load)
+
+    class FakeManager:
+        def get_active_pipeline_session(self, user_id, job_id):
+            assert (user_id, job_id) == ("user-1", "job-1")
+            return SimpleNamespace(
+                session_id="session-1",
+                concept_map={"c1": 0},
+                status="active",
+            )
+
+    client = _build_client(manager=FakeManager(), exercise_svc=SimpleNamespace())
+    response = client.post("/api/pipeline/jobs/job-1/create-session")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["source"] == "existing_session"

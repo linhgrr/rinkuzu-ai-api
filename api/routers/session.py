@@ -57,6 +57,44 @@ BLOOM_LABELS = {
 }
 
 
+def _build_exercise_response_payload(
+    exercise: Any, env_stats: dict[str, Any], content: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the public exercise response without exposing canonical answers."""
+    exercise_type = exercise.payload.exercise_type
+    payload: dict[str, Any] = {
+        "exercise_id": exercise.exercise_id,
+        "concept_name": exercise.concept_name,
+        "concept_idx": exercise.concept_idx,
+        "bloom_level": exercise.bloom_level,
+        "bloom_label": BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
+        "exercise_type": exercise_type,
+        "question": exercise.question,
+        "step": env_stats["step"],
+        "max_steps": env_stats["max_steps"],
+        "theory": exercise.theory,
+        "recommendation_reason": None,
+    }
+
+    match exercise_type:
+        case "mcq" | "multi_correct":
+            payload["options"] = content["options"]
+        case "true_false":
+            payload["statement"] = content["statement"]
+        case "fill_blank":
+            payload["sentence"] = content["sentence"]
+            payload["hint"] = content["hint"]
+        case "ordering":
+            payload["items"] = content["items"]
+        case "matching":
+            payload["pairs"] = content["pairs"]
+            payload["right_items"] = content["right_items"]
+        case "short_answer":
+            payload["rubric"] = content["rubric"]
+
+    return payload
+
+
 async def _get_tutor_chat_history(session: Any, exercise_id: str) -> list[dict[str, str]]:
     async with session._lock:
         if session.tutor_chat_exercise_id != exercise_id:
@@ -233,28 +271,9 @@ async def generate_exercise(
     from api.core.learning.exercise_types.registry import get_handler
 
     content = get_handler(exercise.payload.exercise_type).to_response_dict(exercise)
-    return ok(
-        ExerciseResponse(
-            exercise_id=exercise.exercise_id,
-            concept_name=exercise.concept_name,
-            concept_idx=exercise.concept_idx,
-            bloom_level=exercise.bloom_level,
-            bloom_label=BLOOM_LABELS.get(exercise.bloom_level, "Unknown"),
-            exercise_type=exercise.payload.exercise_type,
-            question=exercise.question,
-            sentence=content.get("sentence"),
-            options=content.get("options", {}),
-            statement=content.get("statement"),
-            hint=content.get("hint"),
-            items=content.get("items", []),
-            pairs=content.get("pairs", []),
-            right_items=content.get("right_items", []),
-            step=env_stats["step"],
-            max_steps=env_stats["max_steps"],
-            theory=exercise.theory,
-            recommendation_reason=getattr(session, "_current_recommendation_reason", None),
-        ).model_dump()
-    )
+    payload = _build_exercise_response_payload(exercise, env_stats, content)
+    payload["recommendation_reason"] = getattr(session, "_current_recommendation_reason", None)
+    return ok(payload)
 
 
 @router.post("/{session_id}/submit", response_model=StandardResponse[SubmitAnswerResponse])

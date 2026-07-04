@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from api.core.content_pipeline.domain.jobs import PipelineStatus
 
+from .enums import PipelineSessionSource
+
 
 class PipelineProcessResponse(BaseModel):
     job_id: str
@@ -59,11 +61,26 @@ class PipelineGraphResponse(BaseModel):
     edges: list[PipelinePartialGraphEdgeResponse] = Field(default_factory=list)
 
 
+class PipelineCycleStatsResponse(BaseModel):
+    removed_cycles: int | None = None
+
+
+class PipelineGraphStatsResponse(BaseModel):
+    num_nodes: int | None = None
+    num_edges: int | None = None
+    is_dag: bool | None = None
+    relations_from_extraction: int | None = None
+    relations_from_verification: int | None = None
+    relations_verified: int | None = None
+    builder_subject_id: str | None = None
+    cycle_stats: PipelineCycleStatsResponse | None = None
+
+
 class PipelineJobResultResponse(BaseModel):
     graph: PipelineGraphResponse = Field(
         default_factory=lambda: PipelineGraphResponse(nodes=[], edges=[])
     )
-    stats: dict[str, object] = Field(default_factory=dict)
+    stats: PipelineGraphStatsResponse = Field(default_factory=PipelineGraphStatsResponse)
     n_concepts: int = 0
 
 
@@ -82,7 +99,7 @@ class PipelineJobStatusResponse(BaseModel):
     concepts_extracted: int = 0
     concepts_after_merge: int = 0
     relations_verified: int = 0
-    graph_stats: dict[str, object] = Field(default_factory=dict)
+    graph_stats: PipelineGraphStatsResponse = Field(default_factory=PipelineGraphStatsResponse)
     error_message: str | None = None
     error_code: str | None = None
     user_message: str | None = None
@@ -149,6 +166,6 @@ class PipelineJobRetryResponse(BaseModel):
 class PipelineSessionCreateResponse(BaseModel):
     session_id: str
     n_concepts: int
-    source: str
+    source: PipelineSessionSource
     job_id: str
     status: Literal["active"]

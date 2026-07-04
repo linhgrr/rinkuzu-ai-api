@@ -4,6 +4,8 @@ from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
+from .enums import ReadinessStatus  # noqa: TC001 - Pydantic resolves this annotation at runtime.
+
 DataT = TypeVar("DataT")
 
 
@@ -38,7 +40,7 @@ class StandardErrorResponse(BaseStandardModel):
 
 
 class ReadinessResponse(BaseStandardModel):
-    status: str
+    status: ReadinessStatus
     ready: bool
     mongo_available: bool
     models_enabled: bool

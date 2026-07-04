@@ -40,7 +40,9 @@ from .knowledge import (
     MasteryRow,
 )
 from .pipeline import (
+    PipelineCycleStatsResponse,
     PipelineFailedBatchResponse,
+    PipelineGraphStatsResponse,
     PipelineJobCancelResponse,
     PipelineJobListItemResponse,
     PipelineJobListResponse,
@@ -84,7 +86,9 @@ __all__ = [
     "MasteryMatrixResponse",
     "MasteryRow",
     "NextConceptResponse",
+    "PipelineCycleStatsResponse",
     "PipelineFailedBatchResponse",
+    "PipelineGraphStatsResponse",
     "PipelineJobCancelResponse",
     "PipelineJobHistoryListResponse",
     "PipelineJobListItemResponse",

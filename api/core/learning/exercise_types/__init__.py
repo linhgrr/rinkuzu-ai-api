@@ -16,11 +16,11 @@ from .models import (
 )
 from .selection import (
     EXERCISE_WEIGHTS,
+    _rng,
     join_lines,
     normalize_text,
     select_exercise_type,
 )
-from .selection import _rng as _rng  # noqa: PLC0414  # re-export: tests patch exercise_types._rng
 
 __all__ = [
     "BLOOM_VERBS",
@@ -38,6 +38,7 @@ __all__ = [
     "ShortAnswerEvaluationOutput",
     "ShortAnswerOutput",
     "TrueFalseOutput",
+    "_rng",
     "join_lines",
     "normalize_text",
     "select_exercise_type",

@@ -4,6 +4,7 @@ routers/pipeline.py — Content pipeline endpoints.
 
 from contextlib import suppress
 from pathlib import Path
+import re
 import time
 from typing import Annotated, Any
 import uuid
@@ -12,7 +13,7 @@ import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 import httpx
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from api.config import get_settings
 from api.core.content_pipeline import PipelineStatus
@@ -21,6 +22,7 @@ from api.core.shared import mongo_store
 from api.core.shared.persistence import (
     find_recent_active_job_by_source,
     load_pipeline_job_for_user,
+    load_subject_progress_for_user,
 )
 from api.core.shared.persistence.pipeline_jobs import list_recent_pipeline_jobs_all_status
 from api.core.shared.url_fetch import UnsafeURLError, stream_download
@@ -56,6 +58,10 @@ UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 _MAX_FILENAME_LENGTH = 200
+_MAX_SUBJECT_ID_LENGTH = 120
+_ASCII_CONTROL_MAX = 31
+_ASCII_DELETE = 127
+_SUBJECT_ID_PATTERN = re.compile(r"^[\w .,:;()\-\/+&']+$", re.UNICODE)
 
 _LONG_POLL_STATUSES = {
     PipelineStatus.LOADING.value,
@@ -130,12 +136,30 @@ async def pipeline_status(
 class ProcessDocumentRequest(BaseModel):
     file_url: str
     filename: str
-    subject_id: str | None = None
+    subject_id: str | None = Field(default=None, max_length=_MAX_SUBJECT_ID_LENGTH)
     prs_threshold: float | None = None  # falls back to settings.prs_threshold (MLP probability)
     min_confidence: float = 0.6
     apply_reduction: bool = True
     page_batch_size: int = Field(default=10, ge=1, le=50)
     source_s3_key: str | None = None
+
+    @field_validator("subject_id")
+    @classmethod
+    def normalize_subject_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if len(normalized) > _MAX_SUBJECT_ID_LENGTH:
+            raise ValueError(f"subject_id must be at most {_MAX_SUBJECT_ID_LENGTH} characters.")
+        if any(
+            ord(char) <= _ASCII_CONTROL_MAX or ord(char) == _ASCII_DELETE for char in normalized
+        ):
+            raise ValueError("subject_id cannot contain control characters.")
+        if not _SUBJECT_ID_PATTERN.fullmatch(normalized):
+            raise ValueError("subject_id contains unsupported characters.")
+        return normalized
 
 
 @router.post("/process", response_model=StandardResponse[PipelineProcessResponse], status_code=202)
@@ -379,13 +403,25 @@ async def create_session_from_pipeline(
     request: Request,
     job_id: PathID,
     background_tasks: BackgroundTasks,
-    max_steps: int = 9999,
+    max_steps: Annotated[int, Query(ge=5, le=10000)] = 9999,
     manager: Any = Depends(get_session_manager),
     exercise_svc: Any = Depends(get_session_service),
     user_id: str = Depends(get_current_user),
 ) -> Any:
     """Create a learning session from a completed pipeline job."""
     del request
+    active_session = manager.get_active_pipeline_session(user_id, job_id)
+    if active_session is not None:
+        return ok(
+            {
+                "session_id": active_session.session_id,
+                "n_concepts": len(active_session.concept_map),
+                "source": "existing_session",
+                "job_id": job_id,
+                "status": "active",
+            }
+        )
+
     job_doc = await load_pipeline_job_for_user(job_id, user_id)
     if not job_doc:
         raise PipelineNotFoundError(job_id)
@@ -425,27 +461,25 @@ async def create_session_from_pipeline(
             status_code=409,
         )
 
-    session = await manager.create_session_from_pipeline(
-        concepts_data=result["concepts_data"],
-        concept_map=result["concept_map"],
-        prereq_edges=result["prereq_edges"],
-        max_steps=max_steps,
-        precomputed_embeddings=result.get("concept_embeddings"),
-        job_id=job_id,
+    subject_progress = await load_subject_progress_for_user(job_id, user_id)
+    session, created = await manager.get_or_create_pipeline_session(
+        job_doc=job_doc,
+        subject_progress=subject_progress,
         user_id=user_id,
+        max_steps=max_steps,
     )
 
-    # Fire eager prefetch
-    try:
-        background_tasks.add_task(exercise_svc.eager_generate_first_exercise, session)
-    except TypeError as exc:
-        logger.warning("[PipelineRouter] Failed to schedule eager prefetch: {}", exc)
+    if created:
+        try:
+            background_tasks.add_task(exercise_svc.eager_generate_first_exercise, session)
+        except TypeError as exc:
+            logger.warning("[PipelineRouter] Failed to schedule eager prefetch: {}", exc)
 
     return ok(
         {
             "session_id": session.session_id,
             "n_concepts": len(result["concept_map"]),
-            "source": "new_session",
+            "source": "new_session" if created else "existing_session",
             "job_id": job_id,
             "status": "active",
         }

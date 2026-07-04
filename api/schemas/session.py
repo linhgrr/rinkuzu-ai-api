@@ -4,6 +4,21 @@ schemas/session.py — Session-related Pydantic models.
 
 from pydantic import BaseModel, Field
 
+from .enums import LearningSessionStatus
+
+
+class SessionConceptSummary(BaseModel):
+    id: str
+    name: str
+    index: int
+
+
+class SessionExerciseSummary(BaseModel):
+    exercise_id: str
+    concept_name: str
+    bloom_level: int
+    is_correct: bool | None = None
+
 
 class SessionCreateRequest(BaseModel):
     max_steps: int = Field(
@@ -17,15 +32,15 @@ class SessionCreateRequest(BaseModel):
 class SessionCreateResponse(BaseModel):
     session_id: str = Field(description="Unique session identifier.")
     n_concepts: int = Field(description="Number of concepts available in this session.")
-    concepts: list[dict[str, object]] = Field(description="Ordered list of concept summaries.")
-    status: str = Field(
-        default="active", description="Session state: active, completed, or cancelled."
+    concepts: list[SessionConceptSummary] = Field(description="Ordered list of concept summaries.")
+    status: LearningSessionStatus = Field(
+        default=LearningSessionStatus.ACTIVE, description="Current learning session state."
     )
 
 
 class SessionStatusResponse(BaseModel):
     session_id: str = Field(description="Session identifier.")
-    status: str = Field(description="Current session status.")
+    status: LearningSessionStatus = Field(description="Current learning session status.")
     step: int = Field(description="Number of exercises answered so far.")
     max_steps: int = Field(description="Session step limit.")
     concepts_visited: int = Field(description="Number of distinct concepts encountered.")
@@ -37,4 +52,4 @@ class SessionStatusResponse(BaseModel):
     total_correct: int = Field(description="Cumulative count of correct answers.")
     total_answered: int = Field(description="Cumulative count of answered exercises.")
     accuracy: float = Field(description="Ratio of correct answers to total answered.")
-    exercises: list[dict[str, object]] = Field(description="Recent exercise history entries.")
+    exercises: list[SessionExerciseSummary] = Field(description="Recent exercise history entries.")

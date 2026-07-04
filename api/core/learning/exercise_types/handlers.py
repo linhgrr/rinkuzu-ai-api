@@ -396,17 +396,17 @@ class MatchingHandler(ExerciseTypeHandler):
 
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
         payload = cast("MatchingPayload", exercise.payload)
-        left_items = [p["left"] for p in payload.pairs]
-        right_canonical = [p["right"] for p in payload.pairs]
+        left_items = [pair.left for pair in payload.pairs]
+        right_canonical = [pair.right for pair in payload.pairs]
         right_items = deterministic_shuffle(right_canonical, exercise.exercise_id)
         return {
             "exercise_type": self.exercise_type.value,
             "question": exercise.question,
-            "pairs": [dict(p) for p in payload.pairs],
+            "pairs": [pair.model_dump() for pair in payload.pairs],
             "left_items": left_items,
             "right_items": right_items,
-            "correct_answer": {p["left"]: p["right"] for p in payload.pairs},
-            "correct_option": join_lines([f"{p['left']} → {p['right']}" for p in payload.pairs]),
+            "correct_answer": {pair.left: pair.right for pair in payload.pairs},
+            "correct_option": join_lines([f"{pair.left} → {pair.right}" for pair in payload.pairs]),
             "explanation_correct": exercise.explanation_correct,
             "explanation_incorrect": exercise.explanation_incorrect,
         }
@@ -418,7 +418,7 @@ class MatchingHandler(ExerciseTypeHandler):
             for left, right in (answer.get("matching") or {}).items()
             if left and right
         }
-        expected = {normalize_text(p["left"]): normalize_text(p["right"]) for p in payload.pairs}
+        expected = {normalize_text(pair.left): normalize_text(pair.right) for pair in payload.pairs}
         summary = ", ".join(
             f"{left} -> {right}" for left, right in (answer.get("matching") or {}).items()
         )
@@ -429,7 +429,7 @@ class MatchingHandler(ExerciseTypeHandler):
 
     def tutor_options(self, exercise: ExerciseRecord) -> list[str]:
         payload = cast("MatchingPayload", exercise.payload)
-        right_canonical = [p["right"] for p in payload.pairs]
+        right_canonical = [pair.right for pair in payload.pairs]
         return deterministic_shuffle(right_canonical, exercise.exercise_id)
 
     def serialize_answer(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> str | None:  # noqa: ARG002 — contract parity

@@ -4,13 +4,15 @@ schemas/knowledge.py — Knowledge graph and mastery Pydantic models.
 
 from pydantic import BaseModel
 
+from .enums import ConceptStatus
+
 
 class KnowledgeNodeResponse(BaseModel):
     id: str
     index: int
     name: str
     mastery: float
-    status: str
+    status: ConceptStatus
     visited: bool
 
 
@@ -46,7 +48,7 @@ class ConceptDetailResponse(BaseModel):
     name: str
     definition: str
     mastery: float
-    status: str
+    status: ConceptStatus
     bloom_mastery: list[float]
     prerequisites: list[ConceptPrereq]
     dependents: list[ConceptPrereq]

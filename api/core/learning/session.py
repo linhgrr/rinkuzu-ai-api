@@ -150,6 +150,8 @@ class SessionManager:
         # Active sessions
         self._sessions: dict[str, SessionState] = {}
         self._recovery_locks: dict[str, asyncio.Lock] = {}
+        self._subject_session_locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._subject_session_ids: dict[tuple[str, str], str] = {}
 
     # ── Properties ──────────────────────────────────────────
 
@@ -262,18 +264,27 @@ class SessionManager:
             )
             # Remove oldest 20%
             for k in sorted_keys[: max_size // 5]:
-                self._sessions.pop(k, None)
-                lock = self._recovery_locks.get(k)
-                if lock is not None and not lock.locked():
-                    self._recovery_locks.pop(k, None)
+                session = self._sessions.get(k)
+                self.remove_session(k)
+                if session and session.user_id and session.job_id:
+                    subject_key = (session.user_id, session.job_id)
+                    subject_lock = self._subject_session_locks.get(subject_key)
+                    if subject_lock is not None and not subject_lock.locked():
+                        self._subject_session_locks.pop(subject_key, None)
 
     def _register_session(self, session: SessionState) -> SessionState:
         self._sessions[session.session_id] = session
+        if session.user_id and session.job_id:
+            self._subject_session_ids[(session.user_id, session.job_id)] = session.session_id
         self._clean_expired_sessions()
         return session
 
     def remove_session(self, session_id: str) -> None:
-        self._sessions.pop(session_id, None)
+        session = self._sessions.pop(session_id, None)
+        if session and session.user_id and session.job_id:
+            subject_key = (session.user_id, session.job_id)
+            if self._subject_session_ids.get(subject_key) == session_id:
+                self._subject_session_ids.pop(subject_key, None)
         lock = self._recovery_locks.get(session_id)
         if lock is not None and not lock.locked():
             self._recovery_locks.pop(session_id, None)
@@ -333,6 +344,11 @@ class SessionManager:
         if session:
             session.accessed_at = time.time()
         return session
+
+    def get_active_pipeline_session(self, user_id: str, job_id: str) -> SessionState | None:
+        session_id = self._subject_session_ids.get((user_id, job_id))
+        session = self.get_session(session_id) if session_id else None
+        return session if session and session.status == "active" else None
 
     def _build_external_embeddings(
         self,
@@ -487,6 +503,9 @@ class SessionManager:
         self,
         session_id: str,
         user_id: str,
+        *,
+        session_doc: dict[str, Any] | None = None,
+        job_doc: dict[str, Any] | None = None,
     ) -> SessionState | None:
         """Get active in-memory session; recover from MongoDB when missing.
 
@@ -509,10 +528,43 @@ class SessionManager:
             if active and getattr(active, "user_id", None) == user_id:
                 return active
 
-            session_doc = await load_subject_progress_by_session_for_user(session_id, user_id)
+            if session_doc is None:
+                session_doc = await load_subject_progress_by_session_for_user(session_id, user_id)
             if not session_doc:
                 return None
 
+            if job_doc is None:
+                job_id = session_doc.get("job_id")
+                if not job_id:
+                    logger.warning(
+                        "[Session] Cannot recover session={}: missing job_id in persisted doc",
+                        session_id,
+                    )
+                    return None
+                job_doc = await load_pipeline_job_for_user(job_id, user_id)
+            if not job_doc:
+                logger.warning(
+                    "[Session] Cannot recover session={}: pipeline job {} not found",
+                    session_id,
+                    session_doc.get("job_id"),
+                )
+                return None
+
+            return await self._recover_session_from_documents(
+                session_id=session_id,
+                user_id=user_id,
+                session_doc=session_doc,
+                job_doc=job_doc,
+            )
+
+    async def _recover_session_from_documents(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        session_doc: dict[str, Any],
+        job_doc: dict[str, Any],
+    ) -> SessionState | None:
         job_id = session_doc.get("job_id")
         if not job_id:
             logger.warning(
@@ -521,20 +573,10 @@ class SessionManager:
             )
             return None
 
-        job_doc = await load_pipeline_job_for_user(job_id, user_id)
-        if not job_doc:
-            logger.warning(
-                "[Session] Cannot recover session={}: pipeline job {} not found",
-                session_id,
-                job_id,
-            )
-            return None
-
         result = job_doc.get("result") or {}
         if not all(key in result for key in ("concepts_data", "concept_map", "prereq_edges")):
             logger.warning(
-                "[Session] Cannot recover session={}: incomplete pipeline result",
-                session_id,
+                "[Session] Cannot recover session={}: incomplete pipeline result", session_id
             )
             return None
 
@@ -562,6 +604,59 @@ class SessionManager:
             return None
         else:
             return recovered
+
+    async def get_or_create_pipeline_session(
+        self,
+        *,
+        job_doc: dict[str, Any],
+        subject_progress: dict[str, Any] | None,
+        user_id: str,
+        max_steps: int,
+    ) -> tuple[SessionState, bool]:
+        """Return one active subject session, recovering or creating it atomically."""
+        job_id = str(job_doc["job_id"])
+        result = job_doc["result"]
+        subject_key = (user_id, job_id)
+        lock = self._subject_session_locks.setdefault(subject_key, asyncio.Lock())
+
+        async with lock:
+            active_session_id = self._subject_session_ids.get(subject_key)
+            if active_session_id:
+                active_session = self.get_session(active_session_id)
+                if active_session and active_session.status == "active":
+                    return active_session, False
+
+            last_session_id = subject_progress.get("last_session_id") if subject_progress else None
+            if (
+                subject_progress
+                and subject_progress.get("status") == "active"
+                and isinstance(last_session_id, str)
+                and last_session_id.strip()
+            ):
+                existing = await self.get_or_recover_session(
+                    last_session_id.strip(),
+                    user_id,
+                    session_doc=subject_progress,
+                    job_doc=job_doc,
+                )
+                if existing and existing.job_id == job_id and existing.status == "active":
+                    return existing, False
+
+            history_source_doc = None
+            if subject_progress:
+                history_source_doc = {**subject_progress, "status": "active"}
+
+            session = await self.create_session_from_pipeline(
+                concepts_data=result["concepts_data"],
+                concept_map=result["concept_map"],
+                prereq_edges=result["prereq_edges"],
+                max_steps=max_steps,
+                precomputed_embeddings=result.get("concept_embeddings"),
+                job_id=job_id,
+                user_id=user_id,
+                history_source_doc=history_source_doc,
+            )
+            return session, True
 
     # ── Query Methods ───────────────────────────────────────
 

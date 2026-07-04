@@ -41,9 +41,14 @@ class OrderingPayload(BaseModel):
     correct_order: list[str]
 
 
+class MatchingPairPayload(BaseModel):
+    left: str
+    right: str
+
+
 class MatchingPayload(BaseModel):
     exercise_type: Literal[ExerciseType.MATCHING] = ExerciseType.MATCHING
-    pairs: list[dict[str, str]]
+    pairs: list[MatchingPairPayload]
 
 
 class ShortAnswerPayload(BaseModel):
