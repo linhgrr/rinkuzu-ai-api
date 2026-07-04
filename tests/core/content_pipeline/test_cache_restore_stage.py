@@ -99,7 +99,7 @@ def test_try_restore_completed_job_from_s3_hashes_and_reads_via_blocking_stage(m
     cache_key = asyncio.run(
         try_restore_completed_job_from_s3(
             job,
-            file_path="/tmp/upload.pdf",  # noqa: S108
+            file_path="/tmp/upload.pdf",
             s3_client=_S3Client(),
             bucket_name="bucket-1",
             hash_file=lambda _path: "hash-123",

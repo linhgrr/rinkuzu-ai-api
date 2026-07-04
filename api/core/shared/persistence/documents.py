@@ -90,6 +90,8 @@ class PipelineJobDocument(Document):
     concepts_after_merge: int = 0
     relations_verified: int = 0
     graph_stats: dict[str, Any] = Field(default_factory=dict)
+    quality_report: dict[str, Any] | None = None
+    debug_trace: list[dict[str, Any]] = Field(default_factory=list)
     result: dict[str, Any] | None = None
     partial_graph: dict[str, Any] | None = None
     error_message: str | None = None
@@ -157,6 +159,7 @@ class PipelineJobActiveProjection(BaseModel):
     concepts_extracted: int = 0
     concepts_after_merge: int = 0
     relations_verified: int = 0
+    quality_report: dict[str, Any] | None = None
     error_code: str | None = None
     user_message: str | None = None
     retryable: bool = False

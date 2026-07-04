@@ -1,5 +1,4 @@
-from pathlib import Path
-
+from anyio import Path
 import pytest
 
 from api.core.content_pipeline.application import source_fetch
@@ -19,8 +18,8 @@ async def test_download_source_from_s3_writes_file(monkeypatch, tmp_path):
     monkeypatch.setattr(source_fetch, "_bucket_name", lambda: "bucket")
     dest = await source_fetch.download_source_to_dir("uploads/x/a.pdf", str(tmp_path))
     p = Path(dest)
-    assert p.exists()
-    assert p.read_bytes().startswith(b"%PDF")
+    assert await p.exists()
+    assert (await p.read_bytes()).startswith(b"%PDF")
 
 
 @pytest.mark.asyncio

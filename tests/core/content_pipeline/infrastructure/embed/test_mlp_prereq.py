@@ -30,12 +30,26 @@ def _reset_singleton():
 
 
 def _build_concept(concept_id: str, name: str):
-    return SimpleNamespace(concept_id=concept_id, name=name, definition="")
+    return SimpleNamespace(concept_id=concept_id, name=name, definition=f"{name} definition")
 
 
 def _make_loaded_ranker(monkeypatch, weights_path: Path, prob_for_pair):
     """Build a ranker with mocked encoder, tokenizer, model, and weight loader."""
     weights_path.write_bytes(b"")  # placeholder so existence check passes
+    weights_path.with_name(f"{weights_path.name[:-4]}.metadata.json").write_text(
+        """
+{
+  "dataset": "ViMath-Prereq-Module1-v1",
+  "encoder": "BAAI/bge-m3",
+  "input_text_mode": "name+definition",
+  "pair_mode": "concat_rich",
+  "embedding_dim": 1024,
+  "input_dim": 4096,
+  "threshold": 0.235
+}
+""".strip(),
+        encoding="utf-8",
+    )
 
     fake_encoder = MagicMock(name="encoder")
     fake_encoder.eval.return_value = fake_encoder
@@ -50,7 +64,8 @@ def _make_loaded_ranker(monkeypatch, weights_path: Path, prob_for_pair):
     fake_mlp.eval.return_value = fake_mlp
     fake_mlp.to.return_value = fake_mlp
 
-    def _forward(emb_a, emb_b):
+    def _forward(features):
+        assert features.shape[-1] == 4096
         # Return logits whose sigmoid hits prob_for_pair for each row.
         target = torch.tensor(prob_for_pair, dtype=torch.float32)
         # logit such that sigmoid(logit) ≈ target
@@ -98,9 +113,21 @@ def test_rank_returns_pairs_above_threshold(tmp_path: Path, monkeypatch):
 
     # Pair ordering deterministic: (i,j) for i in 0..N, j in 0..N, i!=j
     # idx 0 → (c1,c2), idx 3 → (c2,c3)
-    assert ("c1", "c2") in pairs
-    assert ("c2", "c3") in pairs
+    first_pair = next(pair for pair in pairs if pair.source_id == "c1" and pair.target_id == "c2")
+    assert first_pair.sources == frozenset({"mlp"})
+    assert first_pair.ranker_score == pytest.approx(0.9)
+    assert any(pair.source_id == "c2" and pair.target_id == "c3" for pair in pairs)
     assert len(pairs) == 2
+
+
+def test_rank_uses_metadata_threshold_when_threshold_is_none(tmp_path: Path, monkeypatch):
+    probs = [0.3, 0.2]
+    ranker = _make_loaded_ranker(monkeypatch, tmp_path / "w.pth", prob_for_pair=probs)
+    concepts = [_build_concept("c1", "A"), _build_concept("c2", "B")]
+
+    pairs = ranker.rank(concepts, threshold=None)
+
+    assert [(pair.source_id, pair.target_id) for pair in pairs] == [("c1", "c2")]
 
 
 def test_rank_threshold_above_all_probs_returns_empty(tmp_path: Path, monkeypatch):
@@ -132,3 +159,24 @@ def test_load_missing_weights_raises(tmp_path: Path, monkeypatch):
     )
     with pytest.raises(FileNotFoundError):
         MLPPrerequisiteRanker.load(tmp_path / "does_not_exist.pth")
+
+
+def test_load_invalid_metadata_raises(tmp_path: Path, monkeypatch):
+    weights_path = tmp_path / "w.pth"
+    weights_path.write_bytes(b"")
+    weights_path.with_name("w.metadata.json").write_text(
+        """
+{
+  "dataset": "LectureBank",
+  "encoder": "BAAI/bge-m3",
+  "input_text_mode": "name",
+  "pair_mode": "concat",
+  "embedding_dim": 1024,
+  "input_dim": 2048,
+  "threshold": 0.5
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Invalid prerequisite model metadata"):
+        MLPPrerequisiteRanker.load(weights_path)

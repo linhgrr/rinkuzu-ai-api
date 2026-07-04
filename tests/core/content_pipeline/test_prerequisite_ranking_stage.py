@@ -5,9 +5,10 @@ from api.core.content_pipeline.application.stages.prerequisite_ranking import (
     rank_candidate_prerequisites,
 )
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.relations import RelationCandidate
 
 
-def test_rank_candidate_prerequisites_updates_progress_and_returns_pairs():
+def test_rank_candidate_prerequisites_updates_progress_and_returns_candidates():
     job = PipelineJob(job_id="job-1", filename="lesson.pdf", subject_id="algebra")
     concepts = [
         SimpleNamespace(concept_id="c1", name="Alpha"),
@@ -22,9 +23,9 @@ def test_rank_candidate_prerequisites_updates_progress_and_returns_pairs():
     def rank_prerequisites(items, threshold):
         assert items == concepts
         assert threshold == 0.75
-        return [("c1", "c2")]
+        return [RelationCandidate(source_id="c1", target_id="c2", sources=frozenset({"mlp"}))]
 
-    pairs = asyncio.run(
+    candidates = asyncio.run(
         rank_candidate_prerequisites(
             job,
             concepts=concepts,
@@ -34,7 +35,9 @@ def test_rank_candidate_prerequisites_updates_progress_and_returns_pairs():
         )
     )
 
-    assert pairs == [("c1", "c2")]
+    assert candidates == [
+        RelationCandidate(source_id="c1", target_id="c2", sources=frozenset({"mlp"}))
+    ]
     assert calls == [
         (PipelineStatus.RANKING, "Ranking prerequisites...", 0.60),
         (PipelineStatus.RANKING, "Ranking prerequisites...", 0.65),

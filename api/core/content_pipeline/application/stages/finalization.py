@@ -10,7 +10,10 @@ from typing import Any
 
 from loguru import logger
 
-from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
+from api.core.content_pipeline.domain.errors import (
+    PipelineQualityGateError,
+    PipelineStageTimeoutError,
+)
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 from api.core.shared.persistence.common import normalize_for_bson
 
@@ -131,6 +134,20 @@ def classify_terminal_failure(job: PipelineJob, error: BaseException) -> Termina
             user_message="Processing is taking longer than expected. Please try again.",
             retryable=True,
             current_step=f"Timed out while {stage_hint}.",
+        )
+
+    if isinstance(error, PipelineQualityGateError):
+        job.quality_report = error.report
+        return TerminalFailureDetails(
+            status=PipelineStatus.FAILED,
+            error_code="pipeline_quality_gate_failed",
+            error_message=str(error),
+            user_message=(
+                "The document was processed, but the generated knowledge graph did not pass "
+                "quality checks. Please retry or upload a clearer PDF."
+            ),
+            retryable=True,
+            current_step="Quality checks failed.",
         )
 
     return TerminalFailureDetails(

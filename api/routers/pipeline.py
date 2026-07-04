@@ -137,7 +137,7 @@ class ProcessDocumentRequest(BaseModel):
     file_url: str
     filename: str
     subject_id: str | None = Field(default=None, max_length=_MAX_SUBJECT_ID_LENGTH)
-    prs_threshold: float | None = None  # falls back to settings.prs_threshold (MLP probability)
+    prs_threshold: float | None = None  # None = use checkpoint metadata threshold
     min_confidence: float = 0.6
     apply_reduction: bool = True
     page_batch_size: int = Field(default=10, ge=1, le=50)
@@ -370,6 +370,8 @@ async def get_job_status(
         "concepts_after_merge": job_doc.get("concepts_after_merge", 0),
         "relations_verified": job_doc.get("relations_verified", 0),
         "graph_stats": job_doc.get("graph_stats", {}),
+        "quality_report": job_doc.get("quality_report"),
+        "debug_trace": job_doc.get("debug_trace") or [],
         "error_message": job_doc.get("error_message"),
         "error_code": job_doc.get("error_code"),
         "user_message": job_doc.get("user_message"),
@@ -390,6 +392,7 @@ async def get_job_status(
         response["result"] = {
             "graph": result.get("graph", {"nodes": [], "edges": []}),
             "stats": result.get("stats", {}),
+            "quality_report": result.get("quality_report"),
             "n_concepts": len(result.get("concept_map", {})),
         }
     return ok(response)

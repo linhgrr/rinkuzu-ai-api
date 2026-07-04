@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .relations import PipelineDebugTraceEntry, PipelineQualityReport
 
 
 class PipelineProgress:
@@ -83,6 +86,8 @@ class PipelineJob:
     concepts_after_merge: int = 0
     relations_verified: int = 0
     graph_stats: dict[str, Any] = field(default_factory=dict)
+    quality_report: PipelineQualityReport | None = None
+    debug_trace: list[PipelineDebugTraceEntry] = field(default_factory=list)
     error_message: str | None = None
     error_code: str | None = None
     user_message: str | None = None
@@ -132,6 +137,8 @@ class PipelineJob:
         self.error_code = None
         self.user_message = None
         self.retryable = False
+        self.quality_report = None
+        self.debug_trace = []
         self.cancel_requested = False
         self.completed_at = None
         self.retry_count += 1

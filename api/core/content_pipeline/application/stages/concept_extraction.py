@@ -17,7 +17,9 @@ from ..ports import PersistJobStateFn  # noqa: TC001
 from .execution import resolve_timeout_policy, run_process_stage
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
+
+    from api.core.content_pipeline.domain.relations import PipelineDebugArtifact
 
 
 @dataclass
@@ -49,6 +51,7 @@ async def extract_concepts_from_chunks(
     postprocess_concepts: Callable[[list[Any]], list[Any]],
     persist_job_state: PersistJobStateFn,
     document_text: Any = None,
+    record_debug_artifact: Callable[[PipelineDebugArtifact], Awaitable[None]] | None = None,
 ) -> ConceptExtractionOutcome:
     """Extract concepts from loaded document chunks and persist stage progress."""
     await persist_job_state(
@@ -73,14 +76,20 @@ async def extract_concepts_from_chunks(
             progress,
         )
 
+    extraction_kwargs: dict[str, Any] = {
+        "document_text": document_text,
+        "job_id": job.job_id,
+        "on_batch_progress": _heartbeat,
+    }
+    if record_debug_artifact is not None:
+        extraction_kwargs["on_batch_debug"] = record_debug_artifact
+
     extractions: list[Any] = await asyncio.wait_for(
         extraction_chain.extract_from_document(
             file_path,
             job.subject_id,
             job.page_batch_size,
-            document_text=document_text,
-            job_id=job.job_id,
-            on_batch_progress=_heartbeat,
+            **extraction_kwargs,
         ),
         timeout=extraction_timeout,
     )

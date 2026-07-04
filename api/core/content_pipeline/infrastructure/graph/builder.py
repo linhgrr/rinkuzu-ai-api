@@ -96,7 +96,20 @@ class KnowledgeGraphBuilder:
             self.add_concept(concept)
 
     def add_concept(self, concept: Concept) -> Any:
-        """Add a concept and translate extracted dependency relations to graph edges."""
+        """Add a concept node.
+
+        Relation extraction now produces verifier candidates. Edges are added
+        only after verification by the pipeline graph-building stage.
+        """
+        self.add_concept_node(concept)
+
+    def add_concept_nodes(self, concepts: list[Concept]) -> Any:
+        """Add multiple concept nodes without relation side effects."""
+        for concept in concepts:
+            self.add_concept_node(concept)
+
+    def add_concept_node(self, concept: Concept) -> Any:
+        """Add a concept node without translating extracted relations into edges."""
         self._set_non_placeholder(
             concept.concept_id,
             name=getattr(concept, "name", None),
@@ -106,23 +119,6 @@ class KnowledgeGraphBuilder:
 
         self.concept_map[concept.concept_id] = concept
 
-        for rel in getattr(concept, "relations", []) or []:
-            rel_type = getattr(rel, "type", None)
-            if self._norm_rel(rel_type) == RelationType.PREREQUISITE:
-                # Extracted relations point to a prerequisite; graph edges point prerequisite -> dependent.
-                source_id = rel.target_id
-                target_id = concept.concept_id
-            else:
-                source_id = concept.concept_id
-                target_id = rel.target_id
-            self.add_relation(
-                source_id=source_id,
-                target_id=target_id,
-                relation_type=rel_type,
-                evidence=getattr(rel, "evidence", None),
-                location=getattr(rel, "location", None),
-            )
-
     def add_relation(
         self,
         source_id: str,
@@ -130,6 +126,11 @@ class KnowledgeGraphBuilder:
         relation_type: str | None = None,
         evidence: str | list[str] | None = None,
         location: str | None = None,
+        confidence: float | None = None,
+        reasoning: str | None = None,
+        sources: list[str] | None = None,
+        ranker_score: float | None = None,
+        extraction_confidence: float | None = None,
     ) -> Any:
         """
         Add a relation (edge) to graph.
@@ -167,6 +168,11 @@ class KnowledgeGraphBuilder:
             relation_type=rel_type.value,
             evidence=merged_evidence,
             location=location,
+            confidence=confidence,
+            reasoning=reasoning,
+            sources=sources or [],
+            ranker_score=ranker_score,
+            extraction_confidence=extraction_confidence,
         )
 
     def get_graph(self) -> nx.DiGraph:

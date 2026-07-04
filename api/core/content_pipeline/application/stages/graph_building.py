@@ -3,53 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
-
-from loguru import logger
+from typing import TYPE_CHECKING, Any
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
 
+if TYPE_CHECKING:
+    from api.core.content_pipeline.domain.relations import VerifiedRelation
+
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
-VerifiedRelation = tuple[str, str, Any]
-
-
-def sanitize_concept_relations(all_concepts: list[Any]) -> tuple[int, int]:
-    """Remove invalid or duplicate prerequisite relations attached to concepts."""
-    concept_ids = {
-        str(getattr(concept, "concept_id", "")).strip()
-        for concept in all_concepts
-        if getattr(concept, "concept_id", None)
-    }
-    kept = 0
-    dropped = 0
-
-    for concept in all_concepts:
-        source_id = str(getattr(concept, "concept_id", "")).strip()
-        seen_targets = set()
-        cleaned_relations = []
-
-        for relation in getattr(concept, "relations", []) or []:
-            relation_type = str(getattr(relation, "type", "")).strip().upper()
-            target_id = str(getattr(relation, "target_id", "")).strip()
-
-            if relation_type != "PREREQUISITE" or not target_id or target_id == source_id:
-                dropped += 1
-                continue
-            if target_id not in concept_ids:
-                dropped += 1
-                continue
-            if target_id in seen_targets:
-                continue
-
-            seen_targets.add(target_id)
-            cleaned_relations.append(relation)
-            kept += 1
-
-        concept.relations = cleaned_relations
-
-    return kept, dropped
 
 
 def build_partial_graph(graph: Any, all_concepts: list[Any]) -> dict[str, Any]:
@@ -106,13 +69,12 @@ async def build_knowledge_graph(
         for concept in concepts
         if getattr(concept, "concept_id", None)
     }
-    extracted_relation_count, dropped_relation_count = sanitize_concept_relations(concepts)
-    if dropped_relation_count:
-        logger.info("[Pipeline] Dropped {} invalid extracted relations", dropped_relation_count)
-
     builder = knowledge_graph_builder_factory(job.subject_id)
+    add_nodes = (
+        builder.add_concept_nodes if hasattr(builder, "add_concept_nodes") else builder.add_concepts
+    )
     await run_blocking_stage(
-        builder.add_concepts,
+        add_nodes,
         concepts,
         stage_name="graph_building",
     )
@@ -120,27 +82,24 @@ async def build_knowledge_graph(
     remove_invalid_graph_members(graph, concept_ids)
 
     existing_edges = set(graph.edges())
-    logger.debug("[Pipeline] Added {} relations from extraction", extracted_relation_count)
 
     verified_relation_count = 0
-    for source_id, target_id, evaluation in verified_relations:
-        if source_id not in concept_ids or target_id not in concept_ids:
+    for relation in verified_relations:
+        if relation.source_id not in concept_ids or relation.target_id not in concept_ids:
             continue
-        if not hasattr(evaluation, "direction"):
-            continue
-
-        edge = None
-        if evaluation.direction == "A_to_B":
-            edge = (source_id, target_id)
-        elif evaluation.direction == "B_to_A":
-            edge = (target_id, source_id)
-
-        if edge and edge not in existing_edges:
+        edge = (relation.source_id, relation.target_id)
+        if edge not in existing_edges:
             await run_blocking_stage(
                 builder.add_relation,
                 edge[0],
                 edge[1],
                 "PREREQUISITE",
+                evidence=list(relation.evidences),
+                confidence=relation.confidence,
+                reasoning=relation.reasoning,
+                sources=sorted(relation.sources),
+                ranker_score=relation.ranker_score,
+                extraction_confidence=relation.extraction_confidence,
                 stage_name="graph_relation_insertion",
             )
             existing_edges.add(edge)
@@ -160,6 +119,5 @@ async def build_knowledge_graph(
 
     return graph, {
         "base_graph_stats": builder_stats,
-        "extracted_relation_count": extracted_relation_count,
         "verified_relation_count": verified_relation_count,
     }

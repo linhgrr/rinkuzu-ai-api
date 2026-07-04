@@ -50,6 +50,8 @@ def pipeline_job_to_document(job: PipelineJob) -> dict[str, Any]:
         "graph_stats": normalize_for_bson(job.graph_stats)
         if isinstance(job.graph_stats, dict)
         else {},
+        "quality_report": normalize_for_bson(job.quality_report),
+        "debug_trace": normalize_for_bson(job.debug_trace),
         "result": normalize_for_bson(job.result),
         "partial_graph": normalize_for_bson(job.partial_graph),
         "error_message": job.error_message,
@@ -91,6 +93,8 @@ def _document_to_runtime_payload(doc: PipelineJobDocument) -> dict[str, Any]:
         "graph_stats": normalize_for_bson(doc.graph_stats)
         if isinstance(doc.graph_stats, dict)
         else {},
+        "quality_report": normalize_for_bson(doc.quality_report),
+        "debug_trace": normalize_for_bson(doc.debug_trace),
         "result": normalize_for_bson(doc.result),
         "partial_graph": normalize_for_bson(doc.partial_graph),
         "error_message": doc.error_message,
@@ -326,6 +330,7 @@ async def list_recent_pipeline_jobs_all_status(
             "concepts_extracted": r.concepts_extracted,
             "concepts_after_merge": r.concepts_after_merge,
             "relations_verified": r.relations_verified,
+            "quality_report": normalize_for_bson(r.quality_report),
             "error_code": r.error_code,
             "user_message": r.user_message,
             "retryable": r.retryable,

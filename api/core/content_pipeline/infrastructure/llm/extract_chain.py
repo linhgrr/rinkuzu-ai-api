@@ -12,6 +12,8 @@ from loguru import logger
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from api.core.content_pipeline.domain.relations import PipelineDebugArtifact
+
 from api.config import get_settings
 from api.core.content_pipeline.infrastructure.prompts import (
     EVIDENCE_VERIFICATION_PROMPT,
@@ -52,6 +54,24 @@ def _format_usage(usage: dict[str, int]) -> str:
     )
 
 
+def _concept_to_debug_payload(concept: Any) -> dict[str, Any]:
+    return {
+        "concept_id": getattr(concept, "concept_id", None),
+        "name": getattr(concept, "name", None),
+        "definition": getattr(concept, "definition", None),
+        "importance_score": getattr(concept, "importance_score", None),
+        "relations": [
+            {
+                "relation_type": getattr(relation, "relation_type", None),
+                "target_id": getattr(relation, "target_id", None),
+                "confidence": getattr(relation, "confidence", None),
+                "evidence": getattr(relation, "evidence", None),
+            }
+            for relation in getattr(concept, "relations", []) or []
+        ],
+    }
+
+
 class ExtractionChain:
     """LiteLLM-backed concept extraction and relation verification."""
 
@@ -78,6 +98,7 @@ class ExtractionChain:
         max_previous_concepts: int = 20,
         job_id: str | None = None,
         on_batch_progress: Callable[[int, int], Awaitable[None]] | None = None,
+        on_batch_debug: Callable[[PipelineDebugArtifact], Awaitable[None]] | None = None,
     ) -> list[ConceptExtraction]:
         batch_size = page_batch_size or self.settings.content_pipeline_pdf_page_batch_size
         self.last_batches = []
@@ -111,6 +132,7 @@ class ExtractionChain:
 
         while pending_batches:
             batch = pending_batches.pop(0)
+            previous_concept_count = len(previous_concepts[-max_previous_concepts:])
             extraction = await self._extract_single_batch(
                 job_id=job_id,
                 subject_id=subject_id,
@@ -164,6 +186,47 @@ class ExtractionChain:
                         job_id or "-",
                         completed_batches,
                         total_planned_batches,
+                        exc,
+                    )
+            if on_batch_debug is not None:
+                try:
+                    await on_batch_debug(
+                        {
+                            "artifact_id": f"concept-batch-{batch['batch_index']}",
+                            "kind": "concept_extraction_batch",
+                            "label": f"Batch {batch['batch_index']} · pages {batch['page_start']}-{batch['page_end']}",
+                            "index": int(batch["batch_index"]),
+                            "page_start": int(batch["page_start"]),
+                            "page_end": int(batch["page_end"]),
+                            "input": {
+                                "subject_id": subject_id,
+                                "source": source,
+                                "page_start": int(batch["page_start"]),
+                                "page_end": int(batch["page_end"]),
+                                "char_count": int(batch["char_count"]),
+                                "previous_concept_count": previous_concept_count,
+                            },
+                            "output": {
+                                "concept_count": batch_concepts,
+                                "failed": bool(
+                                    extraction.notes and str(extraction.notes).startswith("Error:")
+                                ),
+                                "notes": str(extraction.notes or ""),
+                                "concepts": [
+                                    _concept_to_debug_payload(concept)
+                                    for concept in getattr(extraction, "concepts", []) or []
+                                ],
+                            },
+                            "content_type": "text/markdown",
+                            "content": str(batch["text"]),
+                            "truncated": False,
+                        }
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "extract debug artifact failed job_id={} batch={}: {}",
+                        job_id or "-",
+                        batch["batch_index"],
                         exc,
                     )
         total_concepts = sum(len(extraction.concepts) for extraction in results)

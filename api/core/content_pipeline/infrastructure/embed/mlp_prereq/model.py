@@ -1,26 +1,23 @@
 """PrerequisiteClassifier — MLP for prerequisite link prediction.
 
-Architecture: [emb_A || emb_B] (2048-d) -> 512 -> 256 -> 1 logit.
+Architecture: pair feature vector -> 512 -> 256 -> 1 logit.
 
-Mirrors the network used in module1_update training (LectureBank, BGE-M3
-embeddings, multi-seed F1=0.834, AUC=0.914). Output is a raw logit; apply
-torch.sigmoid for probability.
+The current production checkpoint is trained on ViMath with BGE-M3 embeddings
+and rich pair features: [emb_A, emb_B, |emb_A-emb_B|, emb_A*emb_B]. Output is a
+raw logit; apply torch.sigmoid for probability.
 """
 
-import torch
 from torch import Tensor, nn
 
 
 class PrerequisiteClassifier(nn.Module):
     def __init__(
         self,
-        embedding_dim: int = 1024,
+        input_dim: int = 4096,
         hidden_dim: int = 512,
         dropout: float = 0.3,
     ) -> None:
         super().__init__()
-
-        input_dim = 2 * embedding_dim
 
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
@@ -43,7 +40,6 @@ class PrerequisiteClassifier(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
-    def forward(self, emb_a: Tensor, emb_b: Tensor) -> Tensor:
-        x = torch.cat([emb_a, emb_b], dim=-1)
-        out: Tensor = self.net(x)
+    def forward(self, features: Tensor) -> Tensor:
+        out: Tensor = self.net(features)
         return out

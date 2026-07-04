@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     load_models: bool = True
     saint_path: str = str(BASE_DIR / "models" / "saint_best.pt")
     dqn_path: str = str(BASE_DIR / "models" / "dqn_best.pt")
-    mlp_weights_path: str = str(BASE_DIR / "models" / "prereq_mlp.pth")
+    mlp_weights_path: str = str(BASE_DIR / "models" / "prereq_vimath_bgem3_namedef_concat_rich.pth")
 
     # ── App Config ──────────────────────────────────────────
     environment: str = "dev"  # dev | staging | prod — controls docs visibility
@@ -108,9 +108,7 @@ class Settings(BaseSettings):
     max_seq_length: int | None = None
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    prs_threshold: float = (
-        0.5  # MLP probability threshold (0.5 matches LectureBank BGE-M3 evaluation)
-    )
+    prs_threshold: float | None = None  # None = use threshold from ViMath checkpoint metadata
     adaptive_mastery_threshold: float = 0.75
     similarity_threshold: float = 0.9
     adaptive_exercise_recent_same_concept_limit: int = Field(
@@ -156,6 +154,7 @@ class Settings(BaseSettings):
     content_pipeline_long_stage_retry_after_sec: int = 10
     content_pipeline_delayed_retry_after_sec: int = 15
     content_pipeline_job_delayed_after_sec: int = 360
+    content_pipeline_debug_artifact_max_chars: int = 80_000
     # ── Pipeline resilience (reaper / recovery / dedup) ───────
     content_pipeline_reaper_interval_sec: int = 60
     content_pipeline_job_stalled_after_sec: int = 900

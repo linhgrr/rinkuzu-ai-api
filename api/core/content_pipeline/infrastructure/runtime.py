@@ -17,6 +17,7 @@ from loguru import logger
 
 from api.config import get_settings
 from api.core.content_pipeline.application.relation_engine import DefaultRelationEngine
+from api.core.content_pipeline.domain.relations import RelationCandidate
 
 from .graph.builder import KnowledgeGraphBuilder
 from .graph.cycle_removal import make_dag_with_llm
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 
     from api.core.content_pipeline.application.ports import RelationEngine
 
-PrereqRankingFn = Callable[[list[Any], float], list[tuple[str, str]]]
+PrereqRankingFn = Callable[[list[Any], float | None], list[RelationCandidate]]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CONTENT_PROCESSOR_SRC = str(PROJECT_ROOT)
@@ -137,8 +138,8 @@ def _build_relation_engine(*, extraction_chain: Any) -> Any:
 
         def rank_prerequisites_stub(
             _items: list[Any],
-            _threshold: float,
-        ) -> list[tuple[str, str]]:
+            _threshold: float | None,
+        ) -> list[RelationCandidate]:
             raise ModuleNotFoundError("torch + transformers required for MLP prerequisite ranking")
 
         rank_fn: PrereqRankingFn = rank_prerequisites_stub

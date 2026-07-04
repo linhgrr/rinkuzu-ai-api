@@ -28,6 +28,7 @@ from .core.content_pipeline.application.stages.execution import shutdown_pipelin
 from .core.content_pipeline.application.stages.model_worker import (
     shutdown_sentence_transformer_worker,
 )
+from .core.content_pipeline.domain.jobs import PipelineJob
 from .core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
 from .core.content_pipeline.infrastructure.runtime import (
     CONTENT_PROCESSOR_AVAILABLE,
@@ -120,13 +121,13 @@ def _init_pipeline(app: FastAPI) -> None:
     )
 
     async def run_content_pipeline(
-        job: Any,
-        file_path: Any,
-        prs_threshold: Any,
-        min_confidence: Any,
+        job: PipelineJob,
+        file_path: str,
+        prs_threshold: float | None,
+        min_confidence: float,
         *,
-        apply_reduction: Any,
-        page_batch_size: Any,
+        apply_reduction: bool,
+        page_batch_size: int,
     ) -> None:
         await pipeline_runner.run(
             job,

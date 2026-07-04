@@ -13,29 +13,17 @@ def serialize_concepts(concepts: list[Any]) -> tuple[dict[str, dict[str, Any]], 
     for index, concept in enumerate(concepts):
         concept_id = concept.concept_id
         concept_map[concept_id] = index
-        serialized_relations: list[dict[str, Any]] = []
-        if hasattr(concept, "relations") and concept.relations:
-            serialized_relations.extend(
-                {
-                    "type": relation.type,
-                    "target_id": relation.target_id,
-                    "confidence": relation.confidence,
-                    "evidence": relation.evidence,
-                }
-                for relation in concept.relations
-            )
-
         concepts_data[concept_id] = {
             "name": concept.name,
             "definition": concept.definition,
             "examples": concept.examples if hasattr(concept, "examples") else [],
-            "relations": serialized_relations,
+            "relations": [],
         }
 
     return concepts_data, concept_map
 
 
-def serialize_prerequisite_edges(graph: Any, concept_map: dict[str, int]) -> list[dict[str, str]]:
+def serialize_prerequisite_edges(graph: Any, concept_map: dict[str, int]) -> list[dict[str, Any]]:
     """Extract prerequisite edges from the final graph payload."""
     prereq_edges = []
     for source_id, target_id, data in graph.edges(data=True):
@@ -45,7 +33,19 @@ def serialize_prerequisite_edges(graph: Any, concept_map: dict[str, int]) -> lis
             and source_id in concept_map
             and target_id in concept_map
         ):
-            prereq_edges.append({"source": source_id, "target": target_id})
+            edge: dict[str, Any] = {"source": source_id, "target": target_id}
+            for key in (
+                "confidence",
+                "evidence",
+                "reasoning",
+                "sources",
+                "ranker_score",
+                "extraction_confidence",
+            ):
+                value = data.get(key)
+                if value not in (None, [], ""):
+                    edge[key] = value
+            prereq_edges.append(edge)
     return prereq_edges
 
 
@@ -69,7 +69,7 @@ def assemble_pipeline_result(
     *,
     concepts_data: dict[str, dict[str, Any]],
     concept_map: dict[str, int],
-    prereq_edges: list[dict[str, str]],
+    prereq_edges: list[dict[str, Any]],
     concept_embeddings: list[list[float]] | None,
     stats: dict[str, Any],
 ) -> dict[str, Any]:

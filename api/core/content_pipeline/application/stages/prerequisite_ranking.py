@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 from .execution import run_blocking_stage
+
+if TYPE_CHECKING:
+    from api.core.content_pipeline.domain.relations import RelationCandidate
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
 
@@ -16,16 +19,16 @@ async def rank_candidate_prerequisites(
     job: PipelineJob,
     *,
     concepts: list[Any],
-    prs_threshold: float,
-    rank_prerequisites: Callable[[list[Any], float], list[tuple[str, str]]],
+    prs_threshold: float | None,
+    rank_prerequisites: Callable[[list[Any], float | None], list[RelationCandidate]],
     persist_job_state: PersistJobStateFn,
-) -> list[tuple[str, str]]:
+) -> list[RelationCandidate]:
     """Rank candidate prerequisite pairs and persist stage progress."""
     await persist_job_state(
         job, PipelineStatus.RANKING, "Ranking prerequisites...", PipelineProgress.RANKING_START
     )
 
-    candidate_pairs: list[tuple[str, str]] = await run_blocking_stage(
+    candidates: list[RelationCandidate] = await run_blocking_stage(
         rank_prerequisites,
         concepts,
         prs_threshold,
@@ -35,4 +38,4 @@ async def rank_candidate_prerequisites(
     await persist_job_state(
         job, PipelineStatus.RANKING, "Ranking prerequisites...", PipelineProgress.RANKING_DONE
     )
-    return candidate_pairs
+    return candidates

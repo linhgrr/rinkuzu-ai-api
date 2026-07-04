@@ -42,14 +42,7 @@ def test_serialize_concepts_returns_serializable_payloads_and_index_map():
             "name": "Alpha",
             "definition": "alpha def",
             "examples": ["ex1"],
-            "relations": [
-                {
-                    "type": "PREREQUISITE",
-                    "target_id": "c2",
-                    "confidence": 0.8,
-                    "evidence": "because",
-                }
-            ],
+            "relations": [],
         },
         "c2": {
             "name": "Beta",
@@ -62,13 +55,28 @@ def test_serialize_concepts_returns_serializable_payloads_and_index_map():
 
 def test_serialize_prerequisite_edges_keeps_only_known_prerequisite_edges():
     graph = nx.DiGraph()
-    graph.add_edge("c1", "c2", relation_type="PREREQUISITE")
+    graph.add_edge(
+        "c1",
+        "c2",
+        relation_type="PREREQUISITE",
+        confidence=0.8,
+        evidence=["because"],
+        sources=["mlp"],
+    )
     graph.add_edge("c2", "ghost", relation_type="PREREQUISITE")
     graph.add_edge("c1", "c2x", relation_type="RELATED")
 
     prereq_edges = serialize_prerequisite_edges(graph, {"c1": 0, "c2": 1})
 
-    assert prereq_edges == [{"source": "c1", "target": "c2"}]
+    assert prereq_edges == [
+        {
+            "source": "c1",
+            "target": "c2",
+            "confidence": 0.8,
+            "evidence": ["because"],
+            "sources": ["mlp"],
+        }
+    ]
 
 
 def test_assemble_pipeline_result_builds_final_payload_shape():

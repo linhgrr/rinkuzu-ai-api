@@ -7,35 +7,11 @@ from api.core.content_pipeline.application.stages.graph_building import (
     build_knowledge_graph,
     build_partial_graph,
     remove_invalid_graph_members,
-    sanitize_concept_relations,
 )
 from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.core.content_pipeline.domain.relations import VerifiedRelation
 from api.core.content_pipeline.infrastructure.graph.builder import KnowledgeGraphBuilder
 from api.core.content_pipeline.infrastructure.llm.schemas import Concept, Relation
-
-
-def test_sanitize_concept_relations_drops_invalid_and_duplicate_relations():
-    concepts = [
-        SimpleNamespace(
-            concept_id="c1",
-            name="Alpha",
-            relations=[
-                SimpleNamespace(type="PREREQUISITE", target_id="c2"),
-                SimpleNamespace(type="PREREQUISITE", target_id="c2"),
-                SimpleNamespace(type="RELATED", target_id="c2"),
-                SimpleNamespace(type="PREREQUISITE", target_id="missing"),
-                SimpleNamespace(type="PREREQUISITE", target_id="c1"),
-            ],
-        ),
-        SimpleNamespace(concept_id="c2", name="Beta", relations=[]),
-    ]
-
-    kept, dropped = sanitize_concept_relations(concepts)
-
-    assert kept == 1
-    assert dropped == 3
-    assert len(concepts[0].relations) == 1
-    assert concepts[0].relations[0].target_id == "c2"
 
 
 def test_remove_invalid_graph_members_keeps_only_valid_prerequisite_edges():
@@ -70,7 +46,7 @@ def test_build_partial_graph_serializes_nodes_and_edges():
     }
 
 
-def test_build_knowledge_graph_translates_extracted_dependency_relations_to_prereq_edges():
+def test_build_knowledge_graph_does_not_insert_unverified_extracted_relations():
     concepts = [
         Concept(
             concept_id="ohms_law",
@@ -109,13 +85,13 @@ def test_build_knowledge_graph_translates_extracted_dependency_relations_to_prer
         )
     )
 
-    assert set(graph.edges()) == {("electric_current", "ohms_law")}
+    assert set(graph.edges()) == set()
     assert job.partial_graph == {
         "nodes": [
             {"id": "ohms_law", "name": "Ohm's law"},
             {"id": "electric_current", "name": "Electric current"},
         ],
-        "edges": [{"source": "electric_current", "target": "ohms_law"}],
+        "edges": [],
     }
 
 
@@ -124,21 +100,15 @@ class _BuilderStub:
         self.subject_id = subject_id
         self._graph = nx.DiGraph()
 
-    def add_concepts(self, concepts):
+    def add_concept_nodes(self, concepts):
         for concept in concepts:
             self._graph.add_node(concept.concept_id)
-            for relation in getattr(concept, "relations", []) or []:
-                self._graph.add_edge(
-                    concept.concept_id,
-                    relation.target_id,
-                    relation_type=relation.type,
-                )
 
     def get_graph(self):
         return self._graph
 
-    def add_relation(self, source_id: str, target_id: str, relation_type: str):
-        self._graph.add_edge(source_id, target_id, relation_type=relation_type)
+    def add_relation(self, source_id: str, target_id: str, relation_type: str, **kwargs):
+        self._graph.add_edge(source_id, target_id, relation_type=relation_type, **kwargs)
 
     def get_stats(self):
         return {"builder_subject_id": self.subject_id}
@@ -158,8 +128,8 @@ def test_build_knowledge_graph_updates_partial_graph_and_stats():
         ),
     ]
     verified_relations = [
-        ("c2", "c1", SimpleNamespace(direction="A_to_B")),
-        ("ghost", "c1", SimpleNamespace(direction="A_to_B")),
+        VerifiedRelation(source_id="c2", target_id="c1", confidence=0.8),
+        VerifiedRelation(source_id="ghost", target_id="c1", confidence=0.8),
     ]
     job = PipelineJob(job_id="job-1", filename="lesson.pdf", subject_id="algebra")
     calls = []
@@ -179,10 +149,9 @@ def test_build_knowledge_graph_updates_partial_graph_and_stats():
     )
 
     assert isinstance(graph, nx.DiGraph)
-    assert set(graph.edges()) == {("c1", "c2"), ("c2", "c1")}
+    assert set(graph.edges()) == {("c2", "c1")}
     assert stats == {
         "base_graph_stats": {"builder_subject_id": "algebra"},
-        "extracted_relation_count": 1,
         "verified_relation_count": 1,
     }
     assert job.partial_graph == {
@@ -190,10 +159,7 @@ def test_build_knowledge_graph_updates_partial_graph_and_stats():
             {"id": "c1", "name": "Alpha"},
             {"id": "c2", "name": "Beta"},
         ],
-        "edges": [
-            {"source": "c1", "target": "c2"},
-            {"source": "c2", "target": "c1"},
-        ],
+        "edges": [{"source": "c2", "target": "c1"}],
     }
     assert calls == [
         (PipelineStatus.BUILDING_GRAPH, "Building knowledge graph...", 0.85),

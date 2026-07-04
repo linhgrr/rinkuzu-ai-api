@@ -42,6 +42,57 @@ class PipelinePartialGraphNodeResponse(BaseModel):
 class PipelinePartialGraphEdgeResponse(BaseModel):
     source: str
     target: str
+    confidence: float | None = None
+    evidence: list[str] | None = None
+    reasoning: str | None = None
+    sources: list[str] | None = None
+    ranker_score: float | None = None
+    extraction_confidence: float | None = None
+
+
+class PipelineQualityChecksResponse(BaseModel):
+    has_concepts: bool = False
+    edges_reference_known_concepts: bool = False
+    is_dag: bool = False
+    extraction_failure_ratio_ok: bool = False
+    has_verified_relation_when_multi_concept: bool = False
+
+
+class PipelineQualityReportResponse(BaseModel):
+    passed: bool = False
+    checks: PipelineQualityChecksResponse = Field(default_factory=PipelineQualityChecksResponse)
+    concept_count: int = 0
+    candidate_relation_count: int = 0
+    verified_relation_count: int = 0
+    extraction_failure_ratio: float = 0.0
+    invalid_edge_count: int = 0
+
+
+class PipelineDebugArtifactResponse(BaseModel):
+    artifact_id: str = ""
+    kind: str = ""
+    label: str = ""
+    index: int = 0
+    page_start: int | None = None
+    page_end: int | None = None
+    input: dict[str, object] = Field(default_factory=dict)
+    output: dict[str, object] = Field(default_factory=dict)
+    content_type: str = "text/plain"
+    content: str = ""
+    truncated: bool = False
+
+
+class PipelineDebugTraceEntryResponse(BaseModel):
+    step_id: str = ""
+    label: str = ""
+    status: str = ""
+    started_at: float = 0.0
+    completed_at: float | None = None
+    duration_ms: float | None = None
+    input: dict[str, object] = Field(default_factory=dict)
+    output: dict[str, object] | None = None
+    error: str | None = None
+    artifacts: list[PipelineDebugArtifactResponse] = Field(default_factory=list)
 
 
 class PipelinePartialGraphResponse(BaseModel):
@@ -69,9 +120,13 @@ class PipelineGraphStatsResponse(BaseModel):
     num_nodes: int | None = None
     num_edges: int | None = None
     is_dag: bool | None = None
-    relations_from_extraction: int | None = None
-    relations_from_verification: int | None = None
+    relation_candidates: int | None = None
+    relation_candidates_from_extraction: int | None = None
+    relation_candidates_from_mlp: int | None = None
+    relations_inserted_after_verification: int | None = None
+    relations_extraction_candidates_dropped: int | None = None
     relations_verified: int | None = None
+    quality_report: PipelineQualityReportResponse | None = None
     builder_subject_id: str | None = None
     cycle_stats: PipelineCycleStatsResponse | None = None
 
@@ -81,6 +136,7 @@ class PipelineJobResultResponse(BaseModel):
         default_factory=lambda: PipelineGraphResponse(nodes=[], edges=[])
     )
     stats: PipelineGraphStatsResponse = Field(default_factory=PipelineGraphStatsResponse)
+    quality_report: PipelineQualityReportResponse | None = None
     n_concepts: int = 0
 
 
@@ -100,6 +156,8 @@ class PipelineJobStatusResponse(BaseModel):
     concepts_after_merge: int = 0
     relations_verified: int = 0
     graph_stats: PipelineGraphStatsResponse = Field(default_factory=PipelineGraphStatsResponse)
+    quality_report: PipelineQualityReportResponse | None = None
+    debug_trace: list[PipelineDebugTraceEntryResponse] = Field(default_factory=list)
     error_message: str | None = None
     error_code: str | None = None
     user_message: str | None = None
@@ -132,6 +190,7 @@ class PipelineJobListItemResponse(BaseModel):
     concepts_extracted: int = 0
     concepts_after_merge: int = 0
     relations_verified: int = 0
+    quality_report: PipelineQualityReportResponse | None = None
     error_code: str | None = None
     user_message: str | None = None
     retryable: bool = False
