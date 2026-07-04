@@ -389,11 +389,21 @@ async def get_job_status(
         "partial_graph": job_doc.get("partial_graph"),
     }
     if status_value == PipelineStatus.COMPLETED.value and result:
+        concept_map = result.get("concept_map", {})
+        concept_embeddings = result.get("concept_embeddings", [])
         response["result"] = {
             "graph": result.get("graph", {"nodes": [], "edges": []}),
             "stats": result.get("stats", {}),
             "quality_report": result.get("quality_report"),
-            "n_concepts": len(result.get("concept_map", {})),
+            "n_concepts": len(concept_map) if isinstance(concept_map, dict) else 0,
+            "concepts_data": result.get("concepts_data", {}),
+            "concept_map": concept_map,
+            "concept_embedding_count": len(concept_embeddings)
+            if isinstance(concept_embeddings, list)
+            else 0,
+            "prereq_edges": result.get("prereq_edges", []),
+            "failed_batches": failed_batches if isinstance(failed_batches, list) else [],
+            "warnings": warnings if isinstance(warnings, list) else [],
         }
     return ok(response)
 

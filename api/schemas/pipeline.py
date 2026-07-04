@@ -138,6 +138,12 @@ class PipelineJobResultResponse(BaseModel):
     stats: PipelineGraphStatsResponse = Field(default_factory=PipelineGraphStatsResponse)
     quality_report: PipelineQualityReportResponse | None = None
     n_concepts: int = 0
+    concepts_data: dict[str, dict[str, object]] = Field(default_factory=dict)
+    concept_map: dict[str, int] = Field(default_factory=dict)
+    concept_embedding_count: int = 0
+    prereq_edges: list[dict[str, object]] = Field(default_factory=list)
+    failed_batches: list[object] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class PipelineJobStatusResponse(BaseModel):
