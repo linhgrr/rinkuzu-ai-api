@@ -30,13 +30,17 @@ from api.core.shared.persistence import (
     load_quiz_draft_for_user,
     update_quiz_draft_for_user,
 )
-from api.core.shared.s3 import get_s3_client
+from api.core.shared.s3 import get_quiz_draft_s3_client, get_s3_client
 
 if TYPE_CHECKING:
     from api.schemas.quiz_draft import QuizDraftCreateRequest, QuizDraftPatchRequest
 
 EXPIRY_HOURS = 48
-TOTAL_STEPS = 1
+TOTAL_STEPS = 3
+SOURCE_STEP = 1
+OCR_STEP = 2
+SOURCE_DOWNLOAD_TIMEOUT_SEC = 45
+QUIZ_DRAFT_JOB_TIMEOUT_SEC = 600
 
 
 class QuizDraftServiceError(Exception):
@@ -210,81 +214,138 @@ class QuizDraftService:
         """Run extraction in the background and persist final draft state."""
         try:
             logger.info("[quiz_draft] processing_started draft_id={} user_id={}", draft_id, user_id)
-            draft = await self.get_draft(draft_id, user_id)
-            if draft.get("status") in {"cancelled", "submitted", "completed"}:
-                return
-
-            await update_quiz_draft_for_user(
-                draft_id,
-                user_id,
-                {"status": "processing", "error": None},
+            async with asyncio.timeout(QUIZ_DRAFT_JOB_TIMEOUT_SEC):
+                await self._run_processing_stages(draft_id, user_id)
+        except asyncio.CancelledError:
+            await asyncio.shield(self._mark_interrupted(draft_id, user_id))
+            logger.warning(
+                "[quiz_draft] processing_interrupted draft_id={} user_id={}", draft_id, user_id
             )
-
-            settings = get_settings()
-            s3_key = draft.get("pdf", {}).get("s3_key")
-            if not s3_key:
-                raise QuizDraftValidationError("PDF is missing.")
-            bucket_name, model = self._require_processing_settings(settings)
-            pdf_bytes = await asyncio.to_thread(
-                self._read_pdf_bytes,
-                get_s3_client(),
-                bucket_name,
-                s3_key,
-            )
-            page_count = await asyncio.to_thread(self._count_pdf_pages, pdf_bytes)
-            logger.info(
-                "[quiz_draft] source_loaded draft_id={} bytes={} pages={}",
-                draft_id,
-                len(pdf_bytes),
-                page_count,
-            )
-            await update_quiz_draft_for_user(
-                draft_id,
-                user_id,
-                {
-                    "pdf": {
-                        **(draft.get("pdf") or {}),
-                        "file_size": len(pdf_bytes),
-                        "page_count": page_count,
-                    }
-                },
-            )
-            filename = draft.get("pdf", {}).get("file_name") or "quiz-source.pdf"
-            document_text = await self._load_or_extract_document_text(
-                pdf_bytes=pdf_bytes,
-                filename=filename,
-            )
-            questions = await invoke_document_text_extract_llm(
-                document_text=document_text,
-                filename=filename,
-                prompt=build_extraction_prompt(draft.get("prompt")),
-                model=model,
-            )
-            if not questions:
-                raise QuizDraftValidationError("No quiz questions extracted from PDF.")
-
-            latest = await load_quiz_draft_for_user(draft_id, user_id)
-            if not latest or latest.get("status") in {"cancelled", "submitted"}:
-                return
-
-            await update_quiz_draft_for_user(
-                draft_id,
-                user_id,
-                {
-                    "status": "completed",
-                    "progress": {"processed": TOTAL_STEPS, "total": TOTAL_STEPS, "percent": 100},
-                    "questions": questions,
-                    "error": None,
-                },
-            )
-            logger.info(
-                "[quiz_draft] processing_completed draft_id={} user_id={}", draft_id, user_id
+            raise
+        except TimeoutError:
+            message = f"Quiz extraction exceeded {QUIZ_DRAFT_JOB_TIMEOUT_SEC} seconds."
+            await self._mark_failed(draft_id, user_id, message)
+            logger.error(
+                "[quiz_draft] processing_timed_out draft_id={} user_id={}", draft_id, user_id
             )
         except Exception as exc:
             await self._mark_failed(draft_id, user_id, str(exc) or "Quiz extraction failed.")
             logger.exception(
                 "[quiz_draft] processing_failed draft_id={} user_id={}", draft_id, user_id
             )
+
+    async def _run_processing_stages(self, draft_id: str, user_id: str) -> None:
+        draft = await self.get_draft(draft_id, user_id)
+        if draft.get("status") in {"cancelled", "submitted", "completed"}:
+            return
+
+        await self._persist_or_raise(
+            draft_id,
+            user_id,
+            {
+                "status": "processing",
+                "progress": {"processed": 0, "total": TOTAL_STEPS, "percent": 0},
+                "error": None,
+            },
+        )
+
+        settings = get_settings()
+        s3_key = draft.get("pdf", {}).get("s3_key")
+        if not s3_key:
+            raise QuizDraftValidationError("PDF is missing.")
+        bucket_name, model = self._require_processing_settings(settings)
+        logger.info("[quiz_draft] source_download_started draft_id={} key={}", draft_id, s3_key)
+        try:
+            async with asyncio.timeout(SOURCE_DOWNLOAD_TIMEOUT_SEC):
+                pdf_bytes = await asyncio.to_thread(
+                    self._read_pdf_bytes,
+                    get_quiz_draft_s3_client(),
+                    bucket_name,
+                    s3_key,
+                )
+                page_count = await asyncio.to_thread(self._count_pdf_pages, pdf_bytes)
+        except TimeoutError as exc:
+            raise QuizDraftDependencyError(
+                f"Source download exceeded {SOURCE_DOWNLOAD_TIMEOUT_SEC} seconds."
+            ) from exc
+        logger.info(
+            "[quiz_draft] source_loaded draft_id={} bytes={} pages={}",
+            draft_id,
+            len(pdf_bytes),
+            page_count,
+        )
+        await self._persist_or_raise(
+            draft_id,
+            user_id,
+            {
+                "pdf": {
+                    **(draft.get("pdf") or {}),
+                    "file_size": len(pdf_bytes),
+                    "page_count": page_count,
+                },
+                "progress": {"processed": SOURCE_STEP, "total": TOTAL_STEPS, "percent": 33},
+            },
+        )
+
+        filename = draft.get("pdf", {}).get("file_name") or "quiz-source.pdf"
+        logger.info("[quiz_draft] ocr_started draft_id={} file={}", draft_id, filename)
+        document_text = await self._load_or_extract_document_text(
+            pdf_bytes=pdf_bytes,
+            filename=filename,
+        )
+        logger.info(
+            "[quiz_draft] ocr_completed draft_id={} chars={} cache_hit={}",
+            draft_id,
+            len(document_text.text),
+            bool(document_text.metadata.get("ocr_cache_hit")),
+        )
+        await self._persist_or_raise(
+            draft_id,
+            user_id,
+            {"progress": {"processed": OCR_STEP, "total": TOTAL_STEPS, "percent": 67}},
+        )
+
+        logger.info(
+            "[quiz_draft] llm_started draft_id={} model={} chars={}",
+            draft_id,
+            model,
+            len(document_text.text),
+        )
+        questions = await invoke_document_text_extract_llm(
+            document_text=document_text,
+            filename=filename,
+            prompt=build_extraction_prompt(draft.get("prompt")),
+            model=model,
+        )
+        if not questions:
+            raise QuizDraftValidationError("No quiz questions extracted from PDF.")
+
+        latest = await load_quiz_draft_for_user(draft_id, user_id)
+        if not latest or latest.get("status") in {"cancelled", "submitted"}:
+            return
+
+        await self._persist_or_raise(
+            draft_id,
+            user_id,
+            {
+                "status": "completed",
+                "progress": {"processed": TOTAL_STEPS, "total": TOTAL_STEPS, "percent": 100},
+                "questions": questions,
+                "error": None,
+            },
+        )
+        logger.info("[quiz_draft] processing_completed draft_id={} user_id={}", draft_id, user_id)
+
+    @staticmethod
+    async def _persist_or_raise(
+        draft_id: str,
+        user_id: str,
+        updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        updated = await update_quiz_draft_for_user(draft_id, user_id, updates)
+        if not updated:
+            raise QuizDraftDependencyError("Failed to persist quiz draft processing state.")
+        return updated
 
     async def _load_or_extract_document_text(
         self,
@@ -304,7 +365,7 @@ class QuizDraftService:
         )
 
     async def _mark_failed(self, draft_id: str, user_id: str, message: str) -> None:
-        await update_quiz_draft_for_user(
+        updated = await update_quiz_draft_for_user(
             draft_id,
             user_id,
             {
@@ -313,6 +374,31 @@ class QuizDraftService:
                 "error": message,
             },
         )
+        if not updated:
+            logger.error(
+                "[quiz_draft] failed_state_not_persisted draft_id={} user_id={}",
+                draft_id,
+                user_id,
+            )
+
+    async def _mark_interrupted(self, draft_id: str, user_id: str) -> None:
+        latest = await load_quiz_draft_for_user(draft_id, user_id)
+        if not latest or latest.get("status") in {"cancelled", "submitted", "completed"}:
+            return
+        updated = await update_quiz_draft_for_user(
+            draft_id,
+            user_id,
+            {
+                "status": "queued",
+                "error": "Processing interrupted; queued for recovery.",
+            },
+        )
+        if not updated:
+            logger.error(
+                "[quiz_draft] interrupted_state_not_persisted draft_id={} user_id={}",
+                draft_id,
+                user_id,
+            )
 
     @staticmethod
     def _normalize_and_validate_s3_key(s3_key: str, user_id: str) -> str:

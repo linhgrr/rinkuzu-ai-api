@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -37,7 +38,7 @@ def test_public_draft_uses_safe_defaults():
 
     assert draft["draft_id"] == "draft-1"
     assert draft["questions"] == []
-    assert draft["progress"] == {"processed": 0, "total": 1, "percent": 0}
+    assert draft["progress"] == {"processed": 0, "total": 3, "percent": 0}
 
 
 @pytest.mark.asyncio
@@ -295,7 +296,7 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
     def _get_s3_client():
         return fake_s3_client
 
-    monkeypatch.setattr(draft_service_module, "get_s3_client", _get_s3_client)
+    monkeypatch.setattr(draft_service_module, "get_quiz_draft_s3_client", _get_s3_client)
     monkeypatch.setattr(service, "_read_pdf_bytes", lambda *_args: b"%PDF-demo")
     monkeypatch.setattr(service, "_count_pdf_pages", lambda _bytes: 1)
 
@@ -331,4 +332,62 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
     assert updates[0]["status"] == "processing"
     assert updates[1]["pdf"]["file_size"] == len(b"%PDF-demo")
     assert updates[1]["pdf"]["page_count"] == 1
+    assert updates[1]["progress"] == {"processed": 1, "total": 3, "percent": 33}
+    assert updates[2]["progress"] == {"processed": 2, "total": 3, "percent": 67}
     assert updates[-1]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_process_draft_marks_source_timeout_as_failed(monkeypatch):
+    service = QuizDraftService()
+    failures: list[str] = []
+
+    async def fake_run(_draft_id: str, _user_id: str):
+        await asyncio.sleep(1)
+
+    async def fake_mark_failed(_draft_id: str, _user_id: str, message: str):
+        failures.append(message)
+
+    monkeypatch.setattr(service, "_run_processing_stages", fake_run)
+    monkeypatch.setattr(service, "_mark_failed", fake_mark_failed)
+    monkeypatch.setattr(draft_service_module, "QUIZ_DRAFT_JOB_TIMEOUT_SEC", 0.001)
+
+    await service.process_draft("draft-1", "user-1")
+
+    assert failures == ["Quiz extraction exceeded 0.001 seconds."]
+
+
+@pytest.mark.asyncio
+async def test_process_draft_requeues_cancelled_task(monkeypatch):
+    service = QuizDraftService()
+    interrupted: list[tuple[str, str]] = []
+
+    async def fake_run(_draft_id: str, _user_id: str):
+        raise asyncio.CancelledError
+
+    async def fake_mark_interrupted(draft_id: str, user_id: str):
+        interrupted.append((draft_id, user_id))
+
+    monkeypatch.setattr(service, "_run_processing_stages", fake_run)
+    monkeypatch.setattr(service, "_mark_interrupted", fake_mark_interrupted)
+
+    with pytest.raises(asyncio.CancelledError):
+        await service.process_draft("draft-1", "user-1")
+
+    assert interrupted == [("draft-1", "user-1")]
+
+
+@pytest.mark.asyncio
+async def test_interruption_does_not_requeue_terminal_draft(monkeypatch):
+    service = QuizDraftService()
+
+    async def fake_load(_draft_id: str, _user_id: str):
+        return {"status": "completed"}
+
+    async def fail_update(*_args, **_kwargs):
+        raise AssertionError("terminal draft must not be requeued")
+
+    monkeypatch.setattr(draft_service_module, "load_quiz_draft_for_user", fake_load)
+    monkeypatch.setattr(draft_service_module, "update_quiz_draft_for_user", fail_update)
+
+    await service._mark_interrupted("draft-1", "user-1")

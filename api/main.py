@@ -38,6 +38,7 @@ from .core.content_pipeline.infrastructure.runtime import (
 from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import ChunkChromaStore
 from .core.learning.exercise_service import ExerciseService
 from .core.learning.session import SessionManager
+from .core.quiz.draft_tasks import quiz_draft_task_manager
 from .core.shared import mongo_store
 from .core.shared.persistence import (
     load_pipeline_job,
@@ -247,6 +248,8 @@ async def lifespan(app: FastAPI) -> Any:
 
     _init_pipeline(app)
     _purge_stale_uploads()
+    if mongo_store.is_available():
+        await quiz_draft_task_manager.recover()
 
     janitor = getattr(app.state, "pipeline_janitor", None)
     if janitor is not None and CONTENT_PROCESSOR_AVAILABLE and mongo_store.is_available():
@@ -258,6 +261,7 @@ async def lifespan(app: FastAPI) -> Any:
     yield
 
     logger.info("Shutting down...")
+    await quiz_draft_task_manager.shutdown()
     janitor = getattr(app.state, "pipeline_janitor", None)
     if janitor is not None:
         await janitor.stop()

@@ -155,6 +155,31 @@ async def list_recent_quiz_drafts_for_user(user_id: str, limit: int = 20) -> lis
     return [_document_to_public_dict(doc) for doc in docs]
 
 
+async def list_recoverable_quiz_drafts(limit: int = 100) -> list[dict[str, Any]]:
+    """Return queued/in-flight drafts that need an application-owned worker task."""
+    try:
+        docs = await (
+            QuizDraftDocument.find(
+                {
+                    "status": {
+                        "$in": [
+                            QuizDraftStatus.QUEUED.value,
+                            QuizDraftStatus.PROCESSING.value,
+                        ]
+                    }
+                },
+                projection_model=QuizDraftListProjection,
+            )
+            .sort(("created_at", SortDirection.ASCENDING))
+            .limit(limit)
+            .to_list()
+        )
+    except Exception:
+        logger.exception("[QuizDraftStore] list_recoverable failed")
+        return []
+    return [_document_to_public_dict(doc) for doc in docs]
+
+
 async def delete_quiz_draft_for_user(draft_id: str, user_id: str) -> dict[str, Any] | None:
     try:
         doc = await QuizDraftDocument.find_one(

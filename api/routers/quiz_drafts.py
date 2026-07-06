@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.config import get_settings
 from api.core.quiz.draft_service import (
@@ -12,6 +12,7 @@ from api.core.quiz.draft_service import (
     QuizDraftValidationError,
     public_draft,
 )
+from api.core.quiz.draft_tasks import quiz_draft_task_manager
 from api.dependencies import get_current_user
 from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
@@ -42,7 +43,6 @@ def _service_error_to_http(exc: Exception) -> HTTPException:
 async def create_quiz_draft(
     request: Request,
     req: QuizDraftCreateRequest,
-    background_tasks: BackgroundTasks,
     user_id: Annotated[str, Depends(get_current_user)],
 ) -> Any:
     """Create a new quiz draft and enqueue AI processing."""
@@ -53,7 +53,7 @@ async def create_quiz_draft(
     except Exception as exc:
         raise _service_error_to_http(exc) from exc
 
-    background_tasks.add_task(service.process_draft, draft["draft_id"], user_id)
+    quiz_draft_task_manager.schedule(draft["draft_id"], user_id)
     return ok({"draft": public_draft(draft)})
 
 
@@ -120,6 +120,7 @@ async def delete_quiz_draft(
         draft = await service.delete_draft(draft_id, user_id)
     except Exception as exc:
         raise _service_error_to_http(exc) from exc
+    await quiz_draft_task_manager.cancel(draft_id)
     return ok({"draft": public_draft(draft)})
 
 
