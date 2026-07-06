@@ -183,6 +183,14 @@ class Settings(BaseSettings):
         default=200_000,
         validation_alias="QUIZ_EXTRACT_MAX_CHARS",
     )
+    quiz_extract_source_download_timeout_sec: float = Field(
+        default=180,
+        validation_alias="QUIZ_EXTRACT_SOURCE_DOWNLOAD_TIMEOUT_SEC",
+    )
+    quiz_extract_source_endpoint_timeout_sec: float = Field(
+        default=75,
+        validation_alias="QUIZ_EXTRACT_SOURCE_ENDPOINT_TIMEOUT_SEC",
+    )
 
     # ── S3 Cache ────────────────────────────────────────────
     object_storage_region: str = "ap-southeast-1"
@@ -192,6 +200,9 @@ class Settings(BaseSettings):
     object_storage_secret_key: str | None = None
     object_storage_bucket: str | None = None
     object_storage_addressing_style: str = "path"
+    object_storage_quiz_connect_timeout_sec: float = 10
+    object_storage_quiz_read_timeout_sec: float = 60
+    object_storage_quiz_retry_attempts: int = 2
 
     # ── LangChain / LangSmith ──────────────────────────────
     langchain_tracing_v2: bool = Field(

@@ -25,7 +25,7 @@ def get_s3_client() -> Any:
     )
 
 
-def get_quiz_draft_s3_client() -> Any:
+def get_quiz_draft_s3_client(endpoint_url: str | None = None) -> Any:
     """Build a bounded S3 client for request-independent quiz extraction jobs."""
     settings = get_settings()
     if not settings.s3_available:
@@ -33,14 +33,17 @@ def get_quiz_draft_s3_client() -> Any:
 
     return boto3.client(
         "s3",
-        endpoint_url=settings.object_storage_client_endpoint,
+        endpoint_url=endpoint_url or settings.object_storage_client_endpoint,
         region_name=settings.object_storage_region,
         aws_access_key_id=settings.object_storage_access_key,
         aws_secret_access_key=settings.object_storage_secret_key,
         config=Config(
-            connect_timeout=10,
-            read_timeout=30,
-            retries={"max_attempts": 2, "mode": "standard"},
+            connect_timeout=float(settings.object_storage_quiz_connect_timeout_sec),
+            read_timeout=float(settings.object_storage_quiz_read_timeout_sec),
+            retries={
+                "max_attempts": int(settings.object_storage_quiz_retry_attempts),
+                "mode": "standard",
+            },
             s3={"addressing_style": settings.object_storage_addressing_style or "path"},
         ),
     )

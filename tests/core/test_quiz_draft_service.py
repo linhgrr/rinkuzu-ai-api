@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -293,7 +294,8 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
     )
     fake_s3_client = object()
 
-    def _get_s3_client():
+    def _get_s3_client(*, endpoint_url=None):
+        del endpoint_url
         return fake_s3_client
 
     monkeypatch.setattr(draft_service_module, "get_quiz_draft_s3_client", _get_s3_client)
@@ -334,6 +336,101 @@ async def test_process_draft_uses_document_text_flow(monkeypatch):
     assert updates[1]["pdf"]["page_count"] == 1
     assert updates[1]["progress"] == {"processed": 1, "total": 3, "percent": 33}
     assert updates[2]["progress"] == {"processed": 2, "total": 3, "percent": 67}
+    assert updates[-1]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_process_draft_falls_back_when_primary_source_endpoint_times_out(monkeypatch):
+    service = QuizDraftService()
+    updates: list[dict[str, object]] = []
+    extracted = ExtractedDocumentText(
+        text="## Trang 1\nNội dung",
+        pages=[],
+        metadata={"page_count": 1},
+    )
+    draft = {
+        "draft_id": "draft-1",
+        "status": "queued",
+        "prompt": None,
+        "pdf": {
+            "s3_key": "uploads/quiz_extract/user-1/file.pdf",
+            "file_name": "file.pdf",
+        },
+    }
+    settings = SimpleNamespace(
+        object_storage_bucket="bucket",
+        llm_model="quiz-model",
+        object_storage_client_endpoint="http://internal-storage",
+        object_storage_public_base_url="https://public-storage",
+        object_storage_endpoint_internal="internal-storage",
+        quiz_extract_source_download_timeout_sec=1,
+        quiz_extract_source_endpoint_timeout_sec=0.001,
+    )
+
+    async def fake_get_draft(_draft_id: str, _user_id: str):
+        return draft
+
+    async def fake_update_quiz_draft_for_user(
+        _draft_id: str, _user_id: str, payload: dict[str, object]
+    ):
+        updates.append(payload)
+        return {"status": payload.get("status")}
+
+    def fake_get_quiz_draft_s3_client(*, endpoint_url: str | None = None):
+        return SimpleNamespace(endpoint_url=endpoint_url)
+
+    def fake_read_pdf_bytes(s3_client, *_args):
+        if s3_client.endpoint_url == "http://internal-storage":
+            time.sleep(0.05)
+            return b"%PDF-internal"
+        return b"%PDF-public"
+
+    async def fake_load_or_extract_document_text(**_kwargs):
+        return extracted
+
+    async def fake_invoke_document_text_extract_llm(**_kwargs):
+        return [
+            {
+                "question": "Q1",
+                "type": "single",
+                "options": ["A", "B", "C", "D"],
+                "correctIndex": 0,
+            }
+        ]
+
+    monkeypatch.setattr(service, "get_draft", fake_get_draft)
+    monkeypatch.setattr(
+        draft_service_module,
+        "update_quiz_draft_for_user",
+        fake_update_quiz_draft_for_user,
+    )
+    monkeypatch.setattr(
+        draft_service_module,
+        "load_quiz_draft_for_user",
+        lambda *_args, **_kwargs: fake_get_draft("draft-1", "user-1"),
+    )
+    monkeypatch.setattr(draft_service_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        draft_service_module,
+        "get_quiz_draft_s3_client",
+        fake_get_quiz_draft_s3_client,
+    )
+    monkeypatch.setattr(service, "_read_pdf_bytes", fake_read_pdf_bytes)
+    monkeypatch.setattr(service, "_count_pdf_pages", lambda _bytes: 1)
+    monkeypatch.setattr(
+        service,
+        "_load_or_extract_document_text",
+        fake_load_or_extract_document_text,
+    )
+    monkeypatch.setattr(
+        draft_service_module,
+        "invoke_document_text_extract_llm",
+        fake_invoke_document_text_extract_llm,
+    )
+
+    await service.process_draft("draft-1", "user-1")
+
+    assert updates[1]["pdf"]["file_size"] == len(b"%PDF-public")
     assert updates[-1]["status"] == "completed"
 
 

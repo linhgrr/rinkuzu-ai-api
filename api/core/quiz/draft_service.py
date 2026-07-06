@@ -39,7 +39,8 @@ EXPIRY_HOURS = 48
 TOTAL_STEPS = 3
 SOURCE_STEP = 1
 OCR_STEP = 2
-SOURCE_DOWNLOAD_TIMEOUT_SEC = 45
+SOURCE_DOWNLOAD_TIMEOUT_SEC = 180
+SOURCE_ENDPOINT_TIMEOUT_SEC = 75
 QUIZ_DRAFT_JOB_TIMEOUT_SEC = 600
 
 
@@ -254,19 +255,39 @@ class QuizDraftService:
         if not s3_key:
             raise QuizDraftValidationError("PDF is missing.")
         bucket_name, model = self._require_processing_settings(settings)
-        logger.info("[quiz_draft] source_download_started draft_id={} key={}", draft_id, s3_key)
-        try:
-            async with asyncio.timeout(SOURCE_DOWNLOAD_TIMEOUT_SEC):
-                pdf_bytes = await asyncio.to_thread(
-                    self._read_pdf_bytes,
-                    get_quiz_draft_s3_client(),
-                    bucket_name,
-                    s3_key,
+        source_timeout = float(
+            getattr(
+                settings, "quiz_extract_source_download_timeout_sec", SOURCE_DOWNLOAD_TIMEOUT_SEC
+            )
+        )
+        endpoint_timeout = min(
+            source_timeout,
+            float(
+                getattr(
+                    settings,
+                    "quiz_extract_source_endpoint_timeout_sec",
+                    SOURCE_ENDPOINT_TIMEOUT_SEC,
                 )
-                page_count = await asyncio.to_thread(self._count_pdf_pages, pdf_bytes)
+            ),
+        )
+        logger.info(
+            "[quiz_draft] source_download_started draft_id={} key={} timeout_sec={}",
+            draft_id,
+            s3_key,
+            source_timeout,
+        )
+        try:
+            async with asyncio.timeout(source_timeout):
+                pdf_bytes, page_count = await self._load_source_pdf(
+                    draft_id=draft_id,
+                    settings=settings,
+                    bucket_name=bucket_name,
+                    s3_key=s3_key,
+                    endpoint_timeout_sec=endpoint_timeout,
+                )
         except TimeoutError as exc:
             raise QuizDraftDependencyError(
-                f"Source download exceeded {SOURCE_DOWNLOAD_TIMEOUT_SEC} seconds."
+                f"Source download exceeded {source_timeout:g} seconds."
             ) from exc
         logger.info(
             "[quiz_draft] source_loaded draft_id={} bytes={} pages={}",
@@ -400,6 +421,76 @@ class QuizDraftService:
                 user_id,
             )
 
+    async def _load_source_pdf(
+        self,
+        *,
+        draft_id: str,
+        settings: Any,
+        bucket_name: str,
+        s3_key: str,
+        endpoint_timeout_sec: float,
+    ) -> tuple[bytes, int]:
+        endpoints = self._source_endpoint_urls(settings)
+        last_dependency_error: Exception | None = None
+        for attempt, endpoint_url in enumerate(endpoints, start=1):
+            logger.info(
+                "[quiz_draft] source_endpoint_attempt draft_id={} attempt={}/{} endpoint={}",
+                draft_id,
+                attempt,
+                len(endpoints),
+                endpoint_url,
+            )
+            try:
+                async with asyncio.timeout(endpoint_timeout_sec):
+                    pdf_bytes = await asyncio.to_thread(
+                        self._read_pdf_bytes,
+                        get_quiz_draft_s3_client(endpoint_url=endpoint_url),
+                        bucket_name,
+                        s3_key,
+                    )
+                    page_count = await asyncio.to_thread(self._count_pdf_pages, pdf_bytes)
+                    return pdf_bytes, page_count
+            except TimeoutError as exc:
+                last_dependency_error = exc
+                logger.warning(
+                    "[quiz_draft] source_endpoint_timed_out draft_id={} attempt={}/{} endpoint={} timeout_sec={}",
+                    draft_id,
+                    attempt,
+                    len(endpoints),
+                    endpoint_url,
+                    endpoint_timeout_sec,
+                )
+            except QuizDraftDependencyError as exc:
+                last_dependency_error = exc
+                logger.warning(
+                    "[quiz_draft] source_endpoint_failed draft_id={} attempt={}/{} endpoint={} error={}",
+                    draft_id,
+                    attempt,
+                    len(endpoints),
+                    endpoint_url,
+                    str(exc),
+                )
+
+        raise QuizDraftDependencyError(
+            "Unable to read PDF from object storage after trying all configured endpoints."
+        ) from last_dependency_error
+
+    @staticmethod
+    def _source_endpoint_urls(settings: Any) -> list[str | None]:
+        endpoints: list[str | None] = [
+            getattr(settings, "object_storage_client_endpoint", None),
+            getattr(settings, "object_storage_public_base_url", None),
+            _normalize_object_storage_endpoint(
+                getattr(settings, "object_storage_endpoint_internal", None),
+                default_scheme="http",
+            ),
+        ]
+        deduped: list[str | None] = []
+        for endpoint in endpoints:
+            if endpoint and endpoint not in deduped:
+                deduped.append(endpoint)
+        return deduped or [None]
+
     @staticmethod
     def _normalize_and_validate_s3_key(s3_key: str, user_id: str) -> str:
         normalized_key = s3_key.strip().lstrip("/")
@@ -424,7 +515,7 @@ class QuizDraftService:
             body = response.get("Body")
             pdf_bytes = body.read() if body else b""
         except Exception as exc:
-            raise QuizDraftValidationError("Unable to read PDF for extraction.") from exc
+            raise QuizDraftDependencyError("Unable to read PDF from object storage.") from exc
         if not pdf_bytes:
             raise QuizDraftValidationError("PDF is empty.")
         max_pdf_bytes = int(get_settings().quiz_extract_max_pdf_bytes)
@@ -445,3 +536,12 @@ class QuizDraftService:
             logger.info("[quiz_draft] deleted_pdf key={}", s3_key)
         except Exception:
             logger.exception("[quiz_draft] failed_to_delete_pdf key={}", s3_key)
+
+
+def _normalize_object_storage_endpoint(value: str | None, *, default_scheme: str) -> str | None:
+    raw = (value or "").strip().rstrip("/")
+    if not raw:
+        return None
+    if "://" in raw:
+        return raw
+    return f"{default_scheme}://{raw}"
