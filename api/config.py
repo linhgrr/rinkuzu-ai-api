@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     llm_embedding_model: str = "text-embedding-3-small"
     llm_timeout_sec: float = 150
     llm_max_retries: int = 2
+
+    # ── LLM pricing (USD per 1M tokens) ─────────────────────
+    # Defaults from DeepSeek V4 pricing (cache-miss input). Model name is
+    # matched by substring: "pro" → Pro tier, else Flash.
+    llm_price_flash_input_per_m: float = 0.14
+    llm_price_flash_output_per_m: float = 0.28
+    llm_price_pro_input_per_m: float = 0.435
+    llm_price_pro_output_per_m: float = 0.87
     llm_max_workers: int = Field(
         default=8,
         validation_alias=AliasChoices("LLM_MAX_WORKERS", "ADAPTIVE_LLM_MAX_WORKERS"),

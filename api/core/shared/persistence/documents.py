@@ -313,3 +313,23 @@ class DocumentChunkDocument(Document):
             IndexModel([("job_id", ASCENDING), ("chunk_index", ASCENDING)], unique=True),
             IndexModel([("subject_id", ASCENDING), ("job_id", ASCENDING)]),
         ]
+
+
+class LlmUsageDocument(Document):
+    user_id: str | None = None
+    action: str | None = None
+    model: str
+    provider: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    created_at: datetime = Field(default_factory=utc_now)
+
+    class Settings:
+        name = "llm_usage"
+        indexes: ClassVar[list[IndexModel]] = [
+            IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)]),
+            IndexModel([("created_at", DESCENDING)]),
+            IndexModel([("model", ASCENDING), ("created_at", DESCENDING)]),
+        ]

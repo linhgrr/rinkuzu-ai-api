@@ -50,6 +50,7 @@ from .exceptions import error_json_response, register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
 from .observability import setup_otel, shutdown_otel
 from .rate_limit import limiter
+from .routers import admin_usage as admin_usage_router
 from .routers import history as history_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
@@ -395,6 +396,7 @@ app.include_router(pipeline_router.router)
 app.include_router(history_router.router)
 app.include_router(quiz_drafts_router.router)
 app.include_router(quiz_tutor_router.router)
+app.include_router(admin_usage_router.router)
 
 
 @app.get("/api/live", include_in_schema=False)

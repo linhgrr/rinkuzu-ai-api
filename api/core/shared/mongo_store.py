@@ -14,6 +14,7 @@ from api.config import get_settings
 from api.core.shared.persistence.documents import (
     DocumentChunkDocument,
     DocumentOCRRecordDocument,
+    LlmUsageDocument,
     PipelineJobDocument,
     QuizDraftDocument,
     SubjectProgressDocument,
@@ -62,6 +63,7 @@ async def init_mongo(mongodb_uri: str | None = None) -> bool:
                 QuizDraftDocument,
                 DocumentChunkDocument,
                 DocumentOCRRecordDocument,
+                LlmUsageDocument,
             ],
             allow_index_dropping=allow_index_dropping,
             skip_indexes=skip_indexes,
