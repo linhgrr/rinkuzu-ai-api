@@ -4,6 +4,7 @@ llm.py — Shared LiteLLM-backed abstractions and helpers for the API codebase.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import json
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
 from api.config import get_settings
+from api.core.shared.llm_usage import extract_usage, record_llm_usage
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
@@ -342,6 +344,7 @@ def _litellm_kwargs(
         "extra_headers": _default_headers(),
         "temperature": temperature,
         "stream": stream,
+        **({"stream_options": {"include_usage": True}} if stream else {}),
         **_thinking_kwargs(thinking_enabled),
     }
     if max_tokens is not None:
@@ -376,6 +379,40 @@ def _structured_response_format(config: LLMProviderConfig) -> dict[str, Any] | N
     return _JSON_OBJECT_RESPONSE_FORMAT
 
 
+# Hold strong references to fire-and-forget tasks so they are not garbage
+# collected mid-flight (see RUF006); each task removes itself when done.
+_usage_tasks: set[asyncio.Task[None]] = set()
+
+
+def _record_usage_sync(config: LLMProviderConfig, response: object) -> None:
+    """Fire-and-forget usage recording from a sync context. Best-effort."""
+    usage = extract_usage(response)
+    if not usage:
+        return
+    coro = record_llm_usage(model=config.model, provider=config.custom_llm_provider, usage=usage)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop (pure sync call) — run to completion best-effort.
+        try:
+            asyncio.run(coro)
+        except Exception as exc:
+            logger.debug("[llm_usage] sync record skipped: {}", exc)
+            coro.close()
+        return
+    task = loop.create_task(coro)
+    _usage_tasks.add(task)
+    task.add_done_callback(_usage_tasks.discard)
+
+
+async def _record_usage_async(config: LLMProviderConfig, response: object) -> None:
+    await record_llm_usage(
+        model=config.model,
+        provider=config.custom_llm_provider,
+        usage=extract_usage(response),
+    )
+
+
 class LiteLLMClient(LLMClient):
     """Project-standard LLM client backed by LiteLLM."""
 
@@ -399,6 +436,7 @@ class LiteLLMClient(LLMClient):
                 thinking_enabled=thinking_enabled,
             )
         )
+        _record_usage_sync(self.config, response)
         return extract_llm_text(_extract_response_content(response))
 
     async def stream_text(
@@ -419,7 +457,12 @@ class LiteLLMClient(LLMClient):
                 stream=True,
             )
         )
+        final_usage: dict[str, int] | None = None
         async for chunk in stream:
+            # With include_usage the final chunk carries usage (and empty choices).
+            chunk_usage = extract_usage(chunk)
+            if chunk_usage:
+                final_usage = chunk_usage
             choices = getattr(chunk, "choices", None)
             if choices is None and isinstance(chunk, dict):
                 choices = chunk.get("choices", [])
@@ -427,6 +470,12 @@ class LiteLLMClient(LLMClient):
                 text = _extract_stream_delta_text(_extract_choice_content(choice))
                 if text:
                     yield text
+        if final_usage:
+            await record_llm_usage(
+                model=self.config.model,
+                provider=self.config.custom_llm_provider,
+                usage=final_usage,
+            )
 
     def generate_structured(
         self,
@@ -447,6 +496,7 @@ class LiteLLMClient(LLMClient):
                 response_format=_structured_response_format(self.config),
             )
         )
+        _record_usage_sync(self.config, response)
         content = extract_llm_text(_extract_response_content(response))
         if not content:
             raise TypeError("LLM returned empty structured output.")
@@ -471,6 +521,7 @@ class LiteLLMClient(LLMClient):
                 response_format=_structured_response_format(self.config),
             )
         )
+        await _record_usage_async(self.config, response)
         content = extract_llm_text(_extract_response_content(response))
         if not content:
             raise TypeError("LLM returned empty structured output.")

@@ -7,6 +7,7 @@ dependencies.py — FastAPI dependency injection functions.
 from fastapi import Header, Request
 
 from .config import Settings, get_settings
+from .core.shared.llm_usage import current_user_id
 from .exceptions import AppError, ServiceUnavailableError, SessionNotFoundError
 
 
@@ -45,6 +46,7 @@ def get_current_user(
             detail="Missing x-user-id header",
             status_code=401,
         )
+    current_user_id.set(x_user_id)
     return x_user_id
 
 
