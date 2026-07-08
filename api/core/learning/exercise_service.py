@@ -1,7 +1,7 @@
 """
 exercise_service.py — Exercise lifecycle business logic.
 
-Handles: concept selection via D3QN, theory generation, exercise generation,
+Handles: concept selection via vanilla DQN, theory generation, exercise generation,
 answer submission, and prefetch caching.
 """
 
@@ -209,7 +209,7 @@ class ExerciseService:
             self._theory_inflight.pop(key, None)
 
     async def get_next_concept(self, session: Any) -> dict[str, Any] | None:
-        """Use D3QN to select the next concept+bloom level."""
+        """Use the vanilla DQN policy to select the next concept+bloom level."""
         if session.status != "active":
             return None
 

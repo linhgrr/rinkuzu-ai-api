@@ -282,7 +282,7 @@ settings = get_settings()
 _is_dev = settings.environment == "dev"
 app = FastAPI(
     title="ALSS-LEPC Adaptive Learning API",
-    description="Adaptive Learning System with SAINT KT + D3QN RL",
+    description="Adaptive Learning System with SAINT KT + vanilla DQN RL",
     version="1.0.0",
     default_response_class=ORJSONResponse,
     contact={

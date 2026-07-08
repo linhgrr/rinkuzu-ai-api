@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ALSS-LEPC Adaptive Learning API",
-    "description": "Adaptive Learning System with SAINT KT + D3QN RL",
+    "description": "Adaptive Learning System with SAINT KT + vanilla DQN RL",
     "version": "1.0.0"
   },
   "paths": {

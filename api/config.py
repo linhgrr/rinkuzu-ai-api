@@ -231,10 +231,6 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LANGCHAIN_ENDPOINT", "LANGSMITH_ENDPOINT"),
     )
 
-    # ── Google/Gemini (legacy) ──────────────────────────────
-    google_api_key: str | None = None
-    gemini_api_key: str | None = None
-
     @property
     def s3_available(self) -> bool:
         return all(
