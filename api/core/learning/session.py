@@ -29,12 +29,17 @@ from api.core.shared.persistence import (
     save_subject_progress_snapshot,
 )
 
-from .bloom import BLOOM_LABEL_SEQUENCE
 from .environment import AdaptiveLearningEnv
 from .exercise_types.payloads import ExercisePayload
 from .models import VanillaQNetwork, load_dqn_model, load_saint_model
 from .pca import apply_concept_pca
-from .progress_metrics import build_prereq_graph_from_edges, summarize_mastery_progress
+from .progress_metrics import build_prereq_graph_from_edges
+from .session_queries import (
+    build_concept_detail,
+    build_knowledge_graph,
+    build_mastery_matrix,
+    build_session_status,
+)
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
 _MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
@@ -84,6 +89,12 @@ class SessionState:
     _prefetch_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     tutor_chat_history: list[dict[str, str]] = field(default_factory=list)
     tutor_chat_exercise_id: str | None = None
+    # Recommendation-in-flight state, set by ExerciseService.get_next_concept
+    # once a concept is picked and consumed by get_theory/generate_exercise.
+    _pending_concept_idx: int | None = None
+    _pending_bloom_level: int | None = None
+    _pending_action: int | None = None
+    _current_recommendation_reason: dict[str, Any] | None = None
 
     @staticmethod
     def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
@@ -478,7 +489,7 @@ class SessionManager:
                 [ex["bloom_level"] for ex in prev_history],
                 [1 if ex.get("is_correct") else 0 for ex in prev_history],
             )
-            obs = env._build_obs()
+            obs = env.build_observation()
 
         session = SessionState(
             session_id=session_id,
@@ -665,172 +676,32 @@ class SessionManager:
             )
             return session, True
 
-    # ── Query Methods ───────────────────────────────────────
+    # ── Query Methods (delegated to session_queries) ────────
 
     def get_session_status(self, session_id: str) -> dict[str, Any] | None:
         """Get full session status."""
         session = self.get_session(session_id)
         if not session:
             return None
-
-        env_stats = session.env.get_session_stats()
-        concept_mastery = session.env.get_concept_mastery()
-        unlocked_mask = session.env.get_prereq_ok_mask(threshold=self._mastery_threshold)
-        progress_metrics = summarize_mastery_progress(
-            concept_mastery=concept_mastery,
-            unlocked_mask=unlocked_mask,
-            threshold=self._mastery_threshold,
-        )
-
-        return {
-            "session_id": session_id,
-            "status": session.status,
-            "step": env_stats["step"],
-            "max_steps": env_stats["max_steps"],
-            "concepts_visited": env_stats["concepts_visited"],
-            "total_concepts": progress_metrics["total_concepts"],
-            "unlocked_concepts": progress_metrics["unlocked_concepts"],
-            "locked_concepts": progress_metrics["locked_concepts"],
-            "mastered_concepts": progress_metrics["mastered_concepts"],
-            "avg_mastery": progress_metrics["avg_mastery"],
-            "progress_percent": progress_metrics["progress_percent"],
-            "coverage": env_stats["coverage"],
-            "total_correct": session.total_correct,
-            "total_answered": session.total_answered,
-            "accuracy": session.total_correct / max(session.total_answered, 1),
-            "exercises": [
-                {
-                    "exercise_id": ex.exercise_id,
-                    "concept_name": ex.concept_name,
-                    "bloom_level": ex.bloom_level,
-                    "is_correct": ex.is_correct,
-                }
-                for ex in session.exercise_history
-            ],
-        }
-
-    @staticmethod
-    def _resolve_concept_status(mastery: float, *, visited: bool, prereq_ok: bool) -> str:
-        """Status priority: prerequisite lock > mastered > in-progress > available."""
-        if not prereq_ok:
-            return "locked"
-        if mastery >= _MASTERY_THRESHOLD:
-            return "mastered"
-        if visited:
-            return "in_progress"
-        return "available"
+        return build_session_status(session, threshold=self._mastery_threshold)
 
     def get_knowledge_graph(self, session_id: str) -> dict[str, Any] | None:
         """Get knowledge graph with mastery overlay."""
         session = self.get_session(session_id)
         if not session:
             return None
-
-        concept_mastery = session.env.get_concept_mastery()
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
-        prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=self._mastery_threshold)
-
-        nodes = []
-        for idx in range(len(session.concept_map)):
-            cid = id_to_concept.get(idx, str(idx))
-            mastery = float(concept_mastery[idx])
-            visited = session.env.is_concept_visited(idx)
-            status = self._resolve_concept_status(
-                mastery,
-                visited=visited,
-                prereq_ok=bool(prereq_ok_mask[idx]),
-            )
-            nodes.append(
-                {
-                    "id": cid,
-                    "index": idx,
-                    "name": session.concept_names.get(cid, cid),
-                    "mastery": mastery,
-                    "status": status,
-                    "visited": visited,
-                }
-            )
-
-        edges = []
-        for tgt_idx, src_list in session.prereq_graph.items():
-            tgt_id = id_to_concept.get(tgt_idx, str(tgt_idx))
-            for src_idx in src_list:
-                src_id = id_to_concept.get(src_idx, str(src_idx))
-                edges.append({"source": src_id, "target": tgt_id})
-
-        return {"nodes": nodes, "edges": edges}
+        return build_knowledge_graph(session, threshold=self._mastery_threshold)
 
     def get_mastery_matrix(self, session_id: str) -> dict[str, Any] | None:
         """Get full mastery matrix (concepts x bloom levels)."""
         session = self.get_session(session_id)
         if not session:
             return None
-
-        bloom_mastery = session.env.get_mastery_matrix()
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
-
-        matrix = []
-        for idx in range(len(session.concept_map)):
-            cid = id_to_concept.get(idx, str(idx))
-            matrix.append(
-                {
-                    "concept_id": cid,
-                    "concept_name": session.concept_names.get(cid, cid),
-                    "bloom_levels": [float(bloom_mastery[idx, b]) for b in range(6)],
-                }
-            )
-
-        return {
-            "matrix": matrix,
-            "bloom_labels": list(BLOOM_LABEL_SEQUENCE),
-        }
+        return build_mastery_matrix(session)
 
     def get_concept_detail(self, session_id: str, concept_id: str) -> dict[str, Any] | None:
         """Get detailed info for a specific concept."""
         session = self.get_session(session_id)
-        if not session or concept_id not in session.concept_map:
+        if not session:
             return None
-
-        idx = session.concept_map[concept_id]
-        concept_mastery = session.env.get_concept_mastery()
-        bloom_mastery = session.env.get_mastery_matrix()
-        prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=self._mastery_threshold)
-        id_to_concept = {v: k for k, v in session.concept_map.items()}
-
-        prereqs = [
-            {
-                "id": id_to_concept.get(p, str(p)),
-                "name": session.concept_names.get(id_to_concept.get(p, str(p)), str(p)),
-                "mastery": float(concept_mastery[p]),
-            }
-            for p in session.prereq_graph.get(idx, [])
-        ]
-
-        dependents = []
-        for tgt_idx, src_list in session.prereq_graph.items():
-            if idx in src_list:
-                tgt_id = id_to_concept.get(tgt_idx, str(tgt_idx))
-                dependents.append(
-                    {
-                        "id": tgt_id,
-                        "name": session.concept_names.get(tgt_id, tgt_id),
-                        "mastery": float(concept_mastery[tgt_idx]),
-                    }
-                )
-
-        return {
-            "id": concept_id,
-            "name": session.concept_names.get(concept_id, concept_id),
-            "definition": session.concept_definitions.get(concept_id, ""),
-            "mastery": float(concept_mastery[idx]),
-            "status": self._resolve_concept_status(
-                mastery=float(concept_mastery[idx]),
-                visited=session.env.is_concept_visited(idx),
-                prereq_ok=bool(prereq_ok_mask[idx]),
-            ),
-            "bloom_mastery": [float(bloom_mastery[idx, b]) for b in range(6)],
-            "prerequisites": prereqs,
-            "dependents": dependents,
-            "visited": session.env.is_concept_visited(idx),
-            "visit_count": session.env.get_visit_count(idx),
-        }
+        return build_concept_detail(session, concept_id, threshold=self._mastery_threshold)

@@ -26,7 +26,7 @@ from .exercise_gen import evaluate_short_answer, generate_exercise, generate_the
 from .exercise_types import ExerciseType
 from .exercise_types.payloads import ExercisePayload
 from .history_formatter import format_exercise_history
-from .session import ExerciseRecord
+from .session import ExerciseRecord, SessionManager, SessionState
 
 _PAYLOAD_ADAPTER: TypeAdapter[ExercisePayload] = TypeAdapter(ExercisePayload)
 
@@ -38,7 +38,7 @@ T = TypeVar("T")
 class ExerciseService:
     """Business logic for exercise generation, submission, and prefetching."""
 
-    def __init__(self, session_manager: Any = None) -> None:
+    def __init__(self, session_manager: SessionManager | None = None) -> None:
         self._session_manager = session_manager
         max_workers = max(1, int(settings.llm_max_workers))
         max_concurrency = settings.llm_max_concurrency or max_workers
@@ -57,7 +57,7 @@ class ExerciseService:
         self._scheduled_tasks: set[asyncio.Task] = set()
 
     @staticmethod
-    def _build_id_to_concept_map(session: Any) -> dict[int, str]:
+    def _build_id_to_concept_map(session: SessionState) -> dict[int, str]:
         return {v: k for k, v in session.concept_map.items()}
 
     @staticmethod
@@ -71,7 +71,7 @@ class ExerciseService:
 
     def _build_recommendation_reason(
         self,
-        session: Any,
+        session: SessionState,
         *,
         concept_idx: int,
         concept_name: str,
@@ -97,7 +97,7 @@ class ExerciseService:
                     }
                 )
 
-        satisfied_prereqs.sort(key=lambda item: item["mastery"], reverse=True)
+        satisfied_prereqs.sort(key=lambda item: float(cast("float", item["mastery"])), reverse=True)
 
         return {
             "concept_name": concept_name,
@@ -109,7 +109,7 @@ class ExerciseService:
         }
 
     def _get_recent_same_concept_exercises(
-        self, session: Any, concept_idx: int
+        self, session: SessionState, concept_idx: int
     ) -> list[dict[str, Any]]:
         limit = max(0, int(settings.adaptive_exercise_recent_same_concept_limit))
         if limit == 0:
@@ -144,7 +144,7 @@ class ExerciseService:
 
     async def _generate_exercise_dedup(
         self,
-        session: Any,
+        session: SessionState,
         concept_idx: int,
         bloom_level: int,
         concept_name: str,
@@ -182,7 +182,7 @@ class ExerciseService:
 
     async def _generate_theory_dedup(
         self,
-        session: Any,
+        session: SessionState,
         concept_id: str,
         concept_name: str,
         concept_def: str,
@@ -208,7 +208,7 @@ class ExerciseService:
         finally:
             self._theory_inflight.pop(key, None)
 
-    async def get_next_concept(self, session: Any) -> dict[str, Any] | None:
+    async def get_next_concept(self, session: SessionState) -> dict[str, Any] | None:
         """Use the vanilla DQN policy to select the next concept+bloom level."""
         if session.status != "active":
             return None
@@ -220,7 +220,7 @@ class ExerciseService:
             if env.max_steps <= _MAX_STEPS_UNSET_THRESHOLD:
                 env.max_steps = 9999
             env_stats = env.get_session_stats()
-            current_step = env_stats.get("step", 0)
+            current_step = int(cast("int", env_stats.get("step", 0)))
 
             concept_idx, bloom_level, action_id = select_next_concept_action(
                 env, session.q_net, session.current_obs, session.device
@@ -257,9 +257,9 @@ class ExerciseService:
                 "max_steps": env_stats["max_steps"],
             }
 
-    async def get_theory(self, session: Any) -> dict[str, Any] | None:
+    async def get_theory(self, session: SessionState) -> dict[str, Any] | None:
         """Generate theory for the pending concept."""
-        if not hasattr(session, "_pending_concept_idx"):
+        if session._pending_concept_idx is None:
             return None
 
         concept_idx = session._pending_concept_idx
@@ -288,9 +288,9 @@ class ExerciseService:
         session.concept_theories[concept_id] = theory_data
         return theory_data
 
-    async def generate_exercise(self, session: Any, background_tasks: Any = None) -> Any:
+    async def generate_exercise(self, session: SessionState, background_tasks: Any = None) -> Any:
         """Generate exercise from prefetch cache or LLM."""
-        if not hasattr(session, "_pending_concept_idx"):
+        if session._pending_concept_idx is None or session._pending_bloom_level is None:
             return None
 
         concept_idx = session._pending_concept_idx
@@ -395,7 +395,7 @@ class ExerciseService:
         )
 
     async def submit_answer(
-        self, session: Any, answer: dict[str, Any], _background_tasks: Any = None
+        self, session: SessionState, answer: dict[str, Any], _background_tasks: Any = None
     ) -> dict[str, Any] | None:
         """Process user's answer, update environment, return result."""
 
@@ -448,7 +448,7 @@ class ExerciseService:
             session.total_answered += 1
 
             # Step environment
-            action_id = getattr(session, "_pending_action", 0)
+            action_id = session._pending_action or 0
             obs, _reward, terminated, _truncated, info = session.env.step(
                 action_id, human_correct=is_correct
             )
@@ -498,7 +498,7 @@ class ExerciseService:
             },
         }
 
-    async def eager_generate_first_exercise(self, session: Any) -> None:
+    async def eager_generate_first_exercise(self, session: SessionState) -> None:
         """Background: pre-generate the first exercise when a session starts."""
         try:
             concept_idx, bloom_level, _ = select_next_concept_action(
@@ -536,9 +536,9 @@ class ExerciseService:
         except Exception:
             logger.exception("[Eager] ✗ Failed")
 
-    async def _prefetch_next_exercises(self, session: Any) -> None:
+    async def _prefetch_next_exercises(self, session: SessionState) -> None:
         """Background: simulate correct/incorrect paths and pre-generate exercises."""
-        if not hasattr(session, "_pending_action"):
+        if session._pending_action is None:
             return
 
         action_id = session._pending_action

@@ -264,7 +264,7 @@ async def generate_exercise(
 
     content = get_handler(exercise.payload.exercise_type).to_response_dict(exercise)
     payload = _build_exercise_response_payload(exercise, env_stats, content)
-    payload["recommendation_reason"] = getattr(session, "_current_recommendation_reason", None)
+    payload["recommendation_reason"] = session._current_recommendation_reason
     return ok(payload)
 
 

@@ -328,6 +328,10 @@ class AdaptiveLearningEnv(gym.Env):
         )
         return float(output[0, seq_t].cpu().item())
 
+    def build_observation(self) -> np.ndarray:
+        """Public: rebuild the policy observation from the current history."""
+        return self._build_obs()
+
     def _build_obs(self) -> np.ndarray:
         """Build concept-agnostic observation: global_state + per-concept features.
 

@@ -1,8 +1,8 @@
-from typing import Any
-
 """
 dependencies.py — FastAPI dependency injection functions.
 """
+
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Header, Request
 
@@ -10,11 +10,15 @@ from .config import Settings, get_settings
 from .core.shared.llm_usage import current_user_id
 from .exceptions import AppError, ServiceUnavailableError, SessionNotFoundError
 
+if TYPE_CHECKING:
+    from .core.learning.exercise_service import ExerciseService
+    from .core.learning.session import SessionManager, SessionState
+
 
 def get_current_user(
     x_user_id: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
-) -> Any:
+) -> str:
     """Verify the proxy-issued service token and surface the forwarded user id.
 
     The Next.js proxy is the only trusted issuer of `x-user-id`. Backend MUST
@@ -63,14 +67,14 @@ def _resolve_state(request: Request, attr: str, label: str) -> object:
     return obj
 
 
-def get_session_manager(request: Request) -> Any:
+def get_session_manager(request: Request) -> "SessionManager":
     """Provide SessionManager from app state, raise 503 if not ready."""
-    return _resolve_state(request, "session_manager", "SessionManager")
+    return cast("SessionManager", _resolve_state(request, "session_manager", "SessionManager"))
 
 
-def get_session_service(request: Request) -> Any:
+def get_session_service(request: Request) -> "ExerciseService":
     """Provide ExerciseService from app state, raise 503 if not ready."""
-    return _resolve_state(request, "exercise_service", "ExerciseService")
+    return cast("ExerciseService", _resolve_state(request, "exercise_service", "ExerciseService"))
 
 
 def get_content_pipeline_service(request: Request) -> Any:
@@ -78,7 +82,9 @@ def get_content_pipeline_service(request: Request) -> Any:
     return _resolve_state(request, "content_pipeline_service", "ContentPipelineService")
 
 
-async def resolve_user_session(manager: Any, session_id: str, user_id: str) -> Any:
+async def resolve_user_session(
+    manager: "SessionManager", session_id: str, user_id: str
+) -> "SessionState":
     """Resolve a session for the authenticated user, raising 404 if not found."""
     session = await manager.get_or_recover_session(session_id, user_id)
     if not session:
