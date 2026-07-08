@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from api.config import get_settings
+from api.core.learning.bloom import BLOOM_LABELS
 from api.core.quiz.tutor_chat import (
     create_tutor_chat_stream,
     generate_tutor_chat_response,
@@ -46,15 +47,6 @@ from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/session", tags=["session"])
-
-BLOOM_LABELS = {
-    1: "Remember",
-    2: "Understand",
-    3: "Apply",
-    4: "Analyze",
-    5: "Evaluate",
-    6: "Create",
-}
 
 
 def _build_exercise_response_payload(

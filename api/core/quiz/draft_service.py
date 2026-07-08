@@ -10,7 +10,7 @@ import uuid
 import fitz
 from loguru import logger
 
-from api.config import get_settings
+from api.config import get_settings, normalize_endpoint
 from api.core.quiz.extraction import (
     build_extraction_prompt,
     invoke_document_text_extract_llm,
@@ -480,7 +480,7 @@ class QuizDraftService:
         endpoints: list[str | None] = [
             getattr(settings, "object_storage_client_endpoint", None),
             getattr(settings, "object_storage_public_base_url", None),
-            _normalize_object_storage_endpoint(
+            normalize_endpoint(
                 getattr(settings, "object_storage_endpoint_internal", None),
                 default_scheme="http",
             ),
@@ -536,12 +536,3 @@ class QuizDraftService:
             logger.info("[quiz_draft] deleted_pdf key={}", s3_key)
         except Exception:
             logger.exception("[quiz_draft] failed_to_delete_pdf key={}", s3_key)
-
-
-def _normalize_object_storage_endpoint(value: str | None, *, default_scheme: str) -> str | None:
-    raw = (value or "").strip().rstrip("/")
-    if not raw:
-        return None
-    if "://" in raw:
-        return raw
-    return f"{default_scheme}://{raw}"

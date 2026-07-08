@@ -11,7 +11,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def _normalize_endpoint(value: str | None, *, default_scheme: str) -> str | None:
+def normalize_endpoint(value: str | None, *, default_scheme: str) -> str | None:
+    """Normalize a host/URL into a scheme-qualified endpoint (or None if empty)."""
     raw = (value or "").strip().rstrip("/")
     if not raw:
         return None
@@ -247,7 +248,7 @@ class Settings(BaseSettings):
 
     @property
     def object_storage_client_endpoint(self) -> str | None:
-        internal = _normalize_endpoint(
+        internal = normalize_endpoint(
             self.object_storage_endpoint_internal,
             default_scheme="http",
         )
@@ -258,7 +259,7 @@ class Settings(BaseSettings):
 
     @property
     def object_storage_public_base_url(self) -> str | None:
-        return _normalize_endpoint(
+        return normalize_endpoint(
             self.object_storage_endpoint_external,
             default_scheme="https",
         )

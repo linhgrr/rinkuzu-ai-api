@@ -29,11 +29,12 @@ from api.core.shared.persistence import (
     save_subject_progress_snapshot,
 )
 
+from .bloom import BLOOM_LABEL_SEQUENCE
 from .environment import AdaptiveLearningEnv
 from .exercise_types.payloads import ExercisePayload
 from .models import VanillaQNetwork, load_dqn_model, load_saint_model
 from .pca import apply_concept_pca
-from .progress_metrics import summarize_mastery_progress
+from .progress_metrics import build_prereq_graph_from_edges, summarize_mastery_progress
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
 _MASTERY_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
@@ -178,23 +179,14 @@ class SessionManager:
     def _build_id_to_concept_map(concept_map: dict[str, int]) -> dict[int, str]:
         return {v: k for k, v in concept_map.items()}
 
-    @classmethod
+    @staticmethod
     def _build_prereq_graph_from_edges(
-        cls,
         prereq_edges: list[dict],
         concept_map: dict[str, int],
     ) -> dict[int, list[int]]:
-        graph: dict[int, list[int]] = {}
-        dropped = 0
-        for edge in prereq_edges:
-            src = str(edge.get("source", "")).strip()
-            tgt = str(edge.get("target", "")).strip()
-            if src in concept_map and tgt in concept_map:
-                tgt_idx = concept_map[tgt]
-                src_idx = concept_map[src]
-                graph.setdefault(tgt_idx, []).append(src_idx)
-            else:
-                dropped += 1
+        graph = build_prereq_graph_from_edges(prereq_edges, concept_map)
+        kept = sum(len(v) for v in graph.values())
+        dropped = len(prereq_edges) - kept
         if dropped:
             logger.warning(
                 "[Session] _build_prereq_graph_from_edges: dropped {}/{} edges",
@@ -790,7 +782,7 @@ class SessionManager:
 
         return {
             "matrix": matrix,
-            "bloom_labels": ["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"],
+            "bloom_labels": list(BLOOM_LABEL_SEQUENCE),
         }
 
     def get_concept_detail(self, session_id: str, concept_id: str) -> dict[str, Any] | None:

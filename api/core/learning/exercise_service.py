@@ -19,8 +19,9 @@ from pydantic import TypeAdapter
 from api.config import settings
 from api.exceptions import ExerciseGenerationError
 
-from .agent import decode_action, select_action
+from .agent import decode_action, select_action, select_next_concept_action
 from .answer_eval import evaluate_answer, normalize_text, serialize_answer_for_history
+from .bloom import BLOOM_LABELS
 from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from .exercise_types import ExerciseType
 from .exercise_types.payloads import ExercisePayload
@@ -28,15 +29,6 @@ from .history_formatter import format_exercise_history
 from .session import ExerciseRecord
 
 _PAYLOAD_ADAPTER: TypeAdapter[ExercisePayload] = TypeAdapter(ExercisePayload)
-
-BLOOM_LABELS = {
-    1: "Remember",
-    2: "Understand",
-    3: "Apply",
-    4: "Analyze",
-    5: "Evaluate",
-    6: "Create",
-}
 
 # Threshold below which max_steps is considered unset (likely a default placeholder)
 _MAX_STEPS_UNSET_THRESHOLD = 50
@@ -230,21 +222,12 @@ class ExerciseService:
             env_stats = env.get_session_stats()
             current_step = env_stats.get("step", 0)
 
+            concept_idx, bloom_level, action_id = select_next_concept_action(
+                env, session.q_net, session.current_obs, session.device
+            )
             if current_step == 0:
-                concept_idx = 0
-                bloom_level = 1
-                action_id = concept_idx * 6 + (bloom_level - 1)
                 logger.info("[Exercise] 🎯 STEP 0 — Forcing warm-up: concept_idx=0, bloom=1")
             else:
-                masks = env.action_masks()
-                action_id = select_action(
-                    session.q_net,
-                    session.current_obs,
-                    masks,
-                    session.device,
-                    n_concepts=env.n_concepts,
-                )
-                concept_idx, bloom_level = decode_action(action_id)
                 logger.info("[Exercise] 🤖 DQN selected action_id={}", action_id)
 
             id_to_concept = self._build_id_to_concept_map(session)
@@ -518,22 +501,9 @@ class ExerciseService:
     async def eager_generate_first_exercise(self, session: Any) -> None:
         """Background: pre-generate the first exercise when a session starts."""
         try:
-            env_stats = session.env.get_session_stats()
-            current_step = env_stats.get("step", 0)
-
-            if current_step == 0:
-                concept_idx = 0
-                bloom_level = 1
-            else:
-                masks = session.env.action_masks()
-                action_id = select_action(
-                    session.q_net,
-                    session.current_obs,
-                    masks,
-                    session.device,
-                    n_concepts=session.env.n_concepts,
-                )
-                concept_idx, bloom_level = decode_action(action_id)
+            concept_idx, bloom_level, _ = select_next_concept_action(
+                session.env, session.q_net, session.current_obs, session.device
+            )
 
             id_to_concept = self._build_id_to_concept_map(session)
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))

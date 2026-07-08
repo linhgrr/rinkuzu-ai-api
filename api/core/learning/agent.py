@@ -87,3 +87,31 @@ def decode_action(action: int, n_blooms: int = 6) -> Any:
     concept_idx = action // n_blooms
     bloom_level = (action % n_blooms) + 1
     return concept_idx, bloom_level
+
+
+def select_next_concept_action(
+    env: Any,
+    q_net: VanillaQNetwork,
+    state: np.ndarray,
+    device: torch.device,
+) -> tuple[int, int, int]:
+    """Pick the next (concept_idx, bloom_level, action_id) for an env step.
+
+    Step 0 forces a deterministic warm-up (concept 0, Bloom 1); every later step
+    masks invalid actions and lets the DQN greedily choose. Shared by the live
+    and eager/prefetch exercise paths so both stay in lock-step.
+    """
+    current_step = env.get_session_stats().get("step", 0)
+    if current_step == 0:
+        concept_idx, bloom_level = 0, 1
+        return concept_idx, bloom_level, concept_idx * _N_BLOOMS + (bloom_level - 1)
+
+    action_id = select_action(
+        q_net,
+        state,
+        env.action_masks(),
+        device,
+        n_concepts=env.n_concepts,
+    )
+    concept_idx, bloom_level = decode_action(action_id)
+    return concept_idx, bloom_level, action_id
