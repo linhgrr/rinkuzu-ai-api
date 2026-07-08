@@ -31,7 +31,8 @@ from api.core.shared.persistence import (
 
 from .environment import AdaptiveLearningEnv
 from .exercise_types.payloads import ExercisePayload
-from .models import DuelingQNetwork, load_dqn_model, load_saint_model
+from .models import VanillaQNetwork, load_dqn_model, load_saint_model
+from .pca import apply_concept_pca
 from .progress_metrics import summarize_mastery_progress
 from .subject_progress_snapshot import build_subject_progress_snapshot
 
@@ -61,7 +62,7 @@ class ExerciseRecord:
 class SessionState:
     session_id: str
     env: AdaptiveLearningEnv
-    q_net: DuelingQNetwork
+    q_net: VanillaQNetwork
     device: torch.device
     concept_map: dict[str, int]
     concept_names: dict[str, str]
@@ -309,6 +310,10 @@ class SessionManager:
         """Create a new learning session."""
         session_id = str(uuid.uuid4())[:8]
 
+        # Default (Junyi) session: PCA over SAINT's trained concept embeddings.
+        raw_emb = self._saint_model.concept_emb_matrix[1:].cpu().numpy()
+        concept_embed_pca = apply_concept_pca(raw_emb)
+
         env = AdaptiveLearningEnv(
             saint_model=self._saint_model,
             concept_map=self._concept_map,
@@ -317,6 +322,7 @@ class SessionManager:
             mastery_threshold=self._mastery_threshold,
             deterministic_train=False,
             device=str(self._device),
+            concept_embed_pca=concept_embed_pca,
         )
         obs, _info = env.reset(seed=42)
 
@@ -450,6 +456,13 @@ class SessionManager:
             concept_map, id_to_concept, names, defs, precomputed_embeddings
         )
 
+        # PCA features for the per-concept observation come from the same
+        # 768-dim embeddings SAINT uses for this session (drop the PAD row).
+        concept_embed_pca = None
+        if external_embeddings is not None:
+            raw_emb = external_embeddings[1:].cpu().numpy()
+            concept_embed_pca = apply_concept_pca(raw_emb)
+
         env = AdaptiveLearningEnv(
             saint_model=self._saint_model,
             concept_map=concept_map,
@@ -459,6 +472,7 @@ class SessionManager:
             deterministic_train=False,
             device=str(self._device),
             external_embeddings=external_embeddings,
+            concept_embed_pca=concept_embed_pca,
         )
         obs, _info = env.reset(seed=42)
 

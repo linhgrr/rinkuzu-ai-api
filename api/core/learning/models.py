@@ -1,5 +1,5 @@
 """
-models.py — PyTorch model classes (SAINT + DuelingQNetwork)
+models.py — PyTorch model classes (SAINT + VanillaQNetwork)
 Ported from saint_model.py and train_dqn.py
 """
 
@@ -208,25 +208,34 @@ class SaintModel(nn.Module):
         return hidden_state, predictions
 
 
-class DuelingQNetwork(nn.Module):
-    """Concept-agnostic Dueling DQN with per-concept scoring.
+class VanillaQNetwork(nn.Module):
+    """Concept-agnostic vanilla DQN with a single per-concept Q-head.
 
-    Architecture:
-        Per concept i, input = [global_state | concept_feat_i] → shared backbone → Dueling V(1)+A(6)
-        Weights are independent of N (number of concepts). Works with any N at inference.
+    Matches the trained ``masked_vanilla_dqn`` checkpoint and the report (Ch.4):
+        Per concept i, input = [global_state | concept_feat_i] → shared backbone
+        → flat Q-head (256→128→6). No dueling value/advantage split.
+        Weights are independent of N (number of concepts). Works with any N.
 
     Observation layout (flat):
         [0 : global_dim]                          global state (SAINT hidden + progress)
-        [global_dim : global_dim + N*concept_feat_dim]  per-concept features (bloom*6 + visited + prereq_ok)
+        [global_dim : global_dim + N*concept_feat_dim]
+            per-concept features: bloom_mastery(6) + visited(1) + prereq_ok(1) + PCA(pca_dim)
     """
 
-    CONCEPT_FEAT_DIM = 8  # bloom_mastery(6) + visited(1) + prereq_ok(1)
+    BASE_FEAT_DIM = 8  # bloom_mastery(6) + visited(1) + prereq_ok(1)
     N_BLOOMS = 6
 
-    def __init__(self, global_dim: Any = 130, hidden_sizes: Any = (256, 256)) -> None:
+    def __init__(
+        self,
+        global_dim: Any = 130,
+        hidden_sizes: Any = (256, 256),
+        concept_embed_pca_dim: int = 16,
+    ) -> None:
         super().__init__()
         self.global_dim = global_dim
-        input_dim = global_dim + self.CONCEPT_FEAT_DIM  # e.g. 138
+        self.concept_embed_pca_dim = concept_embed_pca_dim
+        self.concept_feat_dim = self.BASE_FEAT_DIM + concept_embed_pca_dim
+        input_dim = global_dim + self.concept_feat_dim  # e.g. 130 + 24 = 154
 
         layers = []
         prev = input_dim
@@ -234,16 +243,16 @@ class DuelingQNetwork(nn.Module):
             layers.extend([nn.Linear(prev, h), nn.ReLU()])
             prev = h
         self.backbone = nn.Sequential(*layers)
-
-        self.value = nn.Sequential(nn.Linear(prev, 128), nn.ReLU(), nn.Linear(128, 1))
-        self.advantage = nn.Sequential(
-            nn.Linear(prev, 128), nn.ReLU(), nn.Linear(128, self.N_BLOOMS)
+        self.q_head = nn.Sequential(
+            nn.Linear(prev, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.N_BLOOMS),
         )
 
     def forward(self, flat_obs: Any, n_concepts: Any) -> Any:
         """
         Args:
-            flat_obs:    (B, global_dim + n_concepts * CONCEPT_FEAT_DIM)
+            flat_obs:    (B, global_dim + n_concepts * concept_feat_dim)
             n_concepts:  int — number of concepts (can vary between calls)
         Returns:
             Q values:    (B, n_concepts * N_BLOOMS)
@@ -251,16 +260,14 @@ class DuelingQNetwork(nn.Module):
         batch_size = flat_obs.shape[0]
         global_state = flat_obs[:, : self.global_dim]
         concept_flat = flat_obs[:, self.global_dim :]
-        concept_features = concept_flat.view(batch_size, n_concepts, self.CONCEPT_FEAT_DIM)
+        concept_features = concept_flat.view(batch_size, n_concepts, self.concept_feat_dim)
 
         g = global_state.unsqueeze(1).expand(batch_size, n_concepts, -1)
         x = torch.cat([g, concept_features], dim=-1)
-        x = x.view(batch_size * n_concepts, -1)
+        x = x.reshape(batch_size * n_concepts, -1)
 
         features = self.backbone(x)
-        v = self.value(features)
-        a = self.advantage(features)
-        q = v + a - a.mean(dim=1, keepdim=True)
+        q = self.q_head(features)
         return q.view(batch_size, n_concepts * self.N_BLOOMS)
 
 
@@ -297,18 +304,25 @@ def load_saint_model(checkpoint_path: str, device: torch.device) -> Any:
 
 
 def load_dqn_model(checkpoint_path: str, device: torch.device) -> Any:
-    """Load concept-agnostic DQN from checkpoint. Returns (model, config_info)."""
+    """Load concept-agnostic vanilla DQN from checkpoint. Returns (model, config_info)."""
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     global_dim = ckpt.get("global_dim", 130)
     hidden_sizes = ckpt.get("hidden_sizes", (256, 256))
+    concept_embed_pca_dim = int(ckpt.get("concept_embed_pca_dim", 16))
 
-    q_net = DuelingQNetwork(global_dim=global_dim, hidden_sizes=hidden_sizes).to(device)
+    q_net = VanillaQNetwork(
+        global_dim=global_dim,
+        hidden_sizes=hidden_sizes,
+        concept_embed_pca_dim=concept_embed_pca_dim,
+    ).to(device)
     q_net.load_state_dict(ckpt["q_net_state_dict"])
     q_net.eval()
 
     return q_net, {
         "global_dim": global_dim,
         "hidden_sizes": hidden_sizes,
+        "concept_embed_pca_dim": concept_embed_pca_dim,
+        "network_type": ckpt.get("network_type", "vanilla"),
         "step": ckpt.get("step"),
         "mean_reward": ckpt.get("mean_reward"),
     }
