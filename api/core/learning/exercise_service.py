@@ -245,7 +245,7 @@ class ExerciseService:
                     n_concepts=env.n_concepts,
                 )
                 concept_idx, bloom_level = decode_action(action_id)
-                logger.info("[Exercise] 🤖 D3QN selected action_id={}", action_id)
+                logger.info("[Exercise] 🤖 DQN selected action_id={}", action_id)
 
             id_to_concept = self._build_id_to_concept_map(session)
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))

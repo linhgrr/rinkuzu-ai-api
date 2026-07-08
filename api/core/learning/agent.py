@@ -1,7 +1,7 @@
 from typing import Any
 
 """
-agent.py — D3QN action selection with topic coherence
+agent.py — DQN action selection with topic coherence
 """
 
 import secrets
@@ -9,7 +9,7 @@ import secrets
 import numpy as np
 import torch
 
-from .models import DuelingQNetwork
+from .models import VanillaQNetwork
 
 # SystemRandom instance used for epsilon-greedy exploration (non-cryptographic).
 _rng = secrets.SystemRandom()
@@ -19,7 +19,7 @@ _N_BLOOMS = 6
 
 
 def select_action(
-    q_net: DuelingQNetwork,
+    q_net: VanillaQNetwork,
     state: np.ndarray,
     action_mask: np.ndarray,
     device: torch.device,
@@ -47,7 +47,7 @@ def select_action(
 
 
 def select_topic_coherent_action(
-    q_net: DuelingQNetwork,
+    q_net: VanillaQNetwork,
     state: np.ndarray,
     action_mask: np.ndarray,
     device: torch.device,
