@@ -304,7 +304,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_ExerciseResponse_"
+                  "$ref": "#/components/schemas/StandardResponse_Annotated_Union_MCQExerciseResponse__TrueFalseExerciseResponse__FillBlankExerciseResponse__MultiCorrectExerciseResponse__OrderingExerciseResponse__MatchingExerciseResponse__ShortAnswerExerciseResponse___FieldInfo_annotation_NoneType__required_True__discriminator__exercise_type____"
                 }
               }
             }
@@ -850,7 +850,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_PipelineRuntimeStatusResponse_"
                 }
               }
             }
@@ -995,7 +995,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_PipelineJobListResponse_"
                 }
               }
             }
@@ -1121,6 +1121,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 10000,
+              "minimum": 5,
               "default": 9999,
               "title": "Max Steps"
             }
@@ -1244,7 +1246,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_PipelineJobCancelResponse_"
                 }
               }
             }
@@ -1324,7 +1326,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_PipelineJobRetryResponse_"
                 }
               }
             }
@@ -1876,7 +1878,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_QuizDraftSingleResponse_"
                 }
               }
             }
@@ -1952,7 +1954,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_QuizDraftListResponse_"
                 }
               }
             }
@@ -2032,7 +2034,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_QuizDraftSingleResponse_"
                 }
               }
             }
@@ -2120,7 +2122,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_QuizDraftSingleResponse_"
                 }
               }
             }
@@ -2198,7 +2200,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_QuizDraftSingleResponse_"
                 }
               }
             }
@@ -2288,7 +2290,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StandardResponse_dict_"
+                  "$ref": "#/components/schemas/StandardResponse_QuizDraftSingleResponse_"
                 }
               }
             }
@@ -2382,6 +2384,82 @@
         }
       }
     },
+    "/admin/llm-usage/summary": {
+      "get": {
+        "tags": [
+          "admin-usage"
+        ],
+        "summary": "Get Llm Usage Summary",
+        "description": "Aggregate LLM usage/cost over a time window, broken down by action + model.",
+        "operationId": "get_llm_usage_summary_admin_llm_usage_summary_get",
+        "parameters": [
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "30d",
+              "title": "Window"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Llm Usage Summary Admin Llm Usage Summary Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ready": {
       "get": {
         "summary": "Readiness",
@@ -2393,7 +2471,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Readiness Api Ready Get"
+                  "$ref": "#/components/schemas/StandardResponse_ReadinessResponse_"
                 }
               }
             }
@@ -2413,7 +2491,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Health Api Health Get"
+                  "$ref": "#/components/schemas/StandardResponse_ReadinessResponse_"
                 }
               }
             }
@@ -2432,7 +2510,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Info Api Info Get"
+                  "$ref": "#/components/schemas/StandardResponse_InfoResponse_"
                 }
               }
             }
@@ -2444,6 +2522,18 @@
   },
   "components": {
     "schemas": {
+      "BloomLabel": {
+        "type": "string",
+        "enum": [
+          "Remember",
+          "Understand",
+          "Apply",
+          "Analyze",
+          "Evaluate",
+          "Create"
+        ],
+        "title": "BloomLabel"
+      },
       "ConceptDetailResponse": {
         "properties": {
           "id": {
@@ -2463,8 +2553,7 @@
             "title": "Mastery"
           },
           "status": {
-            "type": "string",
-            "title": "Status"
+            "$ref": "#/components/schemas/ConceptStatus"
           },
           "bloom_mastery": {
             "items": {
@@ -2534,6 +2623,16 @@
         ],
         "title": "ConceptPrereq"
       },
+      "ConceptStatus": {
+        "type": "string",
+        "enum": [
+          "locked",
+          "available",
+          "in_progress",
+          "mastered"
+        ],
+        "title": "ConceptStatus"
+      },
       "DeleteSubjectResponse": {
         "properties": {
           "job_id": {
@@ -2550,6 +2649,7 @@
           },
           "status": {
             "type": "string",
+            "const": "deleted",
             "title": "Status"
           }
         },
@@ -2562,7 +2662,136 @@
         ],
         "title": "DeleteSubjectResponse"
       },
-      "ExerciseResponse": {
+      "ExerciseHistoryResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "Bloom Level"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MCQPayload"
+              },
+              {
+                "$ref": "#/components/schemas/TrueFalsePayload"
+              },
+              {
+                "$ref": "#/components/schemas/FillBlankPayload"
+              },
+              {
+                "$ref": "#/components/schemas/MultiCorrectPayload"
+              },
+              {
+                "$ref": "#/components/schemas/OrderingPayload"
+              },
+              {
+                "$ref": "#/components/schemas/MatchingPayload"
+              },
+              {
+                "$ref": "#/components/schemas/ShortAnswerPayload"
+              }
+            ],
+            "title": "Payload",
+            "discriminator": {
+              "propertyName": "exercise_type",
+              "mapping": {
+                "fill_blank": "#/components/schemas/FillBlankPayload",
+                "matching": "#/components/schemas/MatchingPayload",
+                "mcq": "#/components/schemas/MCQPayload",
+                "multi_correct": "#/components/schemas/MultiCorrectPayload",
+                "ordering": "#/components/schemas/OrderingPayload",
+                "short_answer": "#/components/schemas/ShortAnswerPayload",
+                "true_false": "#/components/schemas/TrueFalsePayload"
+              }
+            }
+          },
+          "explanation_correct": {
+            "type": "string",
+            "title": "Explanation Correct"
+          },
+          "explanation_incorrect": {
+            "type": "string",
+            "title": "Explanation Incorrect"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Answer"
+          },
+          "is_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct"
+          },
+          "timestamp": {
+            "type": "number",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_idx",
+          "concept_name",
+          "bloom_level",
+          "question",
+          "explanation",
+          "payload",
+          "explanation_correct",
+          "explanation_incorrect",
+          "theory",
+          "user_answer",
+          "is_correct",
+          "timestamp"
+        ],
+        "title": "ExerciseHistoryResponse"
+      },
+      "FillBlankExerciseResponse": {
         "properties": {
           "exercise_id": {
             "type": "string",
@@ -2581,80 +2810,11 @@
             "title": "Bloom Level"
           },
           "bloom_label": {
-            "type": "string",
-            "title": "Bloom Label"
-          },
-          "exercise_type": {
-            "$ref": "#/components/schemas/ExerciseType",
-            "default": "mcq"
+            "$ref": "#/components/schemas/BloomLabel"
           },
           "question": {
             "type": "string",
             "title": "Question"
-          },
-          "sentence": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sentence"
-          },
-          "options": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Options"
-          },
-          "statement": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Statement"
-          },
-          "hint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hint"
-          },
-          "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "pairs": {
-            "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Pairs"
-          },
-          "right_items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Right Items"
           },
           "step": {
             "type": "integer",
@@ -2683,6 +2843,20 @@
                 "type": "null"
               }
             ]
+          },
+          "exercise_type": {
+            "type": "string",
+            "const": "fill_blank",
+            "title": "Exercise Type",
+            "default": "fill_blank"
+          },
+          "sentence": {
+            "type": "string",
+            "title": "Sentence"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint"
           }
         },
         "type": "object",
@@ -2694,22 +2868,43 @@
           "bloom_label",
           "question",
           "step",
-          "max_steps"
+          "max_steps",
+          "sentence",
+          "hint"
         ],
-        "title": "ExerciseResponse"
+        "title": "FillBlankExerciseResponse"
       },
-      "ExerciseType": {
-        "type": "string",
-        "enum": [
-          "mcq",
-          "true_false",
-          "fill_blank",
-          "multi_correct",
-          "ordering",
-          "matching",
-          "short_answer"
+      "FillBlankPayload": {
+        "properties": {
+          "exercise_type": {
+            "type": "string",
+            "const": "fill_blank",
+            "title": "Exercise Type",
+            "default": "fill_blank"
+          },
+          "sentence": {
+            "type": "string",
+            "title": "Sentence"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint"
+          },
+          "blank_answers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blank Answers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sentence",
+          "hint",
+          "blank_answers"
         ],
-        "title": "ExerciseType"
+        "title": "FillBlankPayload"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2723,6 +2918,39 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InfoResponse": {
+        "properties": {
+          "models_enabled": {
+            "type": "boolean",
+            "title": "Models Enabled"
+          },
+          "models_loaded": {
+            "type": "boolean",
+            "title": "Models Loaded"
+          },
+          "n_concepts": {
+            "type": "integer",
+            "title": "N Concepts"
+          },
+          "mongo_available": {
+            "type": "boolean",
+            "title": "Mongo Available"
+          },
+          "content_pipeline_available": {
+            "type": "boolean",
+            "title": "Content Pipeline Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "models_enabled",
+          "models_loaded",
+          "n_concepts",
+          "mongo_available",
+          "content_pipeline_available"
+        ],
+        "title": "InfoResponse"
       },
       "KnowledgeEdgeResponse": {
         "properties": {
@@ -2785,8 +3013,7 @@
             "title": "Mastery"
           },
           "status": {
-            "type": "string",
-            "title": "Status"
+            "$ref": "#/components/schemas/ConceptStatus"
           },
           "visited": {
             "type": "boolean",
@@ -2803,6 +3030,122 @@
           "visited"
         ],
         "title": "KnowledgeNodeResponse"
+      },
+      "LearningSessionStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "completed"
+        ],
+        "title": "LearningSessionStatus"
+      },
+      "MCQExerciseResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "$ref": "#/components/schemas/BloomLabel"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exercise_type": {
+            "type": "string",
+            "const": "mcq",
+            "title": "Exercise Type",
+            "default": "mcq"
+          },
+          "options": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "question",
+          "step",
+          "max_steps",
+          "options"
+        ],
+        "title": "MCQExerciseResponse"
+      },
+      "MCQPayload": {
+        "properties": {
+          "exercise_type": {
+            "type": "string",
+            "const": "mcq",
+            "title": "Exercise Type",
+            "default": "mcq"
+          },
+          "options": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Options"
+          },
+          "correct_option": {
+            "type": "string",
+            "title": "Correct Option"
+          }
+        },
+        "type": "object",
+        "required": [
+          "options",
+          "correct_option"
+        ],
+        "title": "MCQPayload"
       },
       "MasteryMatrixResponse": {
         "properties": {
@@ -2854,6 +3197,246 @@
         ],
         "title": "MasteryRow"
       },
+      "MatchingExerciseResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "$ref": "#/components/schemas/BloomLabel"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exercise_type": {
+            "type": "string",
+            "const": "matching",
+            "title": "Exercise Type",
+            "default": "matching"
+          },
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/MatchingPairPayload"
+            },
+            "type": "array",
+            "title": "Pairs"
+          },
+          "right_items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Right Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "question",
+          "step",
+          "max_steps",
+          "pairs",
+          "right_items"
+        ],
+        "title": "MatchingExerciseResponse"
+      },
+      "MatchingPairPayload": {
+        "properties": {
+          "left": {
+            "type": "string",
+            "title": "Left"
+          },
+          "right": {
+            "type": "string",
+            "title": "Right"
+          }
+        },
+        "type": "object",
+        "required": [
+          "left",
+          "right"
+        ],
+        "title": "MatchingPairPayload"
+      },
+      "MatchingPayload": {
+        "properties": {
+          "exercise_type": {
+            "type": "string",
+            "const": "matching",
+            "title": "Exercise Type",
+            "default": "matching"
+          },
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/MatchingPairPayload"
+            },
+            "type": "array",
+            "title": "Pairs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pairs"
+        ],
+        "title": "MatchingPayload"
+      },
+      "MultiCorrectExerciseResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "$ref": "#/components/schemas/BloomLabel"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exercise_type": {
+            "type": "string",
+            "const": "multi_correct",
+            "title": "Exercise Type",
+            "default": "multi_correct"
+          },
+          "options": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "question",
+          "step",
+          "max_steps",
+          "options"
+        ],
+        "title": "MultiCorrectExerciseResponse"
+      },
+      "MultiCorrectPayload": {
+        "properties": {
+          "exercise_type": {
+            "type": "string",
+            "const": "multi_correct",
+            "title": "Exercise Type",
+            "default": "multi_correct"
+          },
+          "options": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Options"
+          },
+          "correct_options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Correct Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "options",
+          "correct_options"
+        ],
+        "title": "MultiCorrectPayload"
+      },
       "NextConceptResponse": {
         "properties": {
           "concept_name": {
@@ -2869,8 +3452,7 @@
             "title": "Bloom Level"
           },
           "bloom_label": {
-            "type": "string",
-            "title": "Bloom Label"
+            "$ref": "#/components/schemas/BloomLabel"
           },
           "step": {
             "type": "integer",
@@ -2891,6 +3473,282 @@
           "max_steps"
         ],
         "title": "NextConceptResponse"
+      },
+      "OrderingExerciseResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "$ref": "#/components/schemas/BloomLabel"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exercise_type": {
+            "type": "string",
+            "const": "ordering",
+            "title": "Exercise Type",
+            "default": "ordering"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "question",
+          "step",
+          "max_steps",
+          "items"
+        ],
+        "title": "OrderingExerciseResponse"
+      },
+      "OrderingPayload": {
+        "properties": {
+          "exercise_type": {
+            "type": "string",
+            "const": "ordering",
+            "title": "Exercise Type",
+            "default": "ordering"
+          },
+          "correct_order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Correct Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "correct_order"
+        ],
+        "title": "OrderingPayload"
+      },
+      "PipelineCycleStatsResponse": {
+        "properties": {
+          "removed_cycles": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Cycles"
+          }
+        },
+        "type": "object",
+        "title": "PipelineCycleStatsResponse"
+      },
+      "PipelineDebugArtifactResponse": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "title": "Artifact Id",
+            "default": ""
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index",
+            "default": 0
+          },
+          "page_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Start"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
+          "input": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input"
+          },
+          "output": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "default": "text/plain"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "default": ""
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "PipelineDebugArtifactResponse"
+      },
+      "PipelineDebugTraceEntryResponse": {
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "title": "Step Id",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": ""
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At",
+            "default": 0.0
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "input": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineDebugArtifactResponse"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          }
+        },
+        "type": "object",
+        "title": "PipelineDebugTraceEntryResponse"
       },
       "PipelineFailedBatchResponse": {
         "properties": {
@@ -2968,11 +3826,173 @@
         "type": "object",
         "title": "PipelineGraphResponse"
       },
+      "PipelineGraphStatsResponse": {
+        "properties": {
+          "num_nodes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Nodes"
+          },
+          "num_edges": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Edges"
+          },
+          "is_dag": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Dag"
+          },
+          "relation_candidates": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation Candidates"
+          },
+          "relation_candidates_from_extraction": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation Candidates From Extraction"
+          },
+          "relation_candidates_from_mlp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation Candidates From Mlp"
+          },
+          "relations_inserted_after_verification": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relations Inserted After Verification"
+          },
+          "relations_extraction_candidates_dropped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relations Extraction Candidates Dropped"
+          },
+          "relations_verified": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relations Verified"
+          },
+          "quality_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineQualityReportResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "builder_subject_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Builder Subject Id"
+          },
+          "cycle_stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineCycleStatsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "PipelineGraphStatsResponse"
+      },
+      "PipelineJobCancelResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineStatus"
+              },
+              {
+                "type": "string",
+                "const": "cancelling"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "PipelineJobCancelResponse"
+      },
       "PipelineJobHistoryListResponse": {
         "properties": {
           "jobs": {
             "items": {
-              "$ref": "#/components/schemas/SubjectHistoryResponse"
+              "$ref": "#/components/schemas/PipelineJobListItemResponse"
             },
             "type": "array",
             "title": "Jobs"
@@ -2989,24 +4009,283 @@
         ],
         "title": "PipelineJobHistoryListResponse"
       },
+      "PipelineJobListItemResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": ""
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id",
+            "default": ""
+          },
+          "status": {
+            "$ref": "#/components/schemas/PipelineStatus"
+          },
+          "current_step": {
+            "type": "string",
+            "title": "Current Step",
+            "default": ""
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "default": 0.0
+          },
+          "page_batch_size": {
+            "type": "integer",
+            "title": "Page Batch Size",
+            "default": 10
+          },
+          "batch_count": {
+            "type": "integer",
+            "title": "Batch Count",
+            "default": 0
+          },
+          "failed_batch_count": {
+            "type": "integer",
+            "title": "Failed Batch Count",
+            "default": 0
+          },
+          "partial_success": {
+            "type": "boolean",
+            "title": "Partial Success",
+            "default": false
+          },
+          "concepts_extracted": {
+            "type": "integer",
+            "title": "Concepts Extracted",
+            "default": 0
+          },
+          "concepts_after_merge": {
+            "type": "integer",
+            "title": "Concepts After Merge",
+            "default": 0
+          },
+          "relations_verified": {
+            "type": "integer",
+            "title": "Relations Verified",
+            "default": 0
+          },
+          "quality_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineQualityReportResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "user_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Message"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable",
+            "default": false
+          },
+          "retry_count": {
+            "type": "integer",
+            "title": "Retry Count",
+            "default": 0
+          },
+          "eta_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At",
+            "default": 0.0
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At",
+            "default": 0.0
+          },
+          "heartbeat_at": {
+            "type": "number",
+            "title": "Heartbeat At",
+            "default": 0.0
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "is_terminal": {
+            "type": "boolean",
+            "title": "Is Terminal",
+            "default": false
+          },
+          "is_delayed": {
+            "type": "boolean",
+            "title": "Is Delayed",
+            "default": false
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "title": "Retry After Seconds",
+            "default": 3
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "PipelineJobListItemResponse"
+      },
+      "PipelineJobListResponse": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineJobListItemResponse"
+            },
+            "type": "array",
+            "title": "Jobs"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "PipelineJobListResponse"
+      },
       "PipelineJobResultResponse": {
         "properties": {
           "graph": {
             "$ref": "#/components/schemas/PipelineGraphResponse"
           },
           "stats": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Stats"
+            "$ref": "#/components/schemas/PipelineGraphStatsResponse"
+          },
+          "quality_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineQualityReportResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "n_concepts": {
             "type": "integer",
             "title": "N Concepts",
             "default": 0
+          },
+          "concepts_data": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Concepts Data"
+          },
+          "concept_map": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Concept Map"
+          },
+          "concept_embedding_count": {
+            "type": "integer",
+            "title": "Concept Embedding Count",
+            "default": 0
+          },
+          "prereq_edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Prereq Edges"
+          },
+          "failed_batches": {
+            "items": {},
+            "type": "array",
+            "title": "Failed Batches"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
           }
         },
         "type": "object",
         "title": "PipelineJobResultResponse"
+      },
+      "PipelineJobRetryResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PipelineStatus"
+          },
+          "status_url": {
+            "type": "string",
+            "title": "Status Url"
+          },
+          "retry_count": {
+            "type": "integer",
+            "title": "Retry Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "status_url"
+        ],
+        "title": "PipelineJobRetryResponse"
       },
       "PipelineJobStatusResponse": {
         "properties": {
@@ -3078,9 +4357,24 @@
             "default": 0
           },
           "graph_stats": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Graph Stats"
+            "$ref": "#/components/schemas/PipelineGraphStatsResponse"
+          },
+          "quality_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineQualityReportResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "debug_trace": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineDebugTraceEntryResponse"
+            },
+            "type": "array",
+            "title": "Debug Trace"
           },
           "error_message": {
             "anyOf": [
@@ -3217,6 +4511,78 @@
           "target": {
             "type": "string",
             "title": "Target"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
+          },
+          "ranker_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranker Score"
+          },
+          "extraction_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Confidence"
           }
         },
         "type": "object",
@@ -3311,6 +4677,94 @@
         ],
         "title": "PipelineProcessResponse"
       },
+      "PipelineQualityChecksResponse": {
+        "properties": {
+          "has_concepts": {
+            "type": "boolean",
+            "title": "Has Concepts",
+            "default": false
+          },
+          "edges_reference_known_concepts": {
+            "type": "boolean",
+            "title": "Edges Reference Known Concepts",
+            "default": false
+          },
+          "is_dag": {
+            "type": "boolean",
+            "title": "Is Dag",
+            "default": false
+          },
+          "extraction_failure_ratio_ok": {
+            "type": "boolean",
+            "title": "Extraction Failure Ratio Ok",
+            "default": false
+          },
+          "has_verified_relation_when_multi_concept": {
+            "type": "boolean",
+            "title": "Has Verified Relation When Multi Concept",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "PipelineQualityChecksResponse"
+      },
+      "PipelineQualityReportResponse": {
+        "properties": {
+          "passed": {
+            "type": "boolean",
+            "title": "Passed",
+            "default": false
+          },
+          "checks": {
+            "$ref": "#/components/schemas/PipelineQualityChecksResponse"
+          },
+          "concept_count": {
+            "type": "integer",
+            "title": "Concept Count",
+            "default": 0
+          },
+          "candidate_relation_count": {
+            "type": "integer",
+            "title": "Candidate Relation Count",
+            "default": 0
+          },
+          "verified_relation_count": {
+            "type": "integer",
+            "title": "Verified Relation Count",
+            "default": 0
+          },
+          "extraction_failure_ratio": {
+            "type": "number",
+            "title": "Extraction Failure Ratio",
+            "default": 0.0
+          },
+          "invalid_edge_count": {
+            "type": "integer",
+            "title": "Invalid Edge Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "PipelineQualityReportResponse"
+      },
+      "PipelineRuntimeStatusResponse": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "service_initialized": {
+            "type": "boolean",
+            "title": "Service Initialized"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available",
+          "service_initialized"
+        ],
+        "title": "PipelineRuntimeStatusResponse"
+      },
       "PipelineSessionCreateResponse": {
         "properties": {
           "session_id": {
@@ -3322,8 +4776,7 @@
             "title": "N Concepts"
           },
           "source": {
-            "type": "string",
-            "title": "Source"
+            "$ref": "#/components/schemas/PipelineSessionSource"
           },
           "job_id": {
             "type": "string",
@@ -3344,6 +4797,14 @@
           "status"
         ],
         "title": "PipelineSessionCreateResponse"
+      },
+      "PipelineSessionSource": {
+        "type": "string",
+        "enum": [
+          "new_session",
+          "existing_session"
+        ],
+        "title": "PipelineSessionSource"
       },
       "PipelineStatus": {
         "type": "string",
@@ -3379,7 +4840,8 @@
           "subject_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 120
               },
               {
                 "type": "null"
@@ -3515,6 +4977,22 @@
         ],
         "title": "QuizDraftCreateRequest"
       },
+      "QuizDraftListResponse": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/QuizDraftResponseData"
+            },
+            "type": "array",
+            "title": "Drafts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drafts"
+        ],
+        "title": "QuizDraftListResponse"
+      },
       "QuizDraftPatchRequest": {
         "properties": {
           "title": {
@@ -3571,6 +5049,83 @@
         "type": "object",
         "title": "QuizDraftPatchRequest"
       },
+      "QuizDraftPdfInfo": {
+        "properties": {
+          "s3_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S3 Key"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "s3_key",
+          "file_name",
+          "file_size",
+          "page_count"
+        ],
+        "title": "QuizDraftPdfInfo"
+      },
+      "QuizDraftProgress": {
+        "properties": {
+          "processed": {
+            "type": "integer",
+            "title": "Processed",
+            "default": 0
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "percent": {
+            "type": "integer",
+            "title": "Percent",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "QuizDraftProgress"
+      },
       "QuizDraftQuestion": {
         "properties": {
           "question": {
@@ -3622,6 +5177,137 @@
           "options"
         ],
         "title": "QuizDraftQuestion"
+      },
+      "QuizDraftResponseData": {
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "title": "Draft Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "pdf": {
+            "$ref": "#/components/schemas/QuizDraftPdfInfo"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "processing",
+              "completed",
+              "failed",
+              "cancelled",
+              "submitted",
+              "expired"
+            ],
+            "title": "Status"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/QuizDraftProgress"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuizDraftQuestion"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "submitted_quiz_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted Quiz Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_id",
+          "title",
+          "description",
+          "category_id",
+          "prompt",
+          "pdf",
+          "status",
+          "progress",
+          "questions",
+          "error",
+          "submitted_quiz_id",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "title": "QuizDraftResponseData"
+      },
+      "QuizDraftSingleResponse": {
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/QuizDraftResponseData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft"
+        ],
+        "title": "QuizDraftSingleResponse"
       },
       "QuizDraftSubmitRequest": {
         "properties": {
@@ -3770,6 +5456,56 @@
         ],
         "title": "QuizTutorResponseData"
       },
+      "ReadinessResponse": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ReadinessStatus"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "mongo_available": {
+            "type": "boolean",
+            "title": "Mongo Available"
+          },
+          "models_enabled": {
+            "type": "boolean",
+            "title": "Models Enabled"
+          },
+          "models_loaded": {
+            "type": "boolean",
+            "title": "Models Loaded"
+          },
+          "content_pipeline_available": {
+            "type": "boolean",
+            "title": "Content Pipeline Available"
+          },
+          "content_pipeline_service_ready": {
+            "type": "boolean",
+            "title": "Content Pipeline Service Ready"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "ready",
+          "mongo_available",
+          "models_enabled",
+          "models_loaded",
+          "content_pipeline_available",
+          "content_pipeline_service_ready"
+        ],
+        "title": "ReadinessResponse"
+      },
+      "ReadinessStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "degraded"
+        ],
+        "title": "ReadinessStatus"
+      },
       "RecommendationPrerequisite": {
         "properties": {
           "name": {
@@ -3799,8 +5535,7 @@
             "title": "Bloom Level"
           },
           "bloom_label": {
-            "type": "string",
-            "title": "Bloom Label"
+            "$ref": "#/components/schemas/BloomLabel"
           },
           "satisfied_prereqs": {
             "items": {
@@ -3827,6 +5562,29 @@
           "next_milestone"
         ],
         "title": "RecommendationReason"
+      },
+      "SessionConceptSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "index"
+        ],
+        "title": "SessionConceptSummary"
       },
       "SessionCreateRequest": {
         "properties": {
@@ -3862,17 +5620,15 @@
           },
           "concepts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SessionConceptSummary"
             },
             "type": "array",
             "title": "Concepts",
             "description": "Ordered list of concept summaries."
           },
           "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "Session state: active, completed, or cancelled.",
+            "$ref": "#/components/schemas/LearningSessionStatus",
+            "description": "Current learning session state.",
             "default": "active"
           }
         },
@@ -3884,6 +5640,40 @@
         ],
         "title": "SessionCreateResponse"
       },
+      "SessionExerciseSummary": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "is_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "bloom_level"
+        ],
+        "title": "SessionExerciseSummary"
+      },
       "SessionStatusResponse": {
         "properties": {
           "session_id": {
@@ -3892,9 +5682,8 @@
             "description": "Session identifier."
           },
           "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "Current session status."
+            "$ref": "#/components/schemas/LearningSessionStatus",
+            "description": "Current learning session status."
           },
           "step": {
             "type": "integer",
@@ -3916,10 +5705,30 @@
             "title": "Total Concepts",
             "description": "Total concepts in the session curriculum."
           },
+          "unlocked_concepts": {
+            "type": "integer",
+            "title": "Unlocked Concepts",
+            "description": "Concepts whose prerequisites are currently satisfied."
+          },
+          "locked_concepts": {
+            "type": "integer",
+            "title": "Locked Concepts",
+            "description": "Concepts still locked by prerequisite mastery."
+          },
+          "mastered_concepts": {
+            "type": "integer",
+            "title": "Mastered Concepts",
+            "description": "Unlocked concepts at or above the mastery threshold."
+          },
           "avg_mastery": {
             "type": "number",
             "title": "Avg Mastery",
-            "description": "Average BKT mastery across all concepts."
+            "description": "Average BKT mastery across unlocked concepts."
+          },
+          "progress_percent": {
+            "type": "integer",
+            "title": "Progress Percent",
+            "description": "Percentage of unlocked concepts mastered; locked concepts are excluded."
           },
           "coverage": {
             "type": "number",
@@ -3943,8 +5752,7 @@
           },
           "exercises": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SessionExerciseSummary"
             },
             "type": "array",
             "title": "Exercises",
@@ -3959,7 +5767,11 @@
           "max_steps",
           "concepts_visited",
           "total_concepts",
+          "unlocked_concepts",
+          "locked_concepts",
+          "mastered_concepts",
           "avg_mastery",
+          "progress_percent",
           "coverage",
           "total_correct",
           "total_answered",
@@ -3967,6 +5779,178 @@
           "exercises"
         ],
         "title": "SessionStatusResponse"
+      },
+      "ShortAnswerExerciseResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "$ref": "#/components/schemas/BloomLabel"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exercise_type": {
+            "type": "string",
+            "const": "short_answer",
+            "title": "Exercise Type",
+            "default": "short_answer"
+          },
+          "rubric": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rubric"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "question",
+          "step",
+          "max_steps",
+          "rubric"
+        ],
+        "title": "ShortAnswerExerciseResponse"
+      },
+      "ShortAnswerPayload": {
+        "properties": {
+          "exercise_type": {
+            "type": "string",
+            "const": "short_answer",
+            "title": "Exercise Type",
+            "default": "short_answer"
+          },
+          "rubric": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rubric"
+          },
+          "sample_answer": {
+            "type": "string",
+            "title": "Sample Answer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rubric",
+          "sample_answer"
+        ],
+        "title": "ShortAnswerPayload"
+      },
+      "StandardResponse_Annotated_Union_MCQExerciseResponse__TrueFalseExerciseResponse__FillBlankExerciseResponse__MultiCorrectExerciseResponse__OrderingExerciseResponse__MatchingExerciseResponse__ShortAnswerExerciseResponse___FieldInfo_annotation_NoneType__required_True__discriminator__exercise_type____": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MCQExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/TrueFalseExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/FillBlankExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/MultiCorrectExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/OrderingExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/MatchingExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/ShortAnswerExerciseResponse"
+              }
+            ],
+            "title": "Data",
+            "discriminator": {
+              "propertyName": "exercise_type",
+              "mapping": {
+                "fill_blank": "#/components/schemas/FillBlankExerciseResponse",
+                "matching": "#/components/schemas/MatchingExerciseResponse",
+                "mcq": "#/components/schemas/MCQExerciseResponse",
+                "multi_correct": "#/components/schemas/MultiCorrectExerciseResponse",
+                "ordering": "#/components/schemas/OrderingExerciseResponse",
+                "short_answer": "#/components/schemas/ShortAnswerExerciseResponse",
+                "true_false": "#/components/schemas/TrueFalseExerciseResponse"
+              }
+            }
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[Annotated[Union[MCQExerciseResponse, TrueFalseExerciseResponse, FillBlankExerciseResponse, MultiCorrectExerciseResponse, OrderingExerciseResponse, MatchingExerciseResponse, ShortAnswerExerciseResponse], FieldInfo(annotation=NoneType, required=True, discriminator='exercise_type')]]"
       },
       "StandardResponse_ConceptDetailResponse_": {
         "properties": {
@@ -4026,7 +6010,7 @@
         ],
         "title": "StandardResponse[DeleteSubjectResponse]"
       },
-      "StandardResponse_ExerciseResponse_": {
+      "StandardResponse_InfoResponse_": {
         "properties": {
           "success": {
             "type": "boolean",
@@ -4034,7 +6018,7 @@
             "default": true
           },
           "data": {
-            "$ref": "#/components/schemas/ExerciseResponse"
+            "$ref": "#/components/schemas/InfoResponse"
           },
           "meta": {
             "anyOf": [
@@ -4053,7 +6037,7 @@
         "required": [
           "data"
         ],
-        "title": "StandardResponse[ExerciseResponse]"
+        "title": "StandardResponse[InfoResponse]"
       },
       "StandardResponse_KnowledgeGraphResponse_": {
         "properties": {
@@ -4142,6 +6126,35 @@
         ],
         "title": "StandardResponse[NextConceptResponse]"
       },
+      "StandardResponse_PipelineJobCancelResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineJobCancelResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineJobCancelResponse]"
+      },
       "StandardResponse_PipelineJobHistoryListResponse_": {
         "properties": {
           "success": {
@@ -4170,6 +6183,64 @@
           "data"
         ],
         "title": "StandardResponse[PipelineJobHistoryListResponse]"
+      },
+      "StandardResponse_PipelineJobListResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineJobListResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineJobListResponse]"
+      },
+      "StandardResponse_PipelineJobRetryResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineJobRetryResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineJobRetryResponse]"
       },
       "StandardResponse_PipelineJobStatusResponse_": {
         "properties": {
@@ -4229,6 +6300,35 @@
         ],
         "title": "StandardResponse[PipelineProcessResponse]"
       },
+      "StandardResponse_PipelineRuntimeStatusResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PipelineRuntimeStatusResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[PipelineRuntimeStatusResponse]"
+      },
       "StandardResponse_PipelineSessionCreateResponse_": {
         "properties": {
           "success": {
@@ -4258,6 +6358,64 @@
         ],
         "title": "StandardResponse[PipelineSessionCreateResponse]"
       },
+      "StandardResponse_QuizDraftListResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/QuizDraftListResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[QuizDraftListResponse]"
+      },
+      "StandardResponse_QuizDraftSingleResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/QuizDraftSingleResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[QuizDraftSingleResponse]"
+      },
       "StandardResponse_QuizTutorResponseData_": {
         "properties": {
           "success": {
@@ -4286,6 +6444,35 @@
           "data"
         ],
         "title": "StandardResponse[QuizTutorResponseData]"
+      },
+      "StandardResponse_ReadinessResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ReadinessResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[ReadinessResponse]"
       },
       "StandardResponse_SessionCreateResponse_": {
         "properties": {
@@ -4558,63 +6745,68 @@
           },
           "filename": {
             "type": "string",
-            "title": "Filename",
-            "default": ""
+            "title": "Filename"
           },
           "subject_id": {
             "type": "string",
-            "title": "Subject Id",
-            "default": ""
+            "title": "Subject Id"
           },
           "status": {
-            "type": "string",
-            "title": "Status"
+            "$ref": "#/components/schemas/SubjectHistoryStatus"
           },
           "total_correct": {
             "type": "integer",
-            "title": "Total Correct",
-            "default": 0
+            "title": "Total Correct"
           },
           "total_answered": {
             "type": "integer",
-            "title": "Total Answered",
-            "default": 0
+            "title": "Total Answered"
           },
           "accuracy": {
             "type": "number",
-            "title": "Accuracy",
-            "default": 0.0
+            "title": "Accuracy"
           },
           "step": {
             "type": "integer",
-            "title": "Step",
-            "default": 0
+            "title": "Step"
           },
           "max_steps": {
             "type": "integer",
-            "title": "Max Steps",
-            "default": 0
+            "title": "Max Steps"
           },
           "avg_mastery": {
             "type": "number",
-            "title": "Avg Mastery",
-            "default": 0.0
+            "title": "Avg Mastery"
+          },
+          "unlocked_concepts": {
+            "type": "integer",
+            "title": "Unlocked Concepts"
+          },
+          "locked_concepts": {
+            "type": "integer",
+            "title": "Locked Concepts"
+          },
+          "mastered_concepts": {
+            "type": "integer",
+            "title": "Mastered Concepts"
+          },
+          "progress_percent": {
+            "type": "integer",
+            "title": "Progress Percent"
           },
           "concept_names": {
             "additionalProperties": {
               "type": "string"
             },
             "type": "object",
-            "title": "Concept Names",
-            "default": {}
+            "title": "Concept Names"
           },
           "concept_mastery": {
             "items": {
               "type": "number"
             },
             "type": "array",
-            "title": "Concept Mastery",
-            "default": []
+            "title": "Concept Mastery"
           },
           "bloom_mastery": {
             "items": {
@@ -4624,27 +6816,22 @@
               "type": "array"
             },
             "type": "array",
-            "title": "Bloom Mastery",
-            "default": []
+            "title": "Bloom Mastery"
           },
           "exercise_history": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ExerciseHistoryResponse"
             },
             "type": "array",
-            "title": "Exercise History",
-            "default": []
+            "title": "Exercise History"
           },
           "created_at": {
             "type": "number",
-            "title": "Created At",
-            "default": 0
+            "title": "Created At"
           },
           "updated_at": {
             "type": "number",
-            "title": "Updated At",
-            "default": 0
+            "title": "Updated At"
           },
           "last_session_id": {
             "anyOf": [
@@ -4661,7 +6848,26 @@
         "type": "object",
         "required": [
           "job_id",
-          "status"
+          "filename",
+          "subject_id",
+          "status",
+          "total_correct",
+          "total_answered",
+          "accuracy",
+          "step",
+          "max_steps",
+          "avg_mastery",
+          "unlocked_concepts",
+          "locked_concepts",
+          "mastered_concepts",
+          "progress_percent",
+          "concept_names",
+          "concept_mastery",
+          "bloom_mastery",
+          "exercise_history",
+          "created_at",
+          "updated_at",
+          "last_session_id"
         ],
         "title": "SubjectHistoryDetailResponse"
       },
@@ -4702,22 +6908,20 @@
           },
           "status": {
             "type": "string",
+            "const": "completed",
             "title": "Status"
           },
           "concepts_extracted": {
             "type": "integer",
-            "title": "Concepts Extracted",
-            "default": 0
+            "title": "Concepts Extracted"
           },
           "concepts_after_merge": {
             "type": "integer",
-            "title": "Concepts After Merge",
-            "default": 0
+            "title": "Concepts After Merge"
           },
           "relations_verified": {
             "type": "integer",
-            "title": "Relations Verified",
-            "default": 0
+            "title": "Relations Verified"
           },
           "completed_at": {
             "type": "number",
@@ -4725,18 +6929,23 @@
           },
           "mastered_concept": {
             "type": "integer",
-            "title": "Mastered Concept",
-            "default": 0
+            "title": "Mastered Concept"
           },
           "all_concept": {
             "type": "integer",
-            "title": "All Concept",
-            "default": 0
+            "title": "All Concept"
+          },
+          "unlocked_concept": {
+            "type": "integer",
+            "title": "Unlocked Concept"
+          },
+          "locked_concept": {
+            "type": "integer",
+            "title": "Locked Concept"
           },
           "progress_percent": {
             "type": "integer",
-            "title": "Progress Percent",
-            "default": 0
+            "title": "Progress Percent"
           }
         },
         "type": "object",
@@ -4745,9 +6954,26 @@
           "filename",
           "subject_id",
           "status",
-          "completed_at"
+          "concepts_extracted",
+          "concepts_after_merge",
+          "relations_verified",
+          "completed_at",
+          "mastered_concept",
+          "all_concept",
+          "unlocked_concept",
+          "locked_concept",
+          "progress_percent"
         ],
         "title": "SubjectHistoryResponse"
+      },
+      "SubjectHistoryStatus": {
+        "type": "string",
+        "enum": [
+          "not_started",
+          "active",
+          "completed"
+        ],
+        "title": "SubjectHistoryStatus"
       },
       "SubjectProgressListResponse": {
         "properties": {
@@ -4770,6 +6996,14 @@
         ],
         "title": "SubjectProgressListResponse"
       },
+      "SubjectProgressStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "completed"
+        ],
+        "title": "SubjectProgressStatus"
+      },
       "SubjectProgressSummaryResponse": {
         "properties": {
           "job_id": {
@@ -4778,57 +7012,62 @@
           },
           "filename": {
             "type": "string",
-            "title": "Filename",
-            "default": ""
+            "title": "Filename"
           },
           "subject_id": {
             "type": "string",
-            "title": "Subject Id",
-            "default": ""
+            "title": "Subject Id"
           },
           "status": {
-            "type": "string",
-            "title": "Status"
+            "$ref": "#/components/schemas/SubjectProgressStatus"
           },
           "total_correct": {
             "type": "integer",
-            "title": "Total Correct",
-            "default": 0
+            "title": "Total Correct"
           },
           "total_answered": {
             "type": "integer",
-            "title": "Total Answered",
-            "default": 0
+            "title": "Total Answered"
           },
           "accuracy": {
             "type": "number",
-            "title": "Accuracy",
-            "default": 0.0
+            "title": "Accuracy"
           },
           "avg_mastery": {
             "type": "number",
-            "title": "Avg Mastery",
-            "default": 0.0
+            "title": "Avg Mastery"
+          },
+          "unlocked_concepts": {
+            "type": "integer",
+            "title": "Unlocked Concepts"
+          },
+          "locked_concepts": {
+            "type": "integer",
+            "title": "Locked Concepts"
+          },
+          "mastered_concepts": {
+            "type": "integer",
+            "title": "Mastered Concepts"
+          },
+          "progress_percent": {
+            "type": "integer",
+            "title": "Progress Percent"
           },
           "step": {
             "type": "integer",
-            "title": "Step",
-            "default": 0
+            "title": "Step"
           },
           "max_steps": {
             "type": "integer",
-            "title": "Max Steps",
-            "default": 0
+            "title": "Max Steps"
           },
           "created_at": {
             "type": "number",
-            "title": "Created At",
-            "default": 0
+            "title": "Created At"
           },
           "updated_at": {
             "type": "number",
-            "title": "Updated At",
-            "default": 0
+            "title": "Updated At"
           },
           "last_session_id": {
             "anyOf": [
@@ -4845,7 +7084,22 @@
         "type": "object",
         "required": [
           "job_id",
-          "status"
+          "filename",
+          "subject_id",
+          "status",
+          "total_correct",
+          "total_answered",
+          "accuracy",
+          "avg_mastery",
+          "unlocked_concepts",
+          "locked_concepts",
+          "mastered_concepts",
+          "progress_percent",
+          "step",
+          "max_steps",
+          "created_at",
+          "updated_at",
+          "last_session_id"
         ],
         "title": "SubjectProgressSummaryResponse"
       },
@@ -4967,18 +7221,7 @@
             "title": "Session Completed"
           },
           "stats": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "number"
-                }
-              ]
-            },
-            "type": "object",
-            "title": "Stats"
+            "$ref": "#/components/schemas/SubmitAnswerStats"
           }
         },
         "type": "object",
@@ -4995,6 +7238,29 @@
           "stats"
         ],
         "title": "SubmitAnswerResponse"
+      },
+      "SubmitAnswerStats": {
+        "properties": {
+          "total_correct": {
+            "type": "integer",
+            "title": "Total Correct"
+          },
+          "total_answered": {
+            "type": "integer",
+            "title": "Total Answered"
+          },
+          "accuracy": {
+            "type": "number",
+            "title": "Accuracy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_correct",
+          "total_answered",
+          "accuracy"
+        ],
+        "title": "SubmitAnswerStats"
       },
       "TheoryResponse": {
         "properties": {
@@ -5016,6 +7282,108 @@
           "examples"
         ],
         "title": "TheoryResponse"
+      },
+      "TrueFalseExerciseResponse": {
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_idx": {
+            "type": "integer",
+            "title": "Concept Idx"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "title": "Bloom Level"
+          },
+          "bloom_label": {
+            "$ref": "#/components/schemas/BloomLabel"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exercise_type": {
+            "type": "string",
+            "const": "true_false",
+            "title": "Exercise Type",
+            "default": "true_false"
+          },
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exercise_id",
+          "concept_name",
+          "concept_idx",
+          "bloom_level",
+          "bloom_label",
+          "question",
+          "step",
+          "max_steps",
+          "statement"
+        ],
+        "title": "TrueFalseExerciseResponse"
+      },
+      "TrueFalsePayload": {
+        "properties": {
+          "exercise_type": {
+            "type": "string",
+            "const": "true_false",
+            "title": "Exercise Type",
+            "default": "true_false"
+          },
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          },
+          "correct_answer": {
+            "type": "boolean",
+            "title": "Correct Answer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "statement",
+          "correct_answer"
+        ],
+        "title": "TrueFalsePayload"
       },
       "TutorChatMessage": {
         "properties": {

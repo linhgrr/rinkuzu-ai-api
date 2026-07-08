@@ -27,6 +27,7 @@ def _session_with_one_ordering_exercise():
             get_session_stats=lambda: {"step": 1, "max_steps": 10},
             get_concept_mastery=lambda: np.array([0.5]),
             get_mastery_matrix=lambda: np.zeros((1, 6)),
+            get_prereq_ok_mask=lambda threshold=None: np.array([True]),
         ),
         job_id="job1",
         user_id="u1",
