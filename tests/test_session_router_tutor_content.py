@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from api.core.learning.exercise_types.payloads import TrueFalsePayload
-from api.routers.session import _resolve_exercise_options, _resolve_exercise_question
+from api.domains.learning.exercise_types.payloads import TrueFalsePayload
+from api.domains.learning.router import _resolve_exercise_options, _resolve_exercise_question
 
 
 def _tf():

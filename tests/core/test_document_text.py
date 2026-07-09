@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.core.shared.document_text import (
+from api.shared.document_text import (
     DocumentPageText,
     DocumentTextConfigurationError,
     ExtractedDocumentText,
@@ -149,18 +149,18 @@ async def test_load_or_extract_document_text_cached_returns_cached_record(monkey
         "metadata": {"page_count": 1, "provider": "landingai", "model": "dpt-2-mini"},
     }
 
-    monkeypatch.setattr("api.core.shared.document_text.mongo_store.is_available", lambda: True)
+    monkeypatch.setattr("api.shared.document_text.mongo_store.is_available", lambda: True)
 
     async def fake_load_document_ocr_record(file_hash: str):
         assert file_hash == "hash-1"
         return cached_record
 
     monkeypatch.setattr(
-        "api.core.shared.document_text.load_document_ocr_record",
+        "api.shared.document_text.load_document_ocr_record",
         fake_load_document_ocr_record,
     )
     monkeypatch.setattr(
-        "api.core.shared.document_text.save_document_ocr_record",
+        "api.shared.document_text.save_document_ocr_record",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("should not persist cache hit")),
     )
 
@@ -185,7 +185,7 @@ async def test_load_or_extract_document_text_cached_persists_cache_miss(monkeypa
     )
     saved: dict[str, object] = {}
 
-    monkeypatch.setattr("api.core.shared.document_text.mongo_store.is_available", lambda: True)
+    monkeypatch.setattr("api.shared.document_text.mongo_store.is_available", lambda: True)
 
     async def fake_load_document_ocr_record(_file_hash: str):
         return None
@@ -195,11 +195,11 @@ async def test_load_or_extract_document_text_cached_persists_cache_miss(monkeypa
         return True
 
     monkeypatch.setattr(
-        "api.core.shared.document_text.load_document_ocr_record",
+        "api.shared.document_text.load_document_ocr_record",
         fake_load_document_ocr_record,
     )
     monkeypatch.setattr(
-        "api.core.shared.document_text.save_document_ocr_record",
+        "api.shared.document_text.save_document_ocr_record",
         fake_save_document_ocr_record,
     )
 

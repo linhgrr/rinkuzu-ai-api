@@ -8,11 +8,11 @@ vietnamese-sbert encoding.
 
 import asyncio
 
-from api.core.content_pipeline.application.stages.embedding import (
+from api.domains.content_pipeline.application.stages.embedding import (
     compute_concept_embeddings,
     resolve_embedding_settings,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def test_resolve_embedding_settings_returns_dummy_values():

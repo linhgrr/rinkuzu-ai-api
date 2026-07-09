@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from pydantic import BaseModel
 import pytest
 
-from api.core.shared import llm as llm_module
-from api.core.shared.llm import invoke_structured_completion
+from api.shared import llm as llm_module
+from api.shared.llm import invoke_structured_completion
 
 
 class ExerciseSchema(BaseModel):

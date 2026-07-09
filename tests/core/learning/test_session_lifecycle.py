@@ -3,7 +3,7 @@ from types import MethodType, SimpleNamespace
 
 import pytest
 
-from api.core.learning.session import SessionManager
+from api.domains.learning.session import SessionManager
 
 
 def _manager_shell() -> SessionManager:
@@ -85,10 +85,10 @@ async def test_get_or_create_pipeline_session_reuses_loaded_recovery_documents(m
         return self._register_session(session)
 
     monkeypatch.setattr(
-        "api.core.learning.session.load_subject_progress_by_session_for_user",
+        "api.domains.learning.session.load_subject_progress_by_session_for_user",
         _unexpected_load,
     )
-    monkeypatch.setattr("api.core.learning.session.load_pipeline_job_for_user", _unexpected_load)
+    monkeypatch.setattr("api.domains.learning.session.load_pipeline_job_for_user", _unexpected_load)
     manager.create_session_from_pipeline = MethodType(_fake_create, manager)
 
     session, created = await manager.get_or_create_pipeline_session(

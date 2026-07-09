@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.core.quiz import tutor_chat
-from api.core.shared import retry as retry_module
+from api.domains.quiz import tutor_chat
+from api.shared import retry as retry_module
 
 
 def test_build_tutor_prompt_ignores_suspicious_history_messages():

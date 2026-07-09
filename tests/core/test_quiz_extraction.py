@@ -3,12 +3,12 @@ from types import SimpleNamespace
 from pydantic import ValidationError
 import pytest
 
-from api.core.quiz import extraction
-from api.core.quiz.extraction import (
+from api.domains.quiz import extraction
+from api.domains.quiz.extraction import (
     ExtractedQuizQuestion,
     ExtractedQuizQuestionBatch,
 )
-from api.core.shared.document_text import DocumentPageText, ExtractedDocumentText
+from api.shared.document_text import DocumentPageText, ExtractedDocumentText
 
 
 def test_extracted_quiz_question_requires_single_correct_index():

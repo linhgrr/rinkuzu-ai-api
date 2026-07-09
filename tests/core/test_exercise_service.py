@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.core.learning import exercise_service as exercise_service_module
-from api.core.learning.exercise_service import ExerciseService
+from api.domains.learning import exercise_service as exercise_service_module
+from api.domains.learning.exercise_service import ExerciseService
 
 
 def test_exercise_service_uses_separate_request_and_prefetch_timeouts(monkeypatch):
@@ -66,6 +66,9 @@ async def test_eager_prefetch_uses_prefetch_timeout(monkeypatch):
             get_session_stats=lambda: {"step": 0},
             get_concept_mastery=lambda: [0.2],
         ),
+        q_net=None,
+        current_obs=None,
+        device=None,
         concept_map={"concept-1": 0},
         concept_names={"concept-1": "Concept 1"},
         concept_definitions={"concept-1": "Definition 1"},

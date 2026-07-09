@@ -1,6 +1,6 @@
-from api.core.learning.answer_eval import evaluate_answer, serialize_answer_for_history
-from api.core.learning.exercise_types.payloads import TrueFalsePayload
-from api.core.learning.session import ExerciseRecord
+from api.domains.learning.answer_eval import evaluate_answer, serialize_answer_for_history
+from api.domains.learning.exercise_types.payloads import TrueFalsePayload
+from api.domains.learning.session import ExerciseRecord
 
 
 def _tf_record():

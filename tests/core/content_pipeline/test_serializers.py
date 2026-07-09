@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
-from api.core.content_pipeline.infrastructure.serializers import pipeline_job_to_document
-from api.core.learning.prompts.grading import TheoryOutput
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.infrastructure.serializers import pipeline_job_to_document
+from api.domains.learning.prompts.grading import TheoryOutput
 
 
 def test_pipeline_job_to_document_matches_repository_shape():

@@ -8,7 +8,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from api.core.shared.url_fetch import UnsafeURLError, stream_download
+from api.shared.url_fetch import UnsafeURLError, stream_download
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -91,7 +91,7 @@ async def test_stream_download_retries_on_transient_error(tmp_path: Path) -> Non
 
     dest = tmp_path / "out.pdf"
 
-    with patch("api.core.shared.url_fetch.httpx.AsyncClient", _FakeClient):
+    with patch("api.shared.url_fetch.httpx.AsyncClient", _FakeClient):
         bytes_written = await stream_download(_SAFE_URL, dest, max_bytes=_MAX_BYTES)
 
     assert bytes_written == len(_stream_payload)
@@ -116,7 +116,7 @@ async def test_stream_download_does_not_retry_unsafe_url(tmp_path: Path) -> None
 
     validate_call_count = 0
 
-    import api.core.shared.url_fetch as _mod
+    import api.shared.url_fetch as _mod
 
     original_validate = _mod.validate_download_url
 

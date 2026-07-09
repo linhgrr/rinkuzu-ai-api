@@ -1,4 +1,4 @@
-from api.core.content_pipeline import PipelineJob, PipelineStatus
+from api.domains.content_pipeline import PipelineJob, PipelineStatus
 
 
 def test_pipeline_status_terminal_states():

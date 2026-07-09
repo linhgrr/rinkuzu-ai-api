@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
-from api.core.shared import llm_usage
+import pytest
+
+from api.shared import llm_usage
 
 
 def test_compute_cost_flash_1m_in_1m_out():
@@ -33,3 +35,33 @@ def test_extract_usage_from_object():
 def test_extract_usage_missing_returns_none():
     assert llm_usage.extract_usage({"no_usage": 1}) is None
     assert llm_usage.extract_usage(SimpleNamespace()) is None
+
+
+@pytest.mark.anyio
+async def test_record_llm_usage_persists_action(monkeypatch):
+    """The feature label passed by the caller must reach the persisted record.
+
+    Guards the regression where action was read from an unset ContextVar and
+    every record landed as (unknown).
+    """
+    captured: dict[str, object] = {}
+
+    class _FakeDoc:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def insert(self):
+            return None
+
+    monkeypatch.setattr(llm_usage.mongo_store, "is_available", lambda: True)
+    monkeypatch.setattr(llm_usage, "LlmUsageDocument", _FakeDoc)
+
+    await llm_usage.record_llm_usage(
+        model="deepseek-v4-flash",
+        provider="deepseek",
+        usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        action=llm_usage.LlmAction.ADAPTIVE_EXERCISE,
+    )
+
+    assert captured["action"] == "adaptive_exercise"
+    assert captured["input_tokens"] == 10

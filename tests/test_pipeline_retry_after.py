@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from api.core.content_pipeline import PipelineStatus
-from api.routers import pipeline
+from api.domains.content_pipeline import PipelineStatus
+from api.domains.content_pipeline import router as pipeline
 
 
 def test_pipeline_retry_after_uses_stage_specific_settings(monkeypatch):

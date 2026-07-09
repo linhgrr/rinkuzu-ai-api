@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 
-from api.core.content_pipeline.infrastructure.llm.extract_chain import ExtractionChain
-from api.core.content_pipeline.infrastructure.llm.schemas import EvidenceVerification
+from api.domains.content_pipeline.infrastructure.llm.extract_chain import ExtractionChain
+from api.domains.content_pipeline.infrastructure.llm.schemas import EvidenceVerification
 
 # ---------------------------------------------------------------------------
 # Helpers / stubs
@@ -53,7 +53,7 @@ class _NoopDocumentExtractor:
     """Satisfies ExtractionChain constructor without real I/O."""
 
     def extract_file(self, _file_path: str) -> object:
-        from api.core.shared.document_text import ExtractedDocumentText
+        from api.shared.document_text import ExtractedDocumentText
 
         return ExtractedDocumentText(text="", pages=[], metadata={"page_count": 0})
 
@@ -66,7 +66,7 @@ class _NoopDocumentExtractor:
 def test_verify_single_relation_retries_and_succeeds(monkeypatch):
     """Should retry on failure and return the successful result."""
     # Make retry policy use 4 attempts with zero sleep so the test is fast.
-    import api.core.shared.retry as retry_module
+    import api.shared.retry as retry_module
 
     monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (4, 0.0))
 
@@ -95,7 +95,7 @@ def test_verify_single_relation_retries_and_succeeds(monkeypatch):
 
 def test_verify_single_relation_returns_error_sentinel_on_exhaustion(monkeypatch):
     """After all retries are used up, must return a _verification_error, not raise."""
-    import api.core.shared.retry as retry_module
+    import api.shared.retry as retry_module
 
     # Only 2 attempts so the always-failing client exhausts quickly.
     monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))

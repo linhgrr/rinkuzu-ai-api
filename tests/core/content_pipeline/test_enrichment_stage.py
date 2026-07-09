@@ -2,13 +2,13 @@ import asyncio
 
 from pydantic import BaseModel
 
-from api.core.content_pipeline.application.stages import enrichment as enrichment_stage
-from api.core.content_pipeline.application.stages.enrichment import (
+from api.domains.content_pipeline.application.stages import enrichment as enrichment_stage
+from api.domains.content_pipeline.application.stages.enrichment import (
     build_ordered_embedding_texts,
     generate_concept_theories,
     generate_saint_concept_embeddings,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def test_build_ordered_embedding_texts_uses_concept_map_order():

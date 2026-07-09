@@ -1,4 +1,4 @@
-from api.core.learning.prompts import build_grading_messages, build_theory_messages
+from api.domains.learning.prompts import build_grading_messages, build_theory_messages
 
 
 def test_grading_prompt_contains_score_anchors():

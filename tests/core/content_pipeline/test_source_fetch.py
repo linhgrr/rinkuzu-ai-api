@@ -1,7 +1,7 @@
 from anyio import Path
 import pytest
 
-from api.core.content_pipeline.application import source_fetch
+from api.domains.content_pipeline.application import source_fetch
 
 
 @pytest.mark.asyncio

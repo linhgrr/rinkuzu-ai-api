@@ -2,8 +2,8 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 
-from api.core.content_pipeline.infrastructure import runtime
-from api.core.content_pipeline.infrastructure.runtime import calculate_file_hash
+from api.domains.content_pipeline.infrastructure import runtime
+from api.domains.content_pipeline.infrastructure.runtime import calculate_file_hash
 
 
 def test_calculate_file_hash_is_stable_for_same_content(tmp_path: Path):
@@ -48,7 +48,7 @@ def test_content_processor_bindings_can_build_relation_engine(monkeypatch):
 
 
 def test_build_embedding_client_passes_model_name_and_batch_size(monkeypatch):
-    module_name = "api.core.content_pipeline.infrastructure.embed.embedding_client"
+    module_name = "api.domains.content_pipeline.infrastructure.embed.embedding_client"
     original_module = sys.modules.get(module_name)
 
     class _EmbeddingClient:
@@ -76,7 +76,7 @@ def test_runtime_root_no_longer_points_to_content_processor_folder():
 
 
 def test_generate_theory_helper_imports_exercise_gen_lazily(monkeypatch):
-    module_name = "api.core.learning.exercise_gen"
+    module_name = "api.domains.learning.exercise_gen"
     original_module = sys.modules.get(module_name)
     fake_module = SimpleNamespace(
         generate_theory=lambda name, definition: {

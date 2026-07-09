@@ -5,15 +5,18 @@ from types import SimpleNamespace
 
 import networkx as nx
 
-import api.core.content_pipeline.infrastructure.embed as embed_module
-from api.core.content_pipeline.infrastructure.embed import compute_embeddings_batch
-from api.core.content_pipeline.infrastructure.graph import cycle_removal
-from api.core.content_pipeline.infrastructure.graph.cycle_removal import (
+import api.domains.content_pipeline.infrastructure.embed as embed_module
+from api.domains.content_pipeline.infrastructure.embed import compute_embeddings_batch
+from api.domains.content_pipeline.infrastructure.graph import cycle_removal
+from api.domains.content_pipeline.infrastructure.graph.cycle_removal import (
     CycleRemover,
     make_dag_with_llm,
 )
-from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
-import api.core.content_pipeline.infrastructure.utils.text as text_utils
+from api.domains.content_pipeline.infrastructure.llm.schemas import (
+    CycleRemovalDecision,
+    EdgeDecision,
+)
+import api.domains.content_pipeline.infrastructure.utils.text as text_utils
 
 
 class FakeTokenizer:

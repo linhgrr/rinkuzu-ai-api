@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from api.core.shared.retry import async_transient_retry, is_transient_error
+from api.shared.retry import async_transient_retry, is_transient_error
 
 
 def test_classifier_transient_vs_permanent():

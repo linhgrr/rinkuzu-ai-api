@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from api.core.content_pipeline.application.pipeline_service import PipelineService
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.application.pipeline_service import PipelineService
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def _make_service(saved, run_calls):

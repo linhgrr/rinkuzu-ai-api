@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from api.core.quiz import quiz_tutor
+from api.domains.quiz import quiz_tutor
 
 
 def test_generate_quiz_tutor_response_uses_project_standard_message_shape(monkeypatch):

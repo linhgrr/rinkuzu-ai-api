@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from api.core.shared.persistence.documents import ExerciseEntry
+from api.shared.persistence.documents import ExerciseEntry
 
 
 def test_exercise_entry_accepts_nested_payload():

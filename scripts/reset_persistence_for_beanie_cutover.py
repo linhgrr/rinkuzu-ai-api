@@ -27,10 +27,10 @@ def _get_settings():
 
 def _get_chroma_store_types() -> tuple[type, type]:
     concept_store = import_module(
-        "api.core.content_pipeline.infrastructure.storage.chroma_store"
+        "api.domains.content_pipeline.infrastructure.storage.chroma_store"
     ).ConceptChromaStore
     chunk_store = import_module(
-        "api.core.content_pipeline.infrastructure.storage.chunk_chroma_store"
+        "api.domains.content_pipeline.infrastructure.storage.chunk_chroma_store"
     ).ChunkChromaStore
     return concept_store, chunk_store
 

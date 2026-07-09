@@ -3,15 +3,15 @@ from types import SimpleNamespace
 
 import networkx as nx
 
-from api.core.content_pipeline.application.stages.graph_building import (
+from api.domains.content_pipeline.application.stages.graph_building import (
     build_knowledge_graph,
     build_partial_graph,
     remove_invalid_graph_members,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
-from api.core.content_pipeline.domain.relations import VerifiedRelation
-from api.core.content_pipeline.infrastructure.graph.builder import KnowledgeGraphBuilder
-from api.core.content_pipeline.infrastructure.llm.schemas import Concept, Relation
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.relations import VerifiedRelation
+from api.domains.content_pipeline.infrastructure.graph.builder import KnowledgeGraphBuilder
+from api.domains.content_pipeline.infrastructure.llm.schemas import Concept, Relation
 
 
 def test_remove_invalid_graph_members_keeps_only_valid_prerequisite_edges():

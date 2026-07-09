@@ -1,12 +1,12 @@
 import asyncio
 from types import SimpleNamespace
 
-from api.core.content_pipeline.application.stages.concept_extraction import (
+from api.domains.content_pipeline.application.stages.concept_extraction import (
     _resolve_extraction_timeout,
     build_partial_concept_graph,
     extract_concepts_from_chunks,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 class _FakeExtractionChain:
@@ -190,11 +190,11 @@ def test_resolve_extraction_timeout_uses_retry_aware_llm_budget(monkeypatch):
         return 25
 
     monkeypatch.setattr(
-        "api.core.content_pipeline.application.stages.concept_extraction.run_process_stage",
+        "api.domains.content_pipeline.application.stages.concept_extraction.run_process_stage",
         fake_run_process_stage,
     )
     monkeypatch.setattr(
-        "api.core.content_pipeline.application.stages.concept_extraction.resolve_timeout_policy",
+        "api.domains.content_pipeline.application.stages.concept_extraction.resolve_timeout_policy",
         lambda: (1800.0, 300.0),
     )
 

@@ -1,7 +1,7 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from api.core.learning.exercise_types import ExerciseType
-from api.core.learning.prompts import PromptBuilder
+from api.domains.learning.exercise_types import ExerciseType
+from api.domains.learning.prompts import PromptBuilder
 
 
 def test_build_system_message_contains_role_and_math_rules():

@@ -1,8 +1,8 @@
 import pytest
 
-from api.core.learning.exercise_types.base import ExerciseTypeHandler
-from api.core.learning.exercise_types.models import ExerciseType
-from api.core.learning.exercise_types.registry import (
+from api.domains.learning.exercise_types.base import ExerciseTypeHandler
+from api.domains.learning.exercise_types.models import ExerciseType
+from api.domains.learning.exercise_types.registry import (
     _HANDLER_CLASSES,
     get_handler,
     register,

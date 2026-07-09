@@ -1,5 +1,5 @@
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
-from api.core.shared.persistence.pipeline_jobs import pipeline_job_to_document
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.shared.persistence.pipeline_jobs import pipeline_job_to_document
 
 
 def test_to_document_includes_source_and_retry_fields():

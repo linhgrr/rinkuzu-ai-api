@@ -1,9 +1,13 @@
 import pytest
 
+from api.domains.learning import knowledge_router
+from api.domains.learning.knowledge_router import _get_session_resource
+from api.domains.learning.schemas import (
+    ConceptDetailResponse,
+    KnowledgeGraphResponse,
+    MasteryMatrixResponse,
+)
 from api.exceptions import SessionNotFoundError
-from api.routers import knowledge as knowledge_router
-from api.routers.knowledge import _get_session_resource
-from api.schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
 
 
 @pytest.mark.anyio

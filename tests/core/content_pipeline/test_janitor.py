@@ -1,6 +1,6 @@
 import pytest
 
-from api.core.content_pipeline.application.recovery import PipelineJanitor
+from api.domains.content_pipeline.application.recovery import PipelineJanitor
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-from api.core.shared import retry as retry_module
+from api.shared import retry as retry_module
 
 
 def test_llm_retry_call_uses_tenacity_backoff(monkeypatch):

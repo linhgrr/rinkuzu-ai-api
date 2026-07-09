@@ -1,12 +1,12 @@
-from api.core.learning import exercise_gen
-from api.core.learning.exercise_types import (
+from api.domains.learning import exercise_gen
+from api.domains.learning.exercise_types import (
     ExerciseOptions,
     ExerciseType,
     MCQOutput,
     ShortAnswerEvaluationOutput,
 )
-from api.core.learning.prompts.grading import TheoryOutput
-from api.core.shared import retry as retry_module
+from api.domains.learning.prompts.grading import TheoryOutput
+from api.shared import retry as retry_module
 
 
 def test_generate_exercise_retries_and_serializes(monkeypatch):
@@ -18,10 +18,11 @@ def test_generate_exercise_retries_and_serializes(monkeypatch):
     monkeypatch.setattr(exercise_gen, "select_exercise_type", _select_type)
     monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
 
-    def _fake_invoke(*, schema, messages, temperature=0.3):
+    def _fake_invoke(*, schema, messages, action, temperature=0.3):
         attempts["count"] += 1
         assert schema is MCQOutput
         assert messages
+        assert action == "adaptive_exercise"
         if attempts["count"] == 1:
             raise RuntimeError("temporary failure")
         return MCQOutput(

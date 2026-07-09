@@ -1,8 +1,8 @@
 import json
 from types import SimpleNamespace
 
-from api.core.learning.exercise_types.payloads import TrueFalsePayload
-from api.core.learning.history_formatter import format_exercise_history
+from api.domains.learning.exercise_types.payloads import TrueFalsePayload
+from api.domains.learning.history_formatter import format_exercise_history
 
 
 def test_formatter_includes_statement_from_payload():
