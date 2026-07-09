@@ -6,7 +6,7 @@ answer submission, and prefetch caching.
 """
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Awaitable, Callable
 import hashlib
 import json
 from typing import Any, TypeVar, cast
@@ -24,7 +24,7 @@ from .answer_eval import evaluate_answer, serialize_answer_for_history
 from .bloom import BLOOM_LABELS
 from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from .exercise_types import ExerciseType
-from .exercise_types.payloads import ExercisePayload
+from .exercise_types.payloads import ExercisePayload, ShortAnswerPayload
 from .history_formatter import format_exercise_history
 from .session import ExerciseRecord, SessionManager, SessionState
 
@@ -40,15 +40,15 @@ class ExerciseService:
 
     def __init__(self, session_manager: SessionManager | None = None) -> None:
         self._session_manager = session_manager
-        max_workers = max(1, int(settings.llm_max_workers))
-        max_concurrency = settings.llm_max_concurrency or max_workers
+        # LLM calls are async-native; the semaphore caps in-flight concurrency.
+        # llm_max_workers is kept only as a fallback bound when max_concurrency is unset.
+        max_concurrency = settings.llm_max_concurrency or max(1, int(settings.llm_max_workers))
         self._request_llm_timeout_sec = max(0.0, float(settings.llm_request_timeout_sec))
         self._prefetch_llm_timeout_sec = (
             self._request_llm_timeout_sec
             if settings.llm_prefetch_timeout_sec is None
             else max(0.0, float(settings.llm_prefetch_timeout_sec))
         )
-        self._llm_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
         self._llm_semaphore = asyncio.Semaphore(max_concurrency)
         self._exercise_inflight: dict[
             tuple[str, int, int, int, str], asyncio.Task[dict[str, Any] | None]
@@ -128,15 +128,12 @@ class ExerciseService:
         )
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
 
-    async def _run_llm_call(self, func: Any, *args: Any, timeout_sec: float | None = None) -> T:
-        loop = asyncio.get_running_loop()
+    async def _run_llm_call(
+        self, coro_factory: Callable[[], Awaitable[T]], *, timeout_sec: float | None = None
+    ) -> T:
         timeout = self._request_llm_timeout_sec if timeout_sec is None else timeout_sec
         async with self._llm_semaphore:
-            result = await asyncio.wait_for(
-                loop.run_in_executor(self._llm_executor, func, *args),
-                timeout=timeout,
-            )
-            return cast("T", result)
+            return await asyncio.wait_for(coro_factory(), timeout=timeout)
 
     async def _generate_exercise_dedup(
         self,
@@ -160,12 +157,13 @@ class ExerciseService:
 
         async def _run() -> dict[str, Any] | None:
             return await self._run_llm_call(
-                generate_exercise,
-                concept_name,
-                concept_def,
-                bloom_level,
-                mastery,
-                recent_same_concept_exercises,
+                lambda: generate_exercise(
+                    concept_name,
+                    concept_def,
+                    bloom_level,
+                    mastery,
+                    recent_same_concept_exercises,
+                ),
                 timeout_sec=timeout_sec,
             )
 
@@ -191,9 +189,7 @@ class ExerciseService:
 
         async def _run() -> dict[str, Any] | None:
             return await self._run_llm_call(
-                generate_theory,
-                concept_name,
-                concept_def,
+                lambda: generate_theory(concept_name, concept_def),
                 timeout_sec=timeout_sec,
             )
 
@@ -376,11 +372,29 @@ class ExerciseService:
         return exercise
 
     def _evaluate_answer(self, exercise: Any, answer: dict[str, Any]) -> tuple[bool, str]:
-        return evaluate_answer(
-            exercise,
-            answer,
-            short_answer_grader=evaluate_short_answer,
+        """Evaluate CPU-only exercise types (everything except short-answer)."""
+        return evaluate_answer(exercise, answer)
+
+    async def _evaluate_short_answer(
+        self, exercise: Any, answer: dict[str, Any]
+    ) -> tuple[bool, str]:
+        """Grade a short answer via the LLM, then apply verdict + explanation."""
+        payload = cast("ShortAnswerPayload", exercise.payload)
+        student = (answer.get("text") or "").strip()
+        grading = await self._run_llm_call(
+            lambda: evaluate_short_answer(
+                concept_name=exercise.concept_name,
+                question=exercise.question,
+                rubric=payload.rubric,
+                sample_answer=payload.sample_answer,
+                student_answer=student,
+            ),
+            timeout_sec=self._request_llm_timeout_sec,
         )
+        explanation = str(grading["explanation"])
+        exercise.explanation_correct = explanation
+        exercise.explanation_incorrect = explanation
+        return bool(grading["is_correct"]), student
 
     async def submit_answer(
         self, session: SessionState, answer: dict[str, Any], _background_tasks: Any = None
@@ -393,15 +407,7 @@ class ExerciseService:
 
             exercise = session.current_exercise
             if exercise.payload.exercise_type == ExerciseType.SHORT_ANSWER:
-                is_correct, answer_summary = cast(
-                    "tuple[bool, str]",
-                    await self._run_llm_call(
-                        self._evaluate_answer,
-                        exercise,
-                        answer,
-                        timeout_sec=self._request_llm_timeout_sec,
-                    ),
-                )
+                is_correct, answer_summary = await self._evaluate_short_answer(exercise, answer)
             else:
                 is_correct, answer_summary = self._evaluate_answer(exercise, answer)
             verdict = "✓ ĐÚNG" if is_correct else "✗ SAI"
@@ -599,5 +605,5 @@ class ExerciseService:
         )
 
     def close(self) -> None:
-        """Gracefully release thread-pool resources on app shutdown."""
-        self._llm_executor.shutdown(wait=False, cancel_futures=True)
+        """Shutdown hook. LLM calls are async-native now — no resources to release."""
+        # ponytail: kept as a no-op so lifespan/tests need no change; add teardown here if state returns.

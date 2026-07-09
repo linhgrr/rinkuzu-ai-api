@@ -460,21 +460,12 @@ class ShortAnswerHandler(ExerciseTypeHandler):
             "correct_option": payload.sample_answer,
         }
 
-    def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
-        if self._grader is None:
-            raise RuntimeError("short_answer_grader is required for short_answer exercises")
-        payload = cast("ShortAnswerPayload", exercise.payload)
-        student = (answer.get("text") or "").strip()
-        grading = self._grader(
-            concept_name=exercise.concept_name,
-            question=exercise.question,
-            rubric=payload.rubric,
-            sample_answer=payload.sample_answer,
-            student_answer=student,
+    def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:  # noqa: ARG002 — contract parity
+        # Short answers are LLM-graded asynchronously in ExerciseService; this
+        # sync path must never be reached (it can't await the grader).
+        raise RuntimeError(
+            "short_answer is graded async via ExerciseService._evaluate_short_answer"
         )
-        exercise.explanation_correct = str(grading["explanation"])
-        exercise.explanation_incorrect = str(grading["explanation"])
-        return bool(grading["is_correct"]), student
 
     def tutor_question(self, exercise: ExerciseRecord) -> str:
         return exercise.question

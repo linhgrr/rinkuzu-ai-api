@@ -1,6 +1,5 @@
 """Quiz domain HTTP endpoints: draft processing + ask-AI tutor."""
 
-import asyncio
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -178,8 +177,7 @@ async def ask_ai_about_quiz(
                 headers=SSE_STREAM_HEADERS,
             )
 
-        payload = await asyncio.to_thread(
-            generate_quiz_tutor_response,
+        payload = await generate_quiz_tutor_response(
             question=req.question,
             options=req.options,
             user_question=req.user_question,

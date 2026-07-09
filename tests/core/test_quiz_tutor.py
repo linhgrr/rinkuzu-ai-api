@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 from api.domains.quiz import quiz_tutor
@@ -6,7 +7,7 @@ from api.domains.quiz import quiz_tutor
 def test_generate_quiz_tutor_response_uses_project_standard_message_shape(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_generate_tutor_text(*, input_messages, model, timeout_sec, action):
+    async def fake_generate_tutor_text(*, input_messages, model, timeout_sec, action):
         captured["model"] = model
         captured["input_messages"] = input_messages
         captured["timeout_sec"] = timeout_sec
@@ -24,10 +25,12 @@ def test_generate_quiz_tutor_response_uses_project_standard_message_shape(monkey
         ),
     )
 
-    payload = quiz_tutor.generate_quiz_tutor_response(
-        question="2 + 2 bằng bao nhiêu?",
-        options=["3", "4", "5", "6"],
-        user_question="Giải thích giúp mình",
+    payload = asyncio.run(
+        quiz_tutor.generate_quiz_tutor_response(
+            question="2 + 2 bằng bao nhiêu?",
+            options=["3", "4", "5", "6"],
+            user_question="Giải thích giúp mình",
+        )
     )
 
     assert payload["explanation"] == "Đây là phần giải thích đủ dài cho học sinh hiểu bài."

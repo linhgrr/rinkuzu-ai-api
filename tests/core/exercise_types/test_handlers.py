@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from api.domains.learning.exercise_types import (
     FillBlankOutput,
     MatchingOutput,
@@ -159,14 +161,10 @@ def test_multi_correct_evaluate_orderless():
     assert h.evaluate(rec, {"choices": ["A"]})[0] is False
 
 
-def test_short_answer_uses_injected_grader():
-    captured = {}
-
-    def grader(**kw):
-        captured.update(kw)
-        return {"is_correct": True, "explanation": "đạt", "score": 9}
-
-    h = get_handler(ExerciseType.SHORT_ANSWER, short_answer_grader=grader)
+def test_short_answer_evaluate_is_never_called_sync():
+    """Short-answer is LLM-graded async in the service layer (sans-I/O). The sync
+    handler path must refuse rather than block the event loop."""
+    h = get_handler(ExerciseType.SHORT_ANSWER)
     out = ShortAnswerOutput(
         question="Giải thích",
         rubric=["ý 1", "ý 2"],
@@ -176,10 +174,8 @@ def test_short_answer_uses_injected_grader():
     )
     payload = h.payload_from_output(out)
     rec = _record(payload, question="Giải thích")
-    ok, summary = h.evaluate(rec, {"text": "trả lời"})
-    assert ok is True
-    assert summary == "trả lời"
-    assert rec.explanation_correct == "đạt"
+    with pytest.raises(RuntimeError, match="graded async"):
+        h.evaluate(rec, {"text": "trả lời"})
 
 
 def test_prompt_config_methods_return_per_type_text():

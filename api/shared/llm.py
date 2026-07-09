@@ -4,14 +4,12 @@ llm.py — Shared LiteLLM-backed abstractions and helpers for the API codebase.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 import json
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 import instructor
-from litellm import acompletion, completion
-from loguru import logger
+from litellm import acompletion
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
@@ -22,10 +20,8 @@ from api.shared.llm_usage import extract_usage, record_llm_usage
 from api.shared.retry import (
     async_retry,
     build_async_retrying,
-    build_retrying,
     is_retryable_llm_error,
     resolve_llm_retry_policy,
-    sync_retry,
 )
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
@@ -52,7 +48,7 @@ class LLMProviderConfig:
 class LLMClient(Protocol):
     """Unified project-wide LLM capability surface."""
 
-    def generate_text(
+    async def agenerate_text(
         self,
         *,
         messages: Sequence[object],
@@ -72,18 +68,6 @@ class LLMClient(Protocol):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> AsyncIterator[str]:
-        raise NotImplementedError
-
-    def generate_structured(
-        self,
-        *,
-        messages: Sequence[object],
-        schema: type[StructuredModelT],
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        thinking_enabled: bool = False,
-        action: str | None = None,
-    ) -> StructuredModelT:
         raise NotImplementedError
 
     async def agenerate_structured(
@@ -348,37 +332,6 @@ def _structured_litellm_kwargs(
     return payload
 
 
-# Hold strong references to fire-and-forget tasks so they are not garbage
-# collected mid-flight (see RUF006); each task removes itself when done.
-_usage_tasks: set[asyncio.Task[None]] = set()
-
-
-def _record_usage_sync(config: LLMProviderConfig, response: object, action: str | None) -> None:
-    """Fire-and-forget usage recording from a sync context. Best-effort."""
-    usage = extract_usage(response)
-    if not usage:
-        return
-    coro = record_llm_usage(
-        model=config.model,
-        provider=config.custom_llm_provider,
-        usage=usage,
-        action=action,
-    )
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # No running loop (pure sync call) — run to completion best-effort.
-        try:
-            asyncio.run(coro)
-        except Exception as exc:
-            logger.debug("[llm_usage] sync record skipped: {}", exc)
-            coro.close()
-        return
-    task = loop.create_task(coro)
-    _usage_tasks.add(task)
-    task.add_done_callback(_usage_tasks.discard)
-
-
 async def _record_usage_async(
     config: LLMProviderConfig, response: object, action: str | None
 ) -> None:
@@ -410,14 +363,6 @@ class LiteLLMClient(LLMClient):
         self._max_attempts = policy_attempts if max_attempts is None else max_attempts
         self._base_delay_sec = policy_delay if base_delay_sec is None else base_delay_sec
 
-    def _sync_retry(self, label: str) -> Any:
-        return sync_retry(
-            label=label,
-            max_attempts=self._max_attempts,
-            base_delay_sec=self._base_delay_sec,
-            retry_on=is_retryable_llm_error,
-        )
-
     def _async_retry(self, label: str) -> Any:
         return async_retry(
             label=label,
@@ -426,7 +371,7 @@ class LiteLLMClient(LLMClient):
             retry_on=is_retryable_llm_error,
         )
 
-    def generate_text(
+    async def agenerate_text(
         self,
         *,
         messages: Sequence[object],
@@ -435,9 +380,9 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> str:
-        @self._sync_retry("generate_text")
-        def _call() -> str:
-            response = completion(
+        @self._async_retry("agenerate_text")
+        async def _call() -> str:
+            response = await acompletion(
                 **_litellm_kwargs(
                     config=self.config,
                     messages=messages,
@@ -446,10 +391,10 @@ class LiteLLMClient(LLMClient):
                     thinking_enabled=thinking_enabled,
                 )
             )
-            _record_usage_sync(self.config, response, action)
+            await _record_usage_async(self.config, response, action)
             return extract_llm_text(_extract_response_content(response))
 
-        return cast("str", _call())
+        return cast("str", await _call())
 
     async def stream_text(
         self,
@@ -519,36 +464,6 @@ class LiteLLMClient(LLMClient):
                 return text
         return ""
 
-    def generate_structured(
-        self,
-        *,
-        messages: Sequence[object],
-        schema: type[StructuredModelT],
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        thinking_enabled: bool = False,
-        action: str | None = None,
-    ) -> StructuredModelT:
-        client = instructor.from_litellm(completion, mode=instructor.Mode.JSON)
-        result, raw = client.chat.completions.create_with_completion(
-            response_model=schema,
-            messages=cast("Any", normalize_chat_messages(messages)),
-            max_retries=build_retrying(
-                label="generate_structured",
-                max_attempts=self._max_attempts,
-                base_delay_sec=self._base_delay_sec,
-                retry_on=is_retryable_llm_error,
-            ),
-            **_structured_litellm_kwargs(
-                config=self.config,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
-            ),
-        )
-        _record_usage_sync(self.config, raw, action)
-        return result
-
     async def agenerate_structured(
         self,
         *,
@@ -601,18 +516,18 @@ def get_default_llm_client(
     )
 
 
-def invoke_text_completion(
+async def ainvoke_text_completion(
     *,
     messages: Sequence[object],
     model: str | None = None,
     temperature: float = 0.0,
-    timeout: float | None = None,
+    timeout: float | None = None,  # noqa: ASYNC109
     max_tokens: int | None = None,
     thinking_enabled: bool = False,
     action: str | None = None,
 ) -> str:
     client = get_default_llm_client(model=model, timeout=timeout)
-    return client.generate_text(
+    return await client.agenerate_text(
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -640,28 +555,6 @@ async def astream_text_completion(
         action=action,
     ):
         yield chunk
-
-
-def invoke_structured_completion(
-    *,
-    messages: Sequence[object],
-    schema: type[StructuredModelT],
-    model: str | None = None,
-    temperature: float = 0.0,
-    timeout: float | None = None,
-    max_tokens: int | None = None,
-    thinking_enabled: bool = False,
-    action: str | None = None,
-) -> StructuredModelT:
-    client = get_default_llm_client(model=model, timeout=timeout)
-    return client.generate_structured(
-        messages=messages,
-        schema=schema,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        thinking_enabled=thinking_enabled,
-        action=action,
-    )
 
 
 async def ainvoke_structured_completion(

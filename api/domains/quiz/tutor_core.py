@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from api.shared.llm import (
+    ainvoke_text_completion,
     astream_text_completion,
-    invoke_text_completion,
     serialize_responses_sse_event,
 )
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
 
-def generate_tutor_text(
+async def generate_tutor_text(
     *,
     input_messages: list[dict[str, Any]],
     model: str,
@@ -31,7 +31,7 @@ def generate_tutor_text(
     action: str,
 ) -> str:
     """Non-stream tutor reply. The client retries transient failures."""
-    return invoke_text_completion(
+    return await ainvoke_text_completion(
         messages=input_messages,
         model=model,
         temperature=0.7,

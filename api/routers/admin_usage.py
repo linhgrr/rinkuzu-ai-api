@@ -18,7 +18,7 @@ from api.schemas.common import ok
 from api.shared.persistence.common import utc_now
 from api.shared.persistence.documents import LlmUsageDocument
 
-router = APIRouter(prefix="/admin/llm-usage", tags=["admin-usage"])
+router = APIRouter(prefix="/api/v1/admin/llm-usage", tags=["admin-usage"])
 
 _WINDOW_RE = re.compile(r"^(\d+)([dh])$")
 

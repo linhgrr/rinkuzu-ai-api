@@ -17,7 +17,7 @@ from pydantic import BaseModel
 import pytest
 
 from api.shared import llm as llm_module
-from api.shared.llm import ainvoke_structured_completion, invoke_structured_completion
+from api.shared.llm import ainvoke_structured_completion
 
 
 class ExerciseSchema(BaseModel):
@@ -48,26 +48,28 @@ def _response(content: str) -> ModelResponse:
     )
 
 
-def _patch_completion(monkeypatch, fn):
-    monkeypatch.setattr(llm_module, "completion", fn)
-    monkeypatch.setattr(llm_module, "get_settings", lambda: FAKE_SETTINGS)
+def _patch_acompletion(monkeypatch, sync_fn):
+    """Patch litellm.acompletion with an async shim over a plain sync callable."""
 
+    async def _acompletion(**kwargs):
+        return sync_fn(**kwargs)
 
-def _patch_acompletion(monkeypatch, fn):
-    monkeypatch.setattr(llm_module, "acompletion", fn)
+    monkeypatch.setattr(llm_module, "acompletion", _acompletion)
     monkeypatch.setattr(llm_module, "get_settings", lambda: FAKE_SETTINGS)
 
 
 def _call():
-    return invoke_structured_completion(
-        schema=ExerciseSchema,
-        model="model-x",
-        messages=[{"role": "user", "content": "generate"}],
+    return asyncio.run(
+        ainvoke_structured_completion(
+            schema=ExerciseSchema,
+            model="model-x",
+            messages=[{"role": "user", "content": "generate"}],
+        )
     )
 
 
 def test_valid_json_parses_into_schema(monkeypatch):
-    _patch_completion(
+    _patch_acompletion(
         monkeypatch,
         lambda **_: _response('{"exercise_type": "fill_blank", "question": "Q?"}'),
     )
@@ -92,7 +94,7 @@ def test_reask_on_validation_error_then_succeeds(monkeypatch):
             return _response('{"exercise_type": "mcq"}')  # missing `question`
         return _response('{"exercise_type": "mcq", "question": "Q?"}')
 
-    _patch_completion(monkeypatch, _flaky)
+    _patch_acompletion(monkeypatch, _flaky)
 
     result = _call()
 
@@ -112,7 +114,7 @@ def test_retries_transient_provider_failure_then_succeeds(monkeypatch):
             raise RuntimeError("transient provider failure")
         return _response('{"exercise_type": "mcq", "question": "Q?"}')
 
-    _patch_completion(monkeypatch, _flaky)
+    _patch_acompletion(monkeypatch, _flaky)
 
     result = _call()
 
@@ -128,24 +130,8 @@ def test_raises_after_exhausting_retries(monkeypatch):
         calls["n"] += 1
         raise RuntimeError("permanent provider failure")
 
-    _patch_completion(monkeypatch, _always_fail)
+    _patch_acompletion(monkeypatch, _always_fail)
 
     with pytest.raises(Exception, match="permanent provider failure"):
         _call()
     assert calls["n"] == 2
-
-
-def test_async_valid_json_parses_into_schema(monkeypatch):
-    async def _acompletion(**_):
-        return _response('{"exercise_type": "mcq", "question": "Q async?"}')
-
-    _patch_acompletion(monkeypatch, _acompletion)
-
-    result = asyncio.run(
-        ainvoke_structured_completion(
-            schema=ExerciseSchema,
-            model="model-x",
-            messages=[{"role": "user", "content": "generate"}],
-        )
-    )
-    assert result.model_dump() == {"exercise_type": "mcq", "question": "Q async?"}

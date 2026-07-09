@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 
-def _build_input_message(
+async def _build_input_message(
     *,
     question: str,
     options: list[str],
@@ -33,7 +33,7 @@ def _build_input_message(
     question_image: str | None,
     option_images: list[str | None] | None,
 ) -> list[dict[str, Any]]:
-    prompt = build_tutor_prompt(
+    prompt = await build_tutor_prompt(
         question=question,
         options=options,
         user_question=user_question,
@@ -54,7 +54,7 @@ def _build_input_message(
     ]
 
 
-def generate_quiz_tutor_response(
+async def generate_quiz_tutor_response(
     *,
     question: str,
     options: list[str],
@@ -69,7 +69,7 @@ def generate_quiz_tutor_response(
             raise ValueError(validation_error)
 
     settings = get_settings()
-    input_messages = _build_input_message(
+    input_messages = await _build_input_message(
         question=question,
         options=options,
         user_question=user_question,
@@ -78,7 +78,7 @@ def generate_quiz_tutor_response(
         option_images=option_images,
     )
 
-    explanation = generate_tutor_text(
+    explanation = await generate_tutor_text(
         input_messages=input_messages,
         model=_resolve_tutor_model(),
         timeout_sec=settings.llm_timeout_sec,
@@ -108,7 +108,7 @@ async def create_quiz_tutor_stream(
             raise ValueError(validation_error)
 
     settings = get_settings()
-    input_messages = _build_input_message(
+    input_messages = await _build_input_message(
         question=question,
         options=options,
         user_question=user_question,

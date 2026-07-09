@@ -2,7 +2,6 @@
 Session router — Session lifecycle endpoints.
 """
 
-import asyncio
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -362,8 +361,7 @@ async def chat_about_exercise(
                 headers=SSE_STREAM_HEADERS,
             )
 
-        explanation = await asyncio.to_thread(
-            generate_tutor_chat_response,
+        explanation = await generate_tutor_chat_response(
             question=question,
             options=options,
             user_question=req.user_question,

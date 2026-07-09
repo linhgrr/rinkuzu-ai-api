@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from api.shared.llm import (
     _resolve_shared_llm_model,
-    invoke_structured_completion,
+    ainvoke_structured_completion,
 )
 from api.shared.llm_usage import LlmAction
 
@@ -51,7 +51,7 @@ def _build_generation_spec(
     return spec.schema, messages
 
 
-def _invoke_structured_llm(
+async def _invoke_structured_llm(
     *,
     schema: type[StructuredModelT],
     messages: Sequence[dict[str, object]],
@@ -59,7 +59,7 @@ def _invoke_structured_llm(
     temperature: float = 0.3,
 ) -> StructuredModelT:
     model = _resolve_shared_llm_model(None)
-    return invoke_structured_completion(
+    return await ainvoke_structured_completion(
         schema=schema,
         messages=messages,
         action=action,
@@ -68,7 +68,7 @@ def _invoke_structured_llm(
     )
 
 
-def generate_exercise(
+async def generate_exercise(
     concept_name: str,
     concept_definition: str,
     bloom_level: int,
@@ -95,7 +95,7 @@ def generate_exercise(
         subject_context=subject_context,
     )
 
-    result = _invoke_structured_llm(
+    result = await _invoke_structured_llm(
         schema=schema, messages=messages, action=LlmAction.ADAPTIVE_EXERCISE
     )
     payload = get_handler(exercise_type).payload_from_output(result)
@@ -108,7 +108,7 @@ def generate_exercise(
     }
 
 
-def evaluate_short_answer(
+async def evaluate_short_answer(
     *,
     concept_name: str,
     question: str,
@@ -125,7 +125,7 @@ def evaluate_short_answer(
         student_answer=student_answer,
     )
 
-    result = _invoke_structured_llm(
+    result = await _invoke_structured_llm(
         schema=ShortAnswerEvaluationOutput,
         messages=messages,
         action=LlmAction.ADAPTIVE_SHORT_ANSWER_EVAL,
@@ -133,7 +133,7 @@ def evaluate_short_answer(
     return result.model_dump()
 
 
-def generate_theory(
+async def generate_theory(
     concept_name: str,
     concept_definition: str,
     bloom_level: int = 2,
@@ -154,11 +154,12 @@ def generate_theory(
     # The client retries transient failures; if it still fails, fall back to a
     # deterministic stub so theory generation never hard-fails the lesson flow.
     try:
-        return _invoke_structured_llm(
+        result = await _invoke_structured_llm(
             schema=TheoryOutput,
             messages=messages,
             action=LlmAction.ADAPTIVE_THEORY,
-        ).model_dump()
+        )
+        return result.model_dump()
     except Exception as exc:
         logger.warning("[LLM-Theory] generation failed, using fallback: {}", exc)
         return fallback

@@ -69,7 +69,7 @@ class ContentProcessorBindings:
     make_dag_with_llm: Callable[[Any], Awaitable[tuple[Any, Any]]]
     apply_transitive_reduction: Callable[[Any], Any]
     saint_text_model_factory: Callable[[], Any]
-    generate_theory: Callable[[str, str], Any]
+    generate_theory: Callable[[str, str], Awaitable[Any]]
 
 
 class LockedSentenceTransformerModel:
@@ -84,10 +84,10 @@ class LockedSentenceTransformerModel:
             return self._model.encode(*args, **kwargs)
 
 
-def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str) -> Any:
+async def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str) -> Any:
     """Delegate theory generation to exercise_gen module."""
     exercise_gen = import_module("api.domains.learning.exercise_gen")
-    return exercise_gen.generate_theory(concept_name, concept_definition)
+    return await exercise_gen.generate_theory(concept_name, concept_definition)
 
 
 def get_s3_client() -> Any:

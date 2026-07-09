@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -124,19 +125,21 @@ def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_orderin
         service.close()
 
 
-def test_evaluate_answer_updates_short_answer_feedback(monkeypatch):
+def test_evaluate_short_answer_updates_feedback(monkeypatch):
+    """Short-answer is LLM-graded async in the service (sans-I/O); the grader
+    verdict + explanation are applied to the exercise record."""
     from api.domains.learning.exercise_types.payloads import ShortAnswerPayload
 
     service = ExerciseService()
-    monkeypatch.setattr(
-        exercise_service_module,
-        "evaluate_short_answer",
-        lambda **_kwargs: {
+
+    async def _fake_grader(**_kwargs):
+        return {
             "is_correct": True,
             "explanation": "Đáp án đạt rubric cốt lõi.",
             "score": 9,
-        },
-    )
+        }
+
+    monkeypatch.setattr(exercise_service_module, "evaluate_short_answer", _fake_grader)
 
     short_answer = SimpleNamespace(
         payload=ShortAnswerPayload(rubric=["Ý chính", "Lập luận"], sample_answer="Mẫu trả lời"),
@@ -147,10 +150,10 @@ def test_evaluate_answer_updates_short_answer_feedback(monkeypatch):
     )
 
     try:
-        assert service._evaluate_answer(short_answer, {"text": "Câu trả lời của học sinh"}) == (
-            True,
-            "Câu trả lời của học sinh",
+        result = asyncio.run(
+            service._evaluate_short_answer(short_answer, {"text": "Câu trả lời của học sinh"})
         )
+        assert result == (True, "Câu trả lời của học sinh")
         assert short_answer.explanation_correct == "Đáp án đạt rubric cốt lõi."
         assert short_answer.explanation_incorrect == "Đáp án đạt rubric cốt lõi."
     finally:

@@ -16,7 +16,7 @@ from api.shared.document_text import (
     build_ocr_api_config,
     extract_document_text_from_bytes,
 )
-from api.shared.llm import invoke_structured_completion, resolve_llm_api_key
+from api.shared.llm import ainvoke_structured_completion, resolve_llm_api_key
 from api.shared.llm_usage import LlmAction
 
 EXTRACTION_PROMPT = """
@@ -68,8 +68,7 @@ async def invoke_document_text_extract_llm(
 ) -> list[dict[str, str | int | list[str] | list[int]]]:
     timeout_sec = max(1.0, float(get_settings().llm_timeout_sec))
     llm_start = time.perf_counter()
-    questions = await asyncio.to_thread(
-        _extract_questions_from_document_text_sync,
+    questions = await _extract_questions_from_document_text(
         document_text,
         filename,
         prompt,
@@ -85,15 +84,18 @@ async def invoke_document_text_extract_llm(
     return questions
 
 
-def _extract_questions_from_pdf_bytes_sync(
+async def _extract_questions_from_pdf_bytes(
     pdf_bytes: bytes,
     filename: str,
     prompt: str,
     model: str,
     timeout_sec: float,
 ) -> list[dict[str, str | int | list[str] | list[int]]]:
-    document_text = extract_document_text_from_bytes(pdf_bytes, filename=filename)
-    return _extract_questions_from_document_text_sync(
+    # PDF parsing is CPU/blocking — keep it off the event loop; the LLM call is async.
+    document_text = await asyncio.to_thread(
+        extract_document_text_from_bytes, pdf_bytes, filename=filename
+    )
+    return await _extract_questions_from_document_text(
         document_text,
         filename,
         prompt,
@@ -114,7 +116,7 @@ def _clamp_document_text(text: str, max_chars: int) -> str:
     return text[:max_chars]
 
 
-def _extract_questions_from_document_text_sync(
+async def _extract_questions_from_document_text(
     document_text: ExtractedDocumentText,
     filename: str,
     prompt: str,
@@ -125,7 +127,7 @@ def _extract_questions_from_document_text_sync(
     full_text = _clamp_document_text(document_text.text, max_chars)
     page_count = document_text.metadata.get("page_count", len(document_text.pages))
 
-    payload = invoke_structured_completion(
+    payload = await ainvoke_structured_completion(
         schema=ExtractedQuizQuestionBatch,
         model=model,
         temperature=0.0,

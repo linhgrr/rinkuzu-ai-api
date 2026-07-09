@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import patch
 
 from api.domains.learning import exercise_gen
@@ -16,8 +17,12 @@ def test_generate_exercise_includes_nested_payload(monkeypatch):
         explanation_correct="Đúng",
         explanation_incorrect="Sai",
     )
-    with patch.object(exercise_gen, "_invoke_structured_llm", return_value=fake):
-        data = exercise_gen.generate_exercise("Số nguyên tố", "def", 1)
+
+    async def _fake_invoke(**_kwargs):
+        return fake
+
+    with patch.object(exercise_gen, "_invoke_structured_llm", _fake_invoke):
+        data = asyncio.run(exercise_gen.generate_exercise("Số nguyên tố", "def", 1))
 
     assert data is not None
     assert data["payload"] == {

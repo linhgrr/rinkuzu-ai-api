@@ -13,7 +13,7 @@ from api.config import get_settings
 from api.shared.llm import (
     LLMConfigurationError,
     _resolve_shared_llm_model,
-    invoke_text_completion,
+    ainvoke_text_completion,
 )
 from api.shared.llm_usage import LlmAction
 
@@ -100,7 +100,7 @@ def normalize_chat_history(chat_history: list[dict[str, str]] | None) -> list[di
     return normalized[-12:]
 
 
-def _request_text_response(
+async def _request_text_response(
     *,
     instructions: str,
     user_text: str,
@@ -108,7 +108,7 @@ def _request_text_response(
     temperature: float,
     timeout_sec: float,
 ) -> str:
-    return invoke_text_completion(
+    return await ainvoke_text_completion(
         messages=[
             {"role": "system", "content": instructions},
             {"role": "user", "content": user_text},
@@ -120,7 +120,7 @@ def _request_text_response(
     )
 
 
-def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
+async def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
     if not chat_history:
         return ""
 
@@ -133,7 +133,7 @@ def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
         return ""
 
     try:
-        return _request_text_response(
+        return await _request_text_response(
             instructions=_SUMMARY_SYSTEM_PROMPT,
             user_text=(
                 "Tóm tắt hội thoại sau trong 2-3 câu, tập trung vào khái niệm đã bàn và điểm học sinh còn vướng:\n\n"
@@ -148,10 +148,10 @@ def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
         return ""
 
 
-def build_chat_context(chat_history: list[dict[str, str]] | None) -> str:
+async def build_chat_context(chat_history: list[dict[str, str]] | None) -> str:
     history = normalize_chat_history(chat_history)
     if len(history) > _CHAT_HISTORY_SUMMARIZE_THRESHOLD:
-        summary = summarize_chat_history(history)
+        summary = await summarize_chat_history(history)
         if summary:
             return f"\nTÓM TẮT HỘI THOẠI TRƯỚC:\n{summary}\n"
         return ""
@@ -169,7 +169,7 @@ def build_chat_context(chat_history: list[dict[str, str]] | None) -> str:
     return ""
 
 
-def build_tutor_prompt(
+async def build_tutor_prompt(
     *,
     question: str,
     options: list[str],
@@ -180,7 +180,7 @@ def build_tutor_prompt(
     rag_context: str = "",
     general_instruction: str = "HÃY GIẢI THÍCH TỔNG QUÁT CÂU HỎI NÀY CHO HỌC SINH.",
 ) -> str:
-    contextual_info = build_chat_context(chat_history)
+    contextual_info = await build_chat_context(chat_history)
     sanitized_question = sanitize_chat_input(user_question) if user_question else ""
     learner_prompt = (
         f"CÂU HỎI MỚI CỦA HỌC SINH: {sanitized_question}"
@@ -247,7 +247,7 @@ async def create_tutor_chat_stream(
     if validation_error:
         raise ValueError(validation_error)
 
-    prompt = build_tutor_prompt(
+    prompt = await build_tutor_prompt(
         question=question,
         options=options,
         user_question=user_question,
@@ -265,7 +265,7 @@ async def create_tutor_chat_stream(
     )
 
 
-def generate_tutor_chat_response(
+async def generate_tutor_chat_response(
     question: str,
     options: list[str],
     user_question: str,
@@ -278,7 +278,7 @@ def generate_tutor_chat_response(
     if validation_error:
         raise ValueError(validation_error)
 
-    prompt = build_tutor_prompt(
+    prompt = await build_tutor_prompt(
         question=question,
         options=options,
         user_question=user_question,
@@ -287,7 +287,7 @@ def generate_tutor_chat_response(
         bloom_level=bloom_level,
         rag_context=rag_context,
     )
-    return generate_tutor_text(
+    return await generate_tutor_text(
         input_messages=_tutor_chat_messages(prompt),
         model=_resolve_tutor_model(),
         timeout_sec=get_settings().llm_timeout_sec,
