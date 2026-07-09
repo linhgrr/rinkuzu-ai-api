@@ -77,12 +77,9 @@ class MCQHandler(ExerciseTypeHandler):
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
         payload = cast("MCQPayload", exercise.payload)
         return {
-            "exercise_type": self.exercise_type.value,
-            "question": exercise.question,
+            **self._base_response_dict(exercise),
             "options": dict(payload.options),
             "correct_option": payload.correct_option,
-            "explanation_correct": exercise.explanation_correct,
-            "explanation_incorrect": exercise.explanation_incorrect,
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
@@ -135,13 +132,10 @@ class TrueFalseHandler(ExerciseTypeHandler):
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
         payload = cast("TrueFalsePayload", exercise.payload)
         return {
-            "exercise_type": self.exercise_type.value,
-            "question": exercise.question,
+            **self._base_response_dict(exercise),
             "statement": payload.statement,
             "correct_answer": payload.correct_answer,
             "correct_option": "True" if payload.correct_answer else "False",
-            "explanation_correct": exercise.explanation_correct,
-            "explanation_incorrect": exercise.explanation_incorrect,
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
@@ -202,15 +196,12 @@ class FillBlankHandler(ExerciseTypeHandler):
         payload = cast("FillBlankPayload", exercise.payload)
         canonical = payload.blank_answers[0] if payload.blank_answers else ""
         return {
-            "exercise_type": self.exercise_type.value,
-            "question": exercise.question,
+            **self._base_response_dict(exercise),
             "sentence": payload.sentence,
             "hint": payload.hint,
             "blank_answers": list(payload.blank_answers),
             "correct_answer": list(payload.blank_answers),
             "correct_option": canonical,
-            "explanation_correct": exercise.explanation_correct,
-            "explanation_incorrect": exercise.explanation_incorrect,
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
@@ -275,13 +266,10 @@ class MultiCorrectHandler(ExerciseTypeHandler):
         payload = cast("MultiCorrectPayload", exercise.payload)
         correct = sorted(set(payload.correct_options))
         return {
-            "exercise_type": self.exercise_type.value,
-            "question": exercise.question,
+            **self._base_response_dict(exercise),
             "options": dict(payload.options),
             "correct_answer": correct,
             "correct_option": ", ".join(correct),
-            "explanation_correct": exercise.explanation_correct,
-            "explanation_incorrect": exercise.explanation_incorrect,
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
@@ -337,13 +325,10 @@ class OrderingHandler(ExerciseTypeHandler):
         payload = cast("OrderingPayload", exercise.payload)
         display = deterministic_shuffle(payload.correct_order, exercise.exercise_id)
         return {
-            "exercise_type": self.exercise_type.value,
-            "question": exercise.question,
+            **self._base_response_dict(exercise),
             "items": display,
             "correct_answer": list(payload.correct_order),
             "correct_option": join_lines(payload.correct_order),
-            "explanation_correct": exercise.explanation_correct,
-            "explanation_incorrect": exercise.explanation_incorrect,
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
@@ -400,15 +385,12 @@ class MatchingHandler(ExerciseTypeHandler):
         right_canonical = [pair.right for pair in payload.pairs]
         right_items = deterministic_shuffle(right_canonical, exercise.exercise_id)
         return {
-            "exercise_type": self.exercise_type.value,
-            "question": exercise.question,
+            **self._base_response_dict(exercise),
             "pairs": [pair.model_dump() for pair in payload.pairs],
             "left_items": left_items,
             "right_items": right_items,
             "correct_answer": {pair.left: pair.right for pair in payload.pairs},
             "correct_option": join_lines([f"{pair.left} → {pair.right}" for pair in payload.pairs]),
-            "explanation_correct": exercise.explanation_correct,
-            "explanation_incorrect": exercise.explanation_incorrect,
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:
@@ -471,14 +453,11 @@ class ShortAnswerHandler(ExerciseTypeHandler):
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
         payload = cast("ShortAnswerPayload", exercise.payload)
         return {
-            "exercise_type": self.exercise_type.value,
-            "question": exercise.question,
+            **self._base_response_dict(exercise),
             "rubric": list(payload.rubric),
             "sample_answer": payload.sample_answer,
             "correct_answer": payload.sample_answer,
             "correct_option": payload.sample_answer,
-            "explanation_correct": exercise.explanation_correct,
-            "explanation_incorrect": exercise.explanation_incorrect,
         }
 
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]:

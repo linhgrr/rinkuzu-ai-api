@@ -41,6 +41,15 @@ class ExerciseTypeHandler(ABC):
     @abstractmethod
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]: ...
 
+    def _base_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
+        """Keys every to_response_dict shares; subclasses merge their own on top."""
+        return {
+            "exercise_type": self.exercise_type.value,
+            "question": exercise.question,
+            "explanation_correct": exercise.explanation_correct,
+            "explanation_incorrect": exercise.explanation_incorrect,
+        }
+
     # 4. grading (short_answer uses self._grader; others ignore it)
     @abstractmethod
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]: ...
