@@ -11,8 +11,6 @@ from loguru import logger
 
 from api.config import get_settings
 from api.shared.llm import (
-    LLMConfigurationError,
-    _resolve_shared_llm_model,
     astream_text_completion,
     invoke_text_completion,
     serialize_responses_sse_event,
@@ -23,6 +21,7 @@ from api.shared.retry import llm_retry_call
 from .tutor_chat import (
     TUTOR_SYSTEM_PROMPT,
     _extract_stream_chunk_text,
+    _resolve_tutor_model,
     build_tutor_prompt,
     validate_chat_input,
 )
@@ -31,15 +30,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 _MIN_EXPLANATION_LENGTH = 20
-
-
-def _resolve_quiz_tutor_model() -> str:
-    try:
-        return _resolve_shared_llm_model(None)
-    except LLMConfigurationError as exc:
-        raise LLMConfigurationError(
-            "LLM model is not set. Configure EXERCISE_LLM_MODEL or LLM_MODEL."
-        ) from exc
 
 
 def _build_input_message(
@@ -122,7 +112,7 @@ def generate_quiz_tutor_response(
             raise ValueError(validation_error)
 
     settings = get_settings()
-    model = _resolve_quiz_tutor_model()
+    model = _resolve_tutor_model()
     input_messages = _build_input_message(
         question=question,
         options=options,
@@ -167,7 +157,7 @@ async def create_quiz_tutor_stream(
             raise ValueError(validation_error)
 
     settings = get_settings()
-    model = _resolve_quiz_tutor_model()
+    model = _resolve_tutor_model()
     input_messages = _build_input_message(
         question=question,
         options=options,
