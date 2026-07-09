@@ -72,6 +72,7 @@ async def test_eager_prefetch_uses_prefetch_timeout(monkeypatch):
         concept_map={"concept-1": 0},
         concept_names={"concept-1": "Concept 1"},
         concept_definitions={"concept-1": "Definition 1"},
+        id_to_concept={0: "concept-1"},
         _prefetch_cache={},
     )
 

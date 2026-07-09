@@ -96,6 +96,13 @@ class SessionState:
     _pending_action: int | None = None
     _current_recommendation_reason: dict[str, Any] | None = None
 
+    @property
+    def id_to_concept(self) -> dict[int, str]:
+        """Inverse of concept_map (index → concept_id). Rebuilt per access;
+        concept_map is small (per-subject) so caching isn't worth the staleness risk.
+        """
+        return {v: k for k, v in self.concept_map.items()}
+
     @staticmethod
     def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
         from pydantic import TypeAdapter
@@ -168,14 +175,6 @@ class SessionManager:
         self._subject_session_ids: dict[tuple[str, str], str] = {}
 
     # ── Properties ──────────────────────────────────────────
-
-    @property
-    def concept_map(self) -> Any:
-        return self._concept_map
-
-    @property
-    def concept_names(self) -> Any:
-        return self._concept_names
 
     @property
     def n_concepts(self) -> Any:

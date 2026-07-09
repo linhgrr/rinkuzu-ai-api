@@ -71,7 +71,7 @@ def build_session_status(session: SessionState, *, threshold: float) -> dict[str
 
 def build_knowledge_graph(session: SessionState, *, threshold: float) -> dict[str, Any]:
     concept_mastery = session.env.get_concept_mastery()
-    id_to_concept = {v: k for k, v in session.concept_map.items()}
+    id_to_concept = session.id_to_concept
     prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=threshold)
 
     nodes = []
@@ -107,7 +107,7 @@ def build_knowledge_graph(session: SessionState, *, threshold: float) -> dict[st
 
 def build_mastery_matrix(session: SessionState) -> dict[str, Any]:
     bloom_mastery = session.env.get_mastery_matrix()
-    id_to_concept = {v: k for k, v in session.concept_map.items()}
+    id_to_concept = session.id_to_concept
 
     matrix = [
         {
@@ -130,7 +130,7 @@ def build_concept_detail(
     concept_mastery = session.env.get_concept_mastery()
     bloom_mastery = session.env.get_mastery_matrix()
     prereq_ok_mask = session.env.get_prereq_ok_mask(threshold=threshold)
-    id_to_concept = {v: k for k, v in session.concept_map.items()}
+    id_to_concept = session.id_to_concept
 
     prereqs = [
         {

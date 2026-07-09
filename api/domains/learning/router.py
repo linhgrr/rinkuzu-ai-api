@@ -171,7 +171,7 @@ async def start_session(
     del request
     session = await manager.create_session(max_steps=req.max_steps, user_id=user_id)
 
-    id_to_concept = {v: k for k, v in session.concept_map.items()}
+    id_to_concept = session.id_to_concept
     concepts = [
         {
             "id": id_to_concept.get(i, str(i)),

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Literal, cast
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.config import Settings, get_settings
+from api.domains.quiz.schemas import QuizQuestionShape
 from api.shared.document_text import (
     DocumentTextConfigurationError,
     ExtractedDocumentText,
@@ -44,48 +44,8 @@ User constraint overrides (if any, follow these above defaults):
 """
 
 
-class ExtractedQuizQuestion(BaseModel):
+class ExtractedQuizQuestion(QuizQuestionShape):
     model_config = ConfigDict(extra="forbid")
-
-    question: str = Field(min_length=1)
-    type: Literal["single", "multiple"]
-    options: list[str] = Field(min_length=4, max_length=5)
-    correct_index: int | None = Field(default=None, alias="correctIndex")
-    correct_indexes: list[int] = Field(default_factory=list, alias="correctIndexes")
-
-    @model_validator(mode="after")
-    def validate_answer_shape(self) -> ExtractedQuizQuestion:
-        option_count = len(self.options)
-        if self.type == "single":
-            if self.correct_index is None:
-                raise ValueError("single-choice questions require correctIndex")
-            if self.correct_indexes:
-                raise ValueError("single-choice questions must not include correctIndexes")
-            if not 0 <= self.correct_index < option_count:
-                raise ValueError("correctIndex is out of range")
-            return self
-
-        if self.correct_index is not None:
-            raise ValueError("multiple-choice questions must not include correctIndex")
-        if not self.correct_indexes:
-            raise ValueError("multiple-choice questions require correctIndexes")
-        if len(set(self.correct_indexes)) != len(self.correct_indexes):
-            raise ValueError("correctIndexes must be unique")
-        if any(index < 0 or index >= option_count for index in self.correct_indexes):
-            raise ValueError("correctIndexes contains an out-of-range value")
-        return self
-
-    def to_public_dict(self) -> dict[str, str | int | list[str] | list[int]]:
-        payload: dict[str, str | int | list[str] | list[int]] = {
-            "question": self.question,
-            "type": self.type,
-            "options": self.options,
-        }
-        if self.type == "single":
-            payload["correctIndex"] = cast("int", self.correct_index)
-        else:
-            payload["correctIndexes"] = self.correct_indexes
-        return payload
 
 
 class ExtractedQuizQuestionBatch(BaseModel):

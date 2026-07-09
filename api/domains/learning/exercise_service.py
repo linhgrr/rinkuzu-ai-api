@@ -20,7 +20,7 @@ from api.config import settings
 from api.exceptions import ExerciseGenerationError
 
 from .agent import decode_action, select_action, select_next_concept_action
-from .answer_eval import evaluate_answer, normalize_text, serialize_answer_for_history
+from .answer_eval import evaluate_answer, serialize_answer_for_history
 from .bloom import BLOOM_LABELS
 from .exercise_gen import evaluate_short_answer, generate_exercise, generate_theory
 from .exercise_types import ExerciseType
@@ -57,10 +57,6 @@ class ExerciseService:
         self._scheduled_tasks: set[asyncio.Task] = set()
 
     @staticmethod
-    def _build_id_to_concept_map(session: SessionState) -> dict[int, str]:
-        return {v: k for k, v in session.concept_map.items()}
-
-    @staticmethod
     def _serialize_exercise_for_prompt(exercise: Any) -> dict[str, Any]:
         history_json = format_exercise_history([exercise])
         return cast("dict[str, Any]", json.loads(history_json)[0])
@@ -77,7 +73,7 @@ class ExerciseService:
         concept_name: str,
         bloom_level: int,
     ) -> dict[str, Any]:
-        id_to_concept = self._build_id_to_concept_map(session)
+        id_to_concept = session.id_to_concept
         concept_mastery = session.env.get_concept_mastery()
         current_mastery = (
             float(concept_mastery[concept_idx]) if len(concept_mastery) > concept_idx else 0.0
@@ -230,7 +226,7 @@ class ExerciseService:
             else:
                 logger.info("[Exercise] 🤖 DQN selected action_id={}", action_id)
 
-            id_to_concept = self._build_id_to_concept_map(session)
+            id_to_concept = session.id_to_concept
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
             concept_name = session.concept_names.get(concept_id, concept_id)
 
@@ -263,7 +259,7 @@ class ExerciseService:
             return None
 
         concept_idx = session._pending_concept_idx
-        id_to_concept = self._build_id_to_concept_map(session)
+        id_to_concept = session.id_to_concept
         concept_id = id_to_concept.get(concept_idx, str(concept_idx))
 
         # Check pre-generated theory cache
@@ -296,7 +292,7 @@ class ExerciseService:
         concept_idx = session._pending_concept_idx
         bloom_level = session._pending_bloom_level
 
-        id_to_concept = self._build_id_to_concept_map(session)
+        id_to_concept = session.id_to_concept
         concept_id = id_to_concept.get(concept_idx, str(concept_idx))
         concept_name = session.concept_names.get(concept_id, concept_id)
 
@@ -379,14 +375,6 @@ class ExerciseService:
 
         return exercise
 
-    @staticmethod
-    def _normalize_text(value: str) -> str:
-        return normalize_text(value)
-
-    @classmethod
-    def _serialize_answer_for_history(cls, exercise: Any, answer: dict[str, Any]) -> Any:
-        return serialize_answer_for_history(exercise, answer)
-
     def _evaluate_answer(self, exercise: Any, answer: dict[str, Any]) -> tuple[bool, str]:
         return evaluate_answer(
             exercise,
@@ -439,7 +427,7 @@ class ExerciseService:
                 .to_response_dict(exercise)
                 .get("correct_option", "")
             )
-            exercise.user_answer = self._serialize_answer_for_history(exercise, answer)
+            exercise.user_answer = serialize_answer_for_history(exercise, answer)
             exercise.is_correct = is_correct
             session.exercise_history.append(exercise)
 
@@ -505,7 +493,7 @@ class ExerciseService:
                 session.env, session.q_net, session.current_obs, session.device
             )
 
-            id_to_concept = self._build_id_to_concept_map(session)
+            id_to_concept = session.id_to_concept
             concept_id = id_to_concept.get(concept_idx, str(concept_idx))
             concept_name = session.concept_names.get(concept_id, concept_id)
             concept_def = session.concept_definitions.get(concept_id, "")
@@ -542,7 +530,7 @@ class ExerciseService:
             return
 
         action_id = session._pending_action
-        id_to_concept = self._build_id_to_concept_map(session)
+        id_to_concept = session.id_to_concept
 
         async def _prefetch_branch(*, is_correct: bool, branch: str) -> Any:
             try:
