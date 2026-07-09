@@ -9,22 +9,19 @@ from api.domains.learning.prompts.grading import TheoryOutput
 from api.shared import retry as retry_module
 
 
-def test_generate_exercise_retries_and_serializes(monkeypatch):
-    attempts = {"count": 0}
-
+def test_generate_exercise_serializes_structured_output(monkeypatch):
+    # Retry now lives in the LLM client (see test_llm_json_repair for the
+    # attempt-count contract). Here we only verify exercise_gen serializes a
+    # structured result into the API payload shape.
     def _select_type(_bloom_level, _mastery):
         return ExerciseType.MCQ
 
     monkeypatch.setattr(exercise_gen, "select_exercise_type", _select_type)
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
 
     def _fake_invoke(*, schema, messages, action, temperature=0.3):
-        attempts["count"] += 1
         assert schema is MCQOutput
         assert messages
         assert action == "adaptive_exercise"
-        if attempts["count"] == 1:
-            raise RuntimeError("temporary failure")
         return MCQOutput(
             question="Động năng của vật phụ thuộc vào yếu tố nào?",
             options=ExerciseOptions(
@@ -46,7 +43,6 @@ def test_generate_exercise_retries_and_serializes(monkeypatch):
         bloom_level=3,
     )
 
-    assert attempts["count"] == 2
     assert result is not None
     assert result["exercise_type"] == ExerciseType.MCQ
     assert result["payload"]["correct_option"] == "A"

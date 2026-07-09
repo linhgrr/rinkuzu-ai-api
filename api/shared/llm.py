@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 
 from api.config import get_settings
 from api.shared.llm_usage import extract_usage, record_llm_usage
+from api.shared.retry import (
+    async_retry,
+    is_retryable_llm_error,
+    resolve_llm_retry_policy,
+    sync_retry,
+)
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
@@ -426,10 +432,40 @@ async def _record_usage_async(
 
 
 class LiteLLMClient(LLMClient):
-    """Project-standard LLM client backed by LiteLLM."""
+    """Project-standard LLM client backed by LiteLLM.
 
-    def __init__(self, *, config: LLMProviderConfig) -> None:
+    Retry is a client default: every LLM call retries transient failures
+    (provider 5xx, timeouts, rate limits) using the ``llm_retry_*`` settings.
+    Call sites no longer wrap calls in retry helpers — the client owns it.
+    """
+
+    def __init__(
+        self,
+        *,
+        config: LLMProviderConfig,
+        max_attempts: int | None = None,
+        base_delay_sec: float | None = None,
+    ) -> None:
         self.config = config
+        policy_attempts, policy_delay = resolve_llm_retry_policy()
+        self._max_attempts = policy_attempts if max_attempts is None else max_attempts
+        self._base_delay_sec = policy_delay if base_delay_sec is None else base_delay_sec
+
+    def _sync_retry(self, label: str) -> Any:
+        return sync_retry(
+            label=label,
+            max_attempts=self._max_attempts,
+            base_delay_sec=self._base_delay_sec,
+            retry_on=is_retryable_llm_error,
+        )
+
+    def _async_retry(self, label: str) -> Any:
+        return async_retry(
+            label=label,
+            max_attempts=self._max_attempts,
+            base_delay_sec=self._base_delay_sec,
+            retry_on=is_retryable_llm_error,
+        )
 
     def generate_text(
         self,
@@ -440,17 +476,21 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> str:
-        response = completion(
-            **_litellm_kwargs(
-                config=self.config,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
+        @self._sync_retry("generate_text")
+        def _call() -> str:
+            response = completion(
+                **_litellm_kwargs(
+                    config=self.config,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_enabled=thinking_enabled,
+                )
             )
-        )
-        _record_usage_sync(self.config, response, action)
-        return extract_llm_text(_extract_response_content(response))
+            _record_usage_sync(self.config, response, action)
+            return extract_llm_text(_extract_response_content(response))
+
+        return cast("str", _call())
 
     async def stream_text(
         self,
@@ -461,19 +501,36 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> AsyncIterator[str]:
-        stream = await acompletion(
-            **_litellm_kwargs(
-                config=self.config,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
-                stream=True,
+        """Stream tokens, retrying only the open→first-token phase.
+
+        A transient failure (or an empty completion) before the first token is
+        retried transparently. Once the first token is yielded the stream is
+        committed: a later failure surfaces to the caller mid-stream, because a
+        partially-sent reply cannot be restarted.
+        """
+
+        async def _open_to_first_token() -> tuple[str, Any]:
+            stream = await acompletion(
+                **_litellm_kwargs(
+                    config=self.config,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_enabled=thinking_enabled,
+                    stream=True,
+                )
             )
-        )
+            async for chunk in stream:
+                text = self._first_delta_from_chunk(chunk)
+                if text:
+                    return text, stream
+            raise RuntimeError("LLM returned an empty completion")
+
+        first_delta, stream = await self._async_retry("stream_text")(_open_to_first_token)()
+        yield first_delta
+
         final_usage: dict[str, int] | None = None
         async for chunk in stream:
-            # With include_usage the final chunk carries usage (and empty choices).
             chunk_usage = extract_usage(chunk)
             if chunk_usage:
                 final_usage = chunk_usage
@@ -492,6 +549,17 @@ class LiteLLMClient(LLMClient):
                 action=action,
             )
 
+    @staticmethod
+    def _first_delta_from_chunk(chunk: object) -> str:
+        choices = getattr(chunk, "choices", None)
+        if choices is None and isinstance(chunk, dict):
+            choices = chunk.get("choices", [])
+        for choice in choices or []:
+            text = _extract_stream_delta_text(_extract_choice_content(choice))
+            if text:
+                return text
+        return ""
+
     def generate_structured(
         self,
         *,
@@ -502,21 +570,25 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> StructuredModelT:
-        response = completion(
-            **_litellm_kwargs(
-                config=self.config,
-                messages=_augment_messages_for_schema(messages, schema=schema),
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
-                response_format=_structured_response_format(self.config),
+        @self._sync_retry("generate_structured")
+        def _call() -> StructuredModelT:
+            response = completion(
+                **_litellm_kwargs(
+                    config=self.config,
+                    messages=_augment_messages_for_schema(messages, schema=schema),
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_enabled=thinking_enabled,
+                    response_format=_structured_response_format(self.config),
+                )
             )
-        )
-        _record_usage_sync(self.config, response, action)
-        content = extract_llm_text(_extract_response_content(response))
-        if not content:
-            raise TypeError("LLM returned empty structured output.")
-        return schema.model_validate(repair_json_loads(content))
+            _record_usage_sync(self.config, response, action)
+            content = extract_llm_text(_extract_response_content(response))
+            if not content:
+                raise TypeError("LLM returned empty structured output.")
+            return schema.model_validate(repair_json_loads(content))
+
+        return cast("StructuredModelT", _call())
 
     async def agenerate_structured(
         self,
@@ -528,21 +600,25 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> StructuredModelT:
-        response = await acompletion(
-            **_litellm_kwargs(
-                config=self.config,
-                messages=_augment_messages_for_schema(messages, schema=schema),
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
-                response_format=_structured_response_format(self.config),
+        @self._async_retry("agenerate_structured")
+        async def _call() -> StructuredModelT:
+            response = await acompletion(
+                **_litellm_kwargs(
+                    config=self.config,
+                    messages=_augment_messages_for_schema(messages, schema=schema),
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_enabled=thinking_enabled,
+                    response_format=_structured_response_format(self.config),
+                )
             )
-        )
-        await _record_usage_async(self.config, response, action)
-        content = extract_llm_text(_extract_response_content(response))
-        if not content:
-            raise TypeError("LLM returned empty structured output.")
-        return schema.model_validate(repair_json_loads(content))
+            await _record_usage_async(self.config, response, action)
+            content = extract_llm_text(_extract_response_content(response))
+            if not content:
+                raise TypeError("LLM returned empty structured output.")
+            return schema.model_validate(repair_json_loads(content))
+
+        return cast("StructuredModelT", await _call())
 
 
 def get_default_llm_client(

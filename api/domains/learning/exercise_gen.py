@@ -14,7 +14,6 @@ from api.shared.llm import (
     invoke_structured_completion,
 )
 from api.shared.llm_usage import LlmAction
-from api.shared.retry import llm_retry_call
 
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
 from .exercise_types.registry import get_handler
@@ -98,11 +97,8 @@ def generate_exercise(
         subject_context=subject_context,
     )
 
-    result = llm_retry_call(
-        label="generate_exercise",
-        fn=lambda: _invoke_structured_llm(
-            schema=schema, messages=messages, action=LlmAction.ADAPTIVE_EXERCISE
-        ),
+    result = _invoke_structured_llm(
+        schema=schema, messages=messages, action=LlmAction.ADAPTIVE_EXERCISE
     )
     payload = get_handler(exercise_type).payload_from_output(result)
     return {
@@ -131,13 +127,10 @@ def evaluate_short_answer(
         student_answer=student_answer,
     )
 
-    result = llm_retry_call(
-        label="evaluate_short_answer",
-        fn=lambda: _invoke_structured_llm(
-            schema=ShortAnswerEvaluationOutput,
-            messages=messages,
-            action=LlmAction.ADAPTIVE_SHORT_ANSWER_EVAL,
-        ),
+    result = _invoke_structured_llm(
+        schema=ShortAnswerEvaluationOutput,
+        messages=messages,
+        action=LlmAction.ADAPTIVE_SHORT_ANSWER_EVAL,
     )
     return result.model_dump()
 
@@ -160,12 +153,14 @@ def generate_theory(
         "examples": ["Ví dụ 1: ...", "Ví dụ 2: ..."],
     }
 
-    return llm_retry_call(
-        label="generate_theory",
-        fn=lambda: _invoke_structured_llm(
+    # The client retries transient failures; if it still fails, fall back to a
+    # deterministic stub so theory generation never hard-fails the lesson flow.
+    try:
+        return _invoke_structured_llm(
             schema=TheoryOutput,
             messages=messages,
             action=LlmAction.ADAPTIVE_THEORY,
-        ).model_dump(),
-        on_exhausted=lambda: fallback,
-    )
+        ).model_dump()
+    except Exception as exc:
+        logger.warning("[LLM-Theory] generation failed, using fallback: {}", exc)
+        return fallback

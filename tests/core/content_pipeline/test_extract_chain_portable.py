@@ -81,7 +81,12 @@ def test_payload_models_forbid_unknown_fields():
         )
 
 
-def test_extraction_response_retries_on_client_error():
+def test_extraction_response_propagates_client_error():
+    """_invoke_extraction_response no longer retries — transient-failure retry
+    moved into the LLM client (below parse_response). A client error here
+    propagates; the batch-level caller turns it into an error payload (see
+    test_extract_single_batch_returns_error_payload_when_client_fails).
+    """
     client = _RetryClient()
     chain = ExtractionChain(client=client, document_extractor=_NoopExtractor())
 
@@ -93,11 +98,9 @@ def test_extraction_response_retries_on_client_error():
             previous_concepts=[],
         )
 
-    payload = asyncio.run(_run())
-
-    assert client.calls == 2
-    assert payload.subject_id == "math"
-    assert payload.concepts == []
+    with pytest.raises(ValueError, match="temporary malformed output"):
+        asyncio.run(_run())
+    assert client.calls == 1
 
 
 def test_invoke_extraction_response_uses_structured_generation_client():

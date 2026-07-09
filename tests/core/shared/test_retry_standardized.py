@@ -1,4 +1,9 @@
-"""Tests for the standardized LLM retry layer in api.shared.retry."""
+"""Tests for the standardized retry layer in api.shared.retry.
+
+Retry now lives in the LLM client (api.shared.llm), which composes the generic
+``sync_retry`` / ``async_retry`` decorators below with ``is_retryable_llm_error``
++ ``resolve_llm_retry_policy``. These tests cover the primitives directly.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +14,10 @@ import pytest
 
 from api.shared import retry as retry_module
 from api.shared.retry import (
+    async_retry,
     is_retryable_llm_error,
-    llm_async_retry,
-    llm_retry_call,
     resolve_llm_retry_policy,
+    sync_retry,
 )
 
 
@@ -44,65 +49,70 @@ def test_resolve_llm_retry_policy_clamps(monkeypatch):
     assert resolve_llm_retry_policy() == (1, 0.0)
 
 
-def test_llm_retry_call_succeeds_after_retries(monkeypatch):
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (3, 0.0))
+def test_sync_retry_succeeds_after_retries():
     attempts = {"n": 0}
 
-    def fn():
+    @sync_retry(
+        label="demo",
+        max_attempts=3,
+        base_delay_sec=0.0,
+        retry_on=is_retryable_llm_error,
+    )
+    def fn() -> str:
         attempts["n"] += 1
         if attempts["n"] < 3:
             raise ValueError("try again")
         return "ok"
 
-    assert llm_retry_call(label="demo", fn=fn) == "ok"
+    assert fn() == "ok"
     assert attempts["n"] == 3
 
 
-def test_llm_retry_call_returns_on_exhausted(monkeypatch):
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
-
-    def fn():
+def test_sync_retry_reraises_after_exhaustion():
+    @sync_retry(
+        label="demo",
+        max_attempts=2,
+        base_delay_sec=0.0,
+        retry_on=is_retryable_llm_error,
+    )
+    def fn() -> str:
         raise RuntimeError("always fails")
 
-    result = llm_retry_call(
-        label="demo",
-        fn=fn,
-        on_exhausted=lambda: "fallback",
-    )
-    assert result == "fallback"
+    with pytest.raises(RuntimeError, match="always fails"):
+        fn()
 
 
-def test_llm_retry_call_raises_runtimeerror_without_fallback(monkeypatch):
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
-
-    def fn():
-        raise ValueError("provider down")
-
-    with pytest.raises(RuntimeError, match="demo is temporarily unavailable"):
-        llm_retry_call(label="demo", fn=fn)
-
-
-def test_llm_retry_call_uses_backoff(monkeypatch):
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (3, 2.5))
+def test_sync_retry_uses_exponential_backoff(monkeypatch):
     sleep_calls: list[float] = []
     monkeypatch.setattr(retry_module.time, "sleep", sleep_calls.append)
     attempts = {"n": 0}
 
-    def fn():
+    @sync_retry(
+        label="demo",
+        max_attempts=3,
+        base_delay_sec=2.5,
+        retry_on=is_retryable_llm_error,
+    )
+    def fn() -> str:
         attempts["n"] += 1
         if attempts["n"] < 3:
             raise ValueError("try again")
         return "ok"
 
-    assert llm_retry_call(label="demo", fn=fn) == "ok"
+    assert fn() == "ok"
+    # wait_exponential(multiplier=2.5): 2.5*2^0, 2.5*2^1 = 5.0
     assert sleep_calls == [2.5, 5.0]
 
 
-def test_llm_async_retry_retries_broadly_then_succeeds(monkeypatch):
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (3, 0.0))
+def test_async_retry_retries_broadly_then_succeeds():
     attempts = {"n": 0}
 
-    @llm_async_retry(label="async demo")
+    @async_retry(
+        label="async demo",
+        max_attempts=3,
+        base_delay_sec=0.0,
+        retry_on=is_retryable_llm_error,
+    )
     async def flaky() -> str:
         attempts["n"] += 1
         if attempts["n"] < 3:
@@ -113,12 +123,15 @@ def test_llm_async_retry_retries_broadly_then_succeeds(monkeypatch):
     assert attempts["n"] == 3
 
 
-def test_llm_async_retry_raises_runtimeerror_on_exhaustion(monkeypatch):
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
-
-    @llm_async_retry(label="async demo")
+def test_async_retry_reraises_after_exhaustion():
+    @async_retry(
+        label="async demo",
+        max_attempts=2,
+        base_delay_sec=0.0,
+        retry_on=is_retryable_llm_error,
+    )
     async def boom() -> str:
         raise ValueError("permanently broken")
 
-    with pytest.raises(RuntimeError, match="async demo is temporarily unavailable"):
+    with pytest.raises(ValueError, match="permanently broken"):
         asyncio.run(boom())

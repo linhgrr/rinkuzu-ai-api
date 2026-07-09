@@ -11,7 +11,6 @@ from api.domains.content_pipeline.infrastructure.llm.schemas import CycleRemoval
 from api.domains.content_pipeline.infrastructure.prompts import CYCLE_REMOVAL_PROMPT
 from api.shared.llm import ainvoke_structured_completion
 from api.shared.llm_usage import LlmAction
-from api.shared.retry import llm_async_retry
 
 
 class CycleRemover:
@@ -150,7 +149,6 @@ class CycleRemover:
                 result = 1
         return result
 
-    @llm_async_retry(label="cycle removal")
     async def _invoke_cycle_removal_decision(self, cycle_info: str) -> CycleRemovalDecision:
         return await ainvoke_structured_completion(
             model=self.model,

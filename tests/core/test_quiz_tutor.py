@@ -6,13 +6,14 @@ from api.domains.quiz import quiz_tutor
 def test_generate_quiz_tutor_response_uses_project_standard_message_shape(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_request_quiz_tutor_text(*, model, input_messages, timeout_sec):
+    def fake_generate_tutor_text(*, input_messages, model, timeout_sec, action):
         captured["model"] = model
         captured["input_messages"] = input_messages
         captured["timeout_sec"] = timeout_sec
+        captured["action"] = action
         return "Đây là phần giải thích đủ dài cho học sinh hiểu bài."
 
-    monkeypatch.setattr(quiz_tutor, "_request_quiz_tutor_text", fake_request_quiz_tutor_text)
+    monkeypatch.setattr(quiz_tutor, "generate_tutor_text", fake_generate_tutor_text)
     monkeypatch.setattr(
         quiz_tutor,
         "get_settings",

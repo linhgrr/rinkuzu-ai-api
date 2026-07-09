@@ -1,5 +1,5 @@
 """
-quiz_tutor.py — Quiz ask-AI generation and streaming via the shared chat API.
+quiz_tutor.py — Quiz ask-AI generation and streaming via the shared tutor core.
 """
 
 from __future__ import annotations
@@ -10,26 +10,18 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from api.config import get_settings
-from api.shared.llm import (
-    astream_text_completion,
-    invoke_text_completion,
-    serialize_responses_sse_event,
-)
 from api.shared.llm_usage import LlmAction
-from api.shared.retry import llm_retry_call
 
 from .tutor_chat import (
     TUTOR_SYSTEM_PROMPT,
-    _extract_stream_chunk_text,
     _resolve_tutor_model,
     build_tutor_prompt,
     validate_chat_input,
 )
+from .tutor_core import generate_tutor_text, stream_tutor_sse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
-
-_MIN_EXPLANATION_LENGTH = 20
 
 
 def _build_input_message(
@@ -50,12 +42,7 @@ def _build_input_message(
 
     user_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
     if question_image:
-        user_content.append(
-            {
-                "type": "image",
-                "url": question_image,
-            }
-        )
+        user_content.append({"type": "image", "url": question_image})
 
     user_content.extend(
         {"type": "image", "url": image_url} for image_url in (option_images or []) if image_url
@@ -65,36 +52,6 @@ def _build_input_message(
         {"role": "system", "content": TUTOR_SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
-
-
-def _request_quiz_tutor_text(
-    *,
-    model: str,
-    input_messages: list[dict[str, Any]],
-    timeout_sec: float,
-) -> str:
-    return invoke_text_completion(
-        messages=input_messages,
-        model=model,
-        temperature=0.7,
-        timeout=timeout_sec,
-        action=LlmAction.QUIZ_TUTOR,
-    )
-
-
-async def _open_quiz_tutor_stream(
-    *,
-    model: str,
-    input_messages: list[dict[str, Any]],
-    timeout_sec: float,
-) -> AsyncIterator[str]:
-    return astream_text_completion(
-        messages=input_messages,
-        model=model,
-        temperature=0.7,
-        timeout=timeout_sec,
-        action=LlmAction.QUIZ_TUTOR,
-    )
 
 
 def generate_quiz_tutor_response(
@@ -112,7 +69,6 @@ def generate_quiz_tutor_response(
             raise ValueError(validation_error)
 
     settings = get_settings()
-    model = _resolve_tutor_model()
     input_messages = _build_input_message(
         question=question,
         options=options,
@@ -122,17 +78,12 @@ def generate_quiz_tutor_response(
         option_images=option_images,
     )
 
-    def _try() -> Any:
-        explanation = _request_quiz_tutor_text(
-            model=model,
-            input_messages=input_messages,
-            timeout_sec=settings.llm_timeout_sec,
-        )
-        if len(explanation) < _MIN_EXPLANATION_LENGTH:
-            raise ValueError("explanation too short")
-        return explanation
-
-    explanation = llm_retry_call(label="quiz tutor", fn=_try)
+    explanation = generate_tutor_text(
+        input_messages=input_messages,
+        model=_resolve_tutor_model(),
+        timeout_sec=settings.llm_timeout_sec,
+        action=LlmAction.QUIZ_TUTOR,
+    )
     logger.info("[LLM] ✓ Quiz tutor chat generated")
     return {
         "explanation": explanation,
@@ -157,7 +108,6 @@ async def create_quiz_tutor_stream(
             raise ValueError(validation_error)
 
     settings = get_settings()
-    model = _resolve_tutor_model()
     input_messages = _build_input_message(
         question=question,
         options=options,
@@ -167,33 +117,9 @@ async def create_quiz_tutor_stream(
         option_images=option_images,
     )
 
-    stream = await _open_quiz_tutor_stream(
-        model=model,
+    return await stream_tutor_sse(
         input_messages=input_messages,
+        model=_resolve_tutor_model(),
         timeout_sec=settings.llm_timeout_sec,
+        action=LlmAction.QUIZ_TUTOR,
     )
-
-    async def iterator() -> AsyncIterator[bytes]:
-        started_stream = False
-        try:
-            async for chunk in stream:
-                started_stream = True
-                delta = _extract_stream_chunk_text(chunk)
-                if delta:
-                    yield serialize_responses_sse_event(
-                        {"type": "response.output_text.delta", "delta": delta}
-                    )
-        except Exception as exc:
-            if not started_stream:
-                raise RuntimeError("Quiz tutor streaming is temporarily unavailable") from exc
-            yield serialize_responses_sse_event(
-                {
-                    "type": "response.failed",
-                    "response": {"error": {"message": str(exc)}},
-                }
-            )
-            return
-
-        yield serialize_responses_sse_event({"type": "response.completed"})
-
-    return iterator()

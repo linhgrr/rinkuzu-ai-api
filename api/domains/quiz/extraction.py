@@ -18,7 +18,6 @@ from api.shared.document_text import (
 )
 from api.shared.llm import invoke_structured_completion, resolve_llm_api_key
 from api.shared.llm_usage import LlmAction
-from api.shared.retry import llm_retry_call
 
 EXTRACTION_PROMPT = """
 You are given educational content that may include questions, explanations, and references to images or diagrams.
@@ -126,30 +125,27 @@ def _extract_questions_from_document_text_sync(
     full_text = _clamp_document_text(document_text.text, max_chars)
     page_count = document_text.metadata.get("page_count", len(document_text.pages))
 
-    def _invoke() -> ExtractedQuizQuestionBatch:
-        return invoke_structured_completion(
-            schema=ExtractedQuizQuestionBatch,
-            model=model,
-            temperature=0.0,
-            timeout=timeout_sec,
-            action=LlmAction.QUIZ_EXTRACTION,
-            messages=[
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        f"## FILE\nTên file: {filename}\n"
-                        f"Số trang: {page_count}\n\n"
-                        "<document_text>\n"
-                        f"{full_text}\n"
-                        "</document_text>\n\n"
-                        "Hãy trích xuất câu hỏi theo JSON/schema đã chỉ định."
-                    ),
-                },
-            ],
-        )
-
-    payload = llm_retry_call(label="quiz extraction", fn=_invoke)
+    payload = invoke_structured_completion(
+        schema=ExtractedQuizQuestionBatch,
+        model=model,
+        temperature=0.0,
+        timeout=timeout_sec,
+        action=LlmAction.QUIZ_EXTRACTION,
+        messages=[
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"## FILE\nTên file: {filename}\n"
+                    f"Số trang: {page_count}\n\n"
+                    "<document_text>\n"
+                    f"{full_text}\n"
+                    "</document_text>\n\n"
+                    "Hãy trích xuất câu hỏi theo JSON/schema đã chỉ định."
+                ),
+            },
+        ],
+    )
     return [question.to_public_dict() for question in payload.questions]
 
 
