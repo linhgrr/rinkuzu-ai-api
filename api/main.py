@@ -36,8 +36,6 @@ from .core.content_pipeline.infrastructure.runtime import (
     CONTENT_PROCESSOR_SRC,
 )
 from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import ChunkChromaStore
-from .core.learning.exercise_service import ExerciseService
-from .core.learning.session import SessionManager
 from .core.shared import mongo_store
 from .core.shared.persistence import (
     load_pipeline_job,
@@ -45,6 +43,10 @@ from .core.shared.persistence import (
     save_pipeline_job,
 )
 from .core.shared.persistence.pipeline_jobs import list_active_pipeline_jobs
+from .domains.learning import history_router, knowledge_router
+from .domains.learning import router as session_router
+from .domains.learning.exercise_service import ExerciseService
+from .domains.learning.session import SessionManager
 from .domains.quiz.draft_tasks import quiz_draft_task_manager
 from .domains.quiz.router import drafts_router as quiz_drafts_router
 from .domains.quiz.router import tutor_router as quiz_tutor_router
@@ -53,10 +55,7 @@ from .middleware.request_context import RequestContextMiddleware
 from .observability import setup_otel, shutdown_otel
 from .rate_limit import limiter
 from .routers import admin_usage as admin_usage_router
-from .routers import history as history_router
-from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
-from .routers import session as session_router
 from .schemas.common import InfoResponse, ReadinessResponse, StandardResponse, ok
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"

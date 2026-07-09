@@ -1,7 +1,7 @@
 from pydantic import ValidationError
 import pytest
 
-from api.core.learning.session import SessionState
+from api.domains.learning.session import SessionState
 
 
 def _doc_entry(payload: dict) -> dict:

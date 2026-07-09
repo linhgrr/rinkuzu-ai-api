@@ -10,7 +10,6 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from api.config import get_settings
-from api.core.learning.bloom import BLOOM_LABELS
 from api.core.shared.llm import SSE_STREAM_HEADERS
 from api.dependencies import (
     get_chunk_chroma_store,
@@ -19,6 +18,7 @@ from api.dependencies import (
     get_session_service,
     resolve_user_session,
 )
+from api.domains.learning.bloom import BLOOM_LABELS
 from api.domains.quiz.tutor_chat import (
     create_tutor_chat_stream,
     generate_tutor_chat_response,
@@ -31,7 +31,10 @@ from api.exceptions import (
     SessionNotFoundError,
 )
 from api.rate_limit import is_admin_request, limiter
-from api.schemas import (
+from api.schemas.common import StandardResponse, ok
+from api.schemas.validators import PathID
+
+from .schemas import (
     ExerciseResponse,
     NextConceptResponse,
     SessionCreateRequest,
@@ -43,8 +46,6 @@ from api.schemas import (
     TutorChatRequest,
     TutorChatResponse,
 )
-from api.schemas.common import StandardResponse, ok
-from api.schemas.validators import PathID
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -260,7 +261,7 @@ async def generate_exercise(
 
     env_stats = session.env.get_session_stats()
 
-    from api.core.learning.exercise_types.registry import get_handler
+    from api.domains.learning.exercise_types.registry import get_handler
 
     content = get_handler(exercise.payload.exercise_type).to_response_dict(exercise)
     payload = _build_exercise_response_payload(exercise, env_stats, content)
@@ -291,13 +292,13 @@ async def submit_answer(
 
 
 def _resolve_exercise_question(exercise: Any) -> str:
-    from api.core.learning.exercise_types.registry import get_handler
+    from api.domains.learning.exercise_types.registry import get_handler
 
     return get_handler(exercise.payload.exercise_type).tutor_question(exercise)
 
 
 def _resolve_exercise_options(exercise: Any) -> list[str]:
-    from api.core.learning.exercise_types.registry import get_handler
+    from api.domains.learning.exercise_types.registry import get_handler
 
     return get_handler(exercise.payload.exercise_type).tutor_options(exercise)
 

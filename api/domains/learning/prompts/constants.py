@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from api.core.learning.exercise_types import ExerciseType
+from api.domains.learning.exercise_types import ExerciseType
 
 MATH_FORMAT_RULES = (
     "Quy tắc định dạng toán BẮT BUỘC:\n"

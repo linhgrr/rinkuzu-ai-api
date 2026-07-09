@@ -1,7 +1,7 @@
 from pydantic import TypeAdapter, ValidationError
 import pytest
 
-from api.core.learning.exercise_types.payloads import (
+from api.domains.learning.exercise_types.payloads import (
     ExercisePayload,
     MCQPayload,
     OrderingPayload,

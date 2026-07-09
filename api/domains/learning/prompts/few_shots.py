@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from api.core.learning.exercise_types import ExerciseType
+from api.domains.learning.exercise_types import ExerciseType
 
 # Primary few-shot examples (shown by default) — covers both STEM and non-STEM.
 FEW_SHOT_EXAMPLES: dict[ExerciseType, dict[str, Any]] = {

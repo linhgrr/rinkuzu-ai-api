@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from api.core.learning.exercise_types.payloads import OrderingPayload
-from api.core.learning.subject_progress_snapshot import build_subject_progress_snapshot
+from api.domains.learning.exercise_types.payloads import OrderingPayload
+from api.domains.learning.subject_progress_snapshot import build_subject_progress_snapshot
 
 
 def _session_with_one_ordering_exercise():

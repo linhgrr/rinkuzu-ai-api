@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from api.core.learning import exercise_gen
-from api.core.learning.exercise_types import ExerciseType, TrueFalseOutput
+from api.domains.learning import exercise_gen
+from api.domains.learning.exercise_types import ExerciseType, TrueFalseOutput
 
 
 def test_generate_exercise_includes_nested_payload(monkeypatch):

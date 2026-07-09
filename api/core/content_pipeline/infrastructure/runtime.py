@@ -86,7 +86,7 @@ class LockedSentenceTransformerModel:
 
 def _generate_theory_via_exercise_gen(concept_name: str, concept_definition: str) -> Any:
     """Delegate theory generation to exercise_gen module."""
-    exercise_gen = import_module("api.core.learning.exercise_gen")
+    exercise_gen = import_module("api.domains.learning.exercise_gen")
     return exercise_gen.generate_theory(concept_name, concept_definition)
 
 

@@ -1,5 +1,8 @@
-"""
-schemas — Re-export all Pydantic models for backward compatibility.
+"""Shared API contract schemas.
+
+Domain-specific request/response models now live in each domain package
+(``api.domains.<domain>.schemas``); this package keeps only the cross-cutting
+envelope, enums, validators, and the content-pipeline schemas.
 """
 
 from .common import (
@@ -9,105 +12,11 @@ from .common import (
     StandardErrorResponse,
     StandardResponse,
 )
-from .exercise import (
-    ExerciseOption,
-    ExerciseResponse,
-    NextConceptResponse,
-    SubmitAnswerPayload,
-    SubmitAnswerRequest,
-    SubmitAnswerResponse,
-    TheoryResponse,
-    TutorChatMessage,
-    TutorChatRequest,
-    TutorChatResponse,
-)
-from .history import (
-    DeleteSubjectResponse,
-    PipelineJobHistoryListResponse,
-    SubjectHistoryDetailResponse,
-    SubjectHistoryListResponse,
-    SubjectHistoryResponse,
-    SubjectProgressListResponse,
-    SubjectProgressSummaryResponse,
-)
-from .knowledge import (
-    ConceptDetailResponse,
-    ConceptPrereq,
-    KnowledgeEdgeResponse,
-    KnowledgeGraphResponse,
-    KnowledgeNodeResponse,
-    MasteryMatrixResponse,
-    MasteryRow,
-)
-from .pipeline import (
-    PipelineCycleStatsResponse,
-    PipelineFailedBatchResponse,
-    PipelineGraphStatsResponse,
-    PipelineJobCancelResponse,
-    PipelineJobListItemResponse,
-    PipelineJobListResponse,
-    PipelineJobResultResponse,
-    PipelineJobRetryResponse,
-    PipelineJobStatusResponse,
-    PipelinePartialGraphEdgeResponse,
-    PipelinePartialGraphNodeResponse,
-    PipelinePartialGraphResponse,
-    PipelineProcessResponse,
-    PipelineRuntimeStatusResponse,
-    PipelineSessionCreateResponse,
-)
-from .session import (
-    SessionCreateRequest,
-    SessionCreateResponse,
-    SessionStatusResponse,
-)
 
 __all__ = [
-    "ConceptDetailResponse",
-    "ConceptPrereq",
-    "DeleteSubjectResponse",
     "ErrorDetail",
-    "ExerciseOption",
-    "ExerciseResponse",
     "InfoResponse",
-    "KnowledgeEdgeResponse",
-    "KnowledgeGraphResponse",
-    "KnowledgeNodeResponse",
-    "MasteryMatrixResponse",
-    "MasteryRow",
-    "NextConceptResponse",
-    "PipelineCycleStatsResponse",
-    "PipelineFailedBatchResponse",
-    "PipelineGraphStatsResponse",
-    "PipelineJobCancelResponse",
-    "PipelineJobHistoryListResponse",
-    "PipelineJobListItemResponse",
-    "PipelineJobListResponse",
-    "PipelineJobResultResponse",
-    "PipelineJobRetryResponse",
-    "PipelineJobStatusResponse",
-    "PipelinePartialGraphEdgeResponse",
-    "PipelinePartialGraphNodeResponse",
-    "PipelinePartialGraphResponse",
-    "PipelineProcessResponse",
-    "PipelineRuntimeStatusResponse",
-    "PipelineSessionCreateResponse",
     "ReadinessResponse",
-    "SessionCreateRequest",
-    "SessionCreateResponse",
-    "SessionStatusResponse",
     "StandardErrorResponse",
     "StandardResponse",
-    "SubjectHistoryDetailResponse",
-    "SubjectHistoryListResponse",
-    "SubjectHistoryResponse",
-    "SubjectProgressListResponse",
-    "SubjectProgressSummaryResponse",
-    "SubmitAnswerPayload",
-    "SubmitAnswerRequest",
-    "SubmitAnswerResponse",
-    "TheoryResponse",
-    "TutorChatMessage",
-    "TutorChatRequest",
-    "TutorChatResponse",
 ]

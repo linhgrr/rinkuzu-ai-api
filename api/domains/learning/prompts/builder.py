@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
-from api.core.learning.exercise_types import BLOOM_VERBS, ExerciseType
-from api.core.learning.history_formatter import format_exercise_history
+from api.domains.learning.exercise_types import BLOOM_VERBS, ExerciseType
+from api.domains.learning.history_formatter import format_exercise_history
 
 from .constants import (
     BLOOM_LEVEL_GUIDANCE,

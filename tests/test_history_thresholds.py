@@ -1,7 +1,7 @@
 import pytest
 
 from api.config import get_settings
-from api.routers import history
+from api.domains.learning import history_router as history
 
 
 def test_count_mastered_concepts_uses_backend_mastery_threshold():

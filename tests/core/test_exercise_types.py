@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from api.core.learning import exercise_service as exercise_service_module
-from api.core.learning import exercise_types as exercise_types_module
-from api.core.learning.exercise_service import ExerciseService
-from api.core.learning.exercise_types import (
+from api.domains.learning import exercise_service as exercise_service_module
+from api.domains.learning import exercise_types as exercise_types_module
+from api.domains.learning.exercise_service import ExerciseService
+from api.domains.learning.exercise_types import (
     ExerciseType,
     select_exercise_type,
 )
@@ -44,7 +44,7 @@ def test_select_exercise_type_uses_correct_weights_for_mastery():
 
 
 def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_ordering():
-    from api.core.learning.exercise_types.payloads import (
+    from api.domains.learning.exercise_types.payloads import (
         FillBlankPayload,
         MatchingPayload,
         MultiCorrectPayload,
@@ -125,7 +125,7 @@ def test_evaluate_answer_handles_true_false_fill_blank_multi_correct_and_orderin
 
 
 def test_evaluate_answer_updates_short_answer_feedback(monkeypatch):
-    from api.core.learning.exercise_types.payloads import ShortAnswerPayload
+    from api.domains.learning.exercise_types.payloads import ShortAnswerPayload
 
     service = ExerciseService()
     monkeypatch.setattr(

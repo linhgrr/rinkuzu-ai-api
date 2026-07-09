@@ -1,4 +1,4 @@
-from api.core.learning.exercise_types import (
+from api.domains.learning.exercise_types import (
     ExerciseType,
     FillBlankOutput,
     MatchingOutput,
@@ -8,7 +8,7 @@ from api.core.learning.exercise_types import (
     ShortAnswerOutput,
     TrueFalseOutput,
 )
-from api.core.learning.prompts.registry import get_prompt_spec
+from api.domains.learning.prompts.registry import get_prompt_spec
 
 
 def test_all_exercise_types_have_spec():

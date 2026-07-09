@@ -11,8 +11,8 @@ from .core.shared.llm_usage import current_user_id
 from .exceptions import AppError, ServiceUnavailableError, SessionNotFoundError
 
 if TYPE_CHECKING:
-    from .core.learning.exercise_service import ExerciseService
-    from .core.learning.session import SessionManager, SessionState
+    from .domains.learning.exercise_service import ExerciseService
+    from .domains.learning.session import SessionManager, SessionState
 
 
 def get_current_user(

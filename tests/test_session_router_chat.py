@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.routers.session import _append_tutor_chat_turn, _get_tutor_chat_history
+from api.domains.learning.router import _append_tutor_chat_turn, _get_tutor_chat_history
 
 
 @pytest.mark.anyio

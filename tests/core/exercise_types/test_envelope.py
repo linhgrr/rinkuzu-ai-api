@@ -1,5 +1,5 @@
-from api.core.learning.exercise_types.payloads import MCQPayload
-from api.core.learning.session import ExerciseRecord
+from api.domains.learning.exercise_types.payloads import MCQPayload
+from api.domains.learning.session import ExerciseRecord
 
 
 def test_exercise_record_holds_payload():

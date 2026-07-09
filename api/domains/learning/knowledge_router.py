@@ -12,9 +12,10 @@ from api.config import get_settings
 from api.dependencies import get_current_user, get_session_manager, resolve_user_session
 from api.exceptions import SessionNotFoundError
 from api.rate_limit import is_admin_request, limiter
-from api.schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
+
+from .schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
 
 router = APIRouter(prefix="/api/session", tags=["knowledge"])
 

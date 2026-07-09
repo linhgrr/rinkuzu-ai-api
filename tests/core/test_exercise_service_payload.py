@@ -2,7 +2,7 @@
 
 from pydantic import TypeAdapter
 
-from api.core.learning.exercise_types.payloads import ExercisePayload
+from api.domains.learning.exercise_types.payloads import ExercisePayload
 
 _adapter = TypeAdapter(ExercisePayload)
 

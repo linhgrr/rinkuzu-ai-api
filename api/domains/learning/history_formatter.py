@@ -11,7 +11,7 @@ def _normalize_history_item(item: Any) -> dict[str, Any]:
     if isinstance(item, dict):
         return item
 
-    from api.core.learning.exercise_types.registry import get_handler
+    from api.domains.learning.exercise_types.registry import get_handler
 
     payload = getattr(item, "payload", None)
     base: dict[str, Any] = {

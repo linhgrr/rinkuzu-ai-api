@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
-    from api.core.learning.session import ExerciseRecord
+    from api.domains.learning.session import ExerciseRecord
 
     from .models import ExerciseBaseOutput, ExerciseType
 

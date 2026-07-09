@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from api.core.learning.prompts.constants import EXPLANATION_GUIDANCE, NEGATIVE_CONSTRAINTS
+from api.domains.learning.prompts.constants import EXPLANATION_GUIDANCE, NEGATIVE_CONSTRAINTS
 
 from .base import ExerciseTypeHandler
 from .models import (
@@ -35,7 +35,7 @@ from .selection import join_lines, normalize_text
 from .shuffle import deterministic_shuffle
 
 if TYPE_CHECKING:
-    from api.core.learning.session import ExerciseRecord
+    from api.domains.learning.session import ExerciseRecord
 
 
 # ---- MCQ ----------------------------------------------------------------

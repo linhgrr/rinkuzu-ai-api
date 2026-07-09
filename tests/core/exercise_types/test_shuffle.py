@@ -1,4 +1,4 @@
-from api.core.learning.exercise_types.shuffle import deterministic_shuffle
+from api.domains.learning.exercise_types.shuffle import deterministic_shuffle
 
 
 def test_same_seed_same_order():

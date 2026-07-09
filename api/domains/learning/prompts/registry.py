@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from api.core.learning.exercise_types.registry import get_handler
+from api.domains.learning.exercise_types.registry import get_handler
 
 if TYPE_CHECKING:
-    from api.core.learning.exercise_types import ExerciseBaseOutput, ExerciseType
+    from api.domains.learning.exercise_types import ExerciseBaseOutput, ExerciseType
 
 
 @dataclass(frozen=True)

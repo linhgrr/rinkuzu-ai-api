@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from api.core.learning.exercise_types import (
+from api.domains.learning.exercise_types import (
     FillBlankOutput,
     MatchingOutput,
     MatchingPair,
@@ -9,18 +9,18 @@ from api.core.learning.exercise_types import (
     OrderingOutput,
     ShortAnswerOutput,
 )
-from api.core.learning.exercise_types.models import (
+from api.domains.learning.exercise_types.models import (
     ExerciseOptions,
     ExerciseOptionsFive,
     ExerciseType,
 )
-from api.core.learning.exercise_types.payloads import (
+from api.domains.learning.exercise_types.payloads import (
     MatchingPayload,
     MCQPayload,
     OrderingPayload,
     TrueFalsePayload,
 )
-from api.core.learning.exercise_types.registry import get_handler
+from api.domains.learning.exercise_types.registry import get_handler
 
 
 def _record(payload, **over):
