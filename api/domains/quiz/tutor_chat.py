@@ -18,6 +18,7 @@ from api.shared.llm import (
     invoke_text_completion,
     serialize_responses_sse_event,
 )
+from api.shared.llm_usage import LlmAction
 from api.shared.retry import llm_async_retry, llm_retry_call
 
 if TYPE_CHECKING:
@@ -130,6 +131,7 @@ def _request_text_response(
         model=model,
         temperature=temperature,
         timeout=timeout_sec,
+        action=LlmAction.ADAPTIVE_TUTOR_CHAT,
     )
 
 
@@ -252,6 +254,7 @@ async def _open_tutor_chat_stream(
         model=model,
         temperature=0.7,
         timeout=timeout_sec,
+        action=LlmAction.ADAPTIVE_TUTOR_CHAT,
     )
 
 

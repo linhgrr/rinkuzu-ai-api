@@ -10,6 +10,7 @@ import networkx as nx
 from api.domains.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision
 from api.domains.content_pipeline.infrastructure.prompts import CYCLE_REMOVAL_PROMPT
 from api.shared.llm import ainvoke_structured_completion
+from api.shared.llm_usage import LlmAction
 from api.shared.retry import llm_async_retry
 
 
@@ -156,6 +157,7 @@ class CycleRemover:
             temperature=0.1,
             max_tokens=None,
             schema=CycleRemovalDecision,
+            action=LlmAction.PIPELINE_CYCLE_REMOVAL,
             messages=[
                 {"role": "system", "content": CYCLE_REMOVAL_PROMPT},
                 {"role": "user", "content": f"## CYCLE INFORMATION\n\n{cycle_info}"},

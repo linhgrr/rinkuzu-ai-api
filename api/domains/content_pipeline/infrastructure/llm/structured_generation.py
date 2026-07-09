@@ -32,6 +32,7 @@ class StructuredGenerationClient(Protocol):
         user_text: str,
         text_format: type[StructuredModelT],
         job_id: str | None = None,
+        action: str | None = None,
     ) -> StructuredModelT:
         raise NotImplementedError
 
@@ -67,11 +68,13 @@ class LiteLLMStructuredGenerationClient:
         user_text: str,
         text_format: type[StructuredModelT],
         job_id: str | None = None,
+        action: str | None = None,
     ) -> StructuredModelT:
         del job_id
         return await self.llm_client.agenerate_structured(
             schema=text_format,
             temperature=0.0,
+            action=action,
             messages=[
                 {"role": "system", "content": instructions},
                 {"role": "user", "content": user_text},

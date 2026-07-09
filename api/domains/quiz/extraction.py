@@ -17,6 +17,7 @@ from api.shared.document_text import (
     extract_document_text_from_bytes,
 )
 from api.shared.llm import invoke_structured_completion, resolve_llm_api_key
+from api.shared.llm_usage import LlmAction
 from api.shared.retry import llm_retry_call
 
 EXTRACTION_PROMPT = """
@@ -171,6 +172,7 @@ def _extract_questions_from_document_text_sync(
             model=model,
             temperature=0.0,
             timeout=timeout_sec,
+            action=LlmAction.QUIZ_EXTRACTION,
             messages=[
                 {"role": "system", "content": prompt},
                 {

@@ -13,6 +13,7 @@ from api.shared.llm import (
     _resolve_shared_llm_model,
     invoke_structured_completion,
 )
+from api.shared.llm_usage import LlmAction
 from api.shared.retry import llm_retry_call
 
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
@@ -57,12 +58,14 @@ def _invoke_structured_llm(
     *,
     schema: type[StructuredModelT],
     messages: Sequence[BaseMessage],
+    action: str,
     temperature: float = 0.3,
 ) -> StructuredModelT:
     model = _resolve_shared_llm_model(None)
     return invoke_structured_completion(
         schema=schema,
         messages=messages,
+        action=action,
         model=model,
         temperature=temperature,
     )
@@ -97,7 +100,9 @@ def generate_exercise(
 
     result = llm_retry_call(
         label="generate_exercise",
-        fn=lambda: _invoke_structured_llm(schema=schema, messages=messages),
+        fn=lambda: _invoke_structured_llm(
+            schema=schema, messages=messages, action=LlmAction.ADAPTIVE_EXERCISE
+        ),
     )
     payload = get_handler(exercise_type).payload_from_output(result)
     return {
@@ -128,7 +133,11 @@ def evaluate_short_answer(
 
     result = llm_retry_call(
         label="evaluate_short_answer",
-        fn=lambda: _invoke_structured_llm(schema=ShortAnswerEvaluationOutput, messages=messages),
+        fn=lambda: _invoke_structured_llm(
+            schema=ShortAnswerEvaluationOutput,
+            messages=messages,
+            action=LlmAction.ADAPTIVE_SHORT_ANSWER_EVAL,
+        ),
     )
     return result.model_dump()
 
@@ -156,6 +165,7 @@ def generate_theory(
         fn=lambda: _invoke_structured_llm(
             schema=TheoryOutput,
             messages=messages,
+            action=LlmAction.ADAPTIVE_THEORY,
         ).model_dump(),
         on_exhausted=lambda: fallback,
     )

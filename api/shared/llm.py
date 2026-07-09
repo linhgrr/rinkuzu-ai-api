@@ -52,6 +52,7 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -62,6 +63,7 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> AsyncIterator[str]:
         raise NotImplementedError
 
@@ -73,6 +75,7 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> StructuredModelT:
         raise NotImplementedError
 
@@ -84,6 +87,7 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> StructuredModelT:
         raise NotImplementedError
 
@@ -384,12 +388,17 @@ def _structured_response_format(config: LLMProviderConfig) -> dict[str, Any] | N
 _usage_tasks: set[asyncio.Task[None]] = set()
 
 
-def _record_usage_sync(config: LLMProviderConfig, response: object) -> None:
+def _record_usage_sync(config: LLMProviderConfig, response: object, action: str | None) -> None:
     """Fire-and-forget usage recording from a sync context. Best-effort."""
     usage = extract_usage(response)
     if not usage:
         return
-    coro = record_llm_usage(model=config.model, provider=config.custom_llm_provider, usage=usage)
+    coro = record_llm_usage(
+        model=config.model,
+        provider=config.custom_llm_provider,
+        usage=usage,
+        action=action,
+    )
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -405,11 +414,14 @@ def _record_usage_sync(config: LLMProviderConfig, response: object) -> None:
     task.add_done_callback(_usage_tasks.discard)
 
 
-async def _record_usage_async(config: LLMProviderConfig, response: object) -> None:
+async def _record_usage_async(
+    config: LLMProviderConfig, response: object, action: str | None
+) -> None:
     await record_llm_usage(
         model=config.model,
         provider=config.custom_llm_provider,
         usage=extract_usage(response),
+        action=action,
     )
 
 
@@ -426,6 +438,7 @@ class LiteLLMClient(LLMClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> str:
         response = completion(
             **_litellm_kwargs(
@@ -436,7 +449,7 @@ class LiteLLMClient(LLMClient):
                 thinking_enabled=thinking_enabled,
             )
         )
-        _record_usage_sync(self.config, response)
+        _record_usage_sync(self.config, response, action)
         return extract_llm_text(_extract_response_content(response))
 
     async def stream_text(
@@ -446,6 +459,7 @@ class LiteLLMClient(LLMClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> AsyncIterator[str]:
         stream = await acompletion(
             **_litellm_kwargs(
@@ -475,6 +489,7 @@ class LiteLLMClient(LLMClient):
                 model=self.config.model,
                 provider=self.config.custom_llm_provider,
                 usage=final_usage,
+                action=action,
             )
 
     def generate_structured(
@@ -485,6 +500,7 @@ class LiteLLMClient(LLMClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> StructuredModelT:
         response = completion(
             **_litellm_kwargs(
@@ -496,7 +512,7 @@ class LiteLLMClient(LLMClient):
                 response_format=_structured_response_format(self.config),
             )
         )
-        _record_usage_sync(self.config, response)
+        _record_usage_sync(self.config, response, action)
         content = extract_llm_text(_extract_response_content(response))
         if not content:
             raise TypeError("LLM returned empty structured output.")
@@ -510,6 +526,7 @@ class LiteLLMClient(LLMClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking_enabled: bool = False,
+        action: str | None = None,
     ) -> StructuredModelT:
         response = await acompletion(
             **_litellm_kwargs(
@@ -521,7 +538,7 @@ class LiteLLMClient(LLMClient):
                 response_format=_structured_response_format(self.config),
             )
         )
-        await _record_usage_async(self.config, response)
+        await _record_usage_async(self.config, response, action)
         content = extract_llm_text(_extract_response_content(response))
         if not content:
             raise TypeError("LLM returned empty structured output.")
@@ -551,6 +568,7 @@ def invoke_text_completion(
     timeout: float | None = None,
     max_tokens: int | None = None,
     thinking_enabled: bool = False,
+    action: str | None = None,
 ) -> str:
     client = get_default_llm_client(model=model, timeout=timeout)
     return client.generate_text(
@@ -558,6 +576,7 @@ def invoke_text_completion(
         temperature=temperature,
         max_tokens=max_tokens,
         thinking_enabled=thinking_enabled,
+        action=action,
     )
 
 
@@ -569,6 +588,7 @@ async def astream_text_completion(
     timeout: float | None = None,  # noqa: ASYNC109
     max_tokens: int | None = None,
     thinking_enabled: bool = False,
+    action: str | None = None,
 ) -> AsyncIterator[str]:
     client = get_default_llm_client(model=model, timeout=timeout)
     async for chunk in client.stream_text(
@@ -576,6 +596,7 @@ async def astream_text_completion(
         temperature=temperature,
         max_tokens=max_tokens,
         thinking_enabled=thinking_enabled,
+        action=action,
     ):
         yield chunk
 
@@ -589,6 +610,7 @@ def invoke_structured_completion(
     timeout: float | None = None,
     max_tokens: int | None = None,
     thinking_enabled: bool = False,
+    action: str | None = None,
 ) -> StructuredModelT:
     client = get_default_llm_client(model=model, timeout=timeout)
     return client.generate_structured(
@@ -597,6 +619,7 @@ def invoke_structured_completion(
         temperature=temperature,
         max_tokens=max_tokens,
         thinking_enabled=thinking_enabled,
+        action=action,
     )
 
 
@@ -609,6 +632,7 @@ async def ainvoke_structured_completion(
     timeout: float | None = None,  # noqa: ASYNC109
     max_tokens: int | None = None,
     thinking_enabled: bool = False,
+    action: str | None = None,
 ) -> StructuredModelT:
     client = get_default_llm_client(model=model, timeout=timeout)
     return await client.agenerate_structured(
@@ -617,6 +641,7 @@ async def ainvoke_structured_completion(
         temperature=temperature,
         max_tokens=max_tokens,
         thinking_enabled=thinking_enabled,
+        action=action,
     )
 
 

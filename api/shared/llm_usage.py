@@ -23,9 +23,24 @@ from api.shared.persistence.documents import LlmUsageDocument
 current_user_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "current_user_id", default=None
 )
-current_llm_action: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "current_llm_action", default=None
-)
+
+
+class LlmAction:
+    """Feature labels attributed to each LLM call in usage accounting.
+
+    Passed explicitly down to record_llm_usage so the attribution survives the
+    thread-pool executor that a ContextVar would not cross.
+    """
+
+    ADAPTIVE_EXERCISE = "adaptive_exercise"
+    ADAPTIVE_THEORY = "adaptive_theory"
+    ADAPTIVE_SHORT_ANSWER_EVAL = "adaptive_short_answer_eval"
+    ADAPTIVE_TUTOR_CHAT = "adaptive_tutor_chat"
+    QUIZ_EXTRACTION = "quiz_extraction"
+    QUIZ_TUTOR = "quiz_tutor"
+    PIPELINE_CONCEPT_EXTRACTION = "pipeline_concept_extraction"
+    PIPELINE_RELATION_VERIFICATION = "pipeline_relation_verification"
+    PIPELINE_CYCLE_REMOVAL = "pipeline_cycle_removal"
 
 
 def compute_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
@@ -76,8 +91,14 @@ async def record_llm_usage(
     model: str,
     provider: str | None,
     usage: dict[str, int] | None,
+    action: str | None = None,
 ) -> None:
-    """Persist one usage record. Best-effort — never raises."""
+    """Persist one usage record. Best-effort — never raises.
+
+    ``action`` is the feature that issued the call (e.g. "adaptive_exercise");
+    the caller passes it explicitly so it survives thread-pool hops that a
+    ContextVar would not.
+    """
     if not usage:
         return
     if not mongo_store.is_available():
@@ -87,7 +108,7 @@ async def record_llm_usage(
         output_tokens = usage.get("output_tokens", 0)
         await LlmUsageDocument(
             user_id=current_user_id.get(),
-            action=current_llm_action.get(),
+            action=action,
             model=model,
             provider=provider,
             input_tokens=input_tokens,

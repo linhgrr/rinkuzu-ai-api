@@ -26,6 +26,7 @@ from api.shared.document_text import (
     build_document_text_extractor,
     build_text_batches,
 )
+from api.shared.llm_usage import LlmAction
 from api.shared.retry import llm_async_retry
 
 from .schemas import (
@@ -376,6 +377,7 @@ class ExtractionChain:
             user_text=user_message,
             text_format=ConceptExtractionPayload,
             job_id=job_id,
+            action=LlmAction.PIPELINE_CONCEPT_EXTRACTION,
         )
 
     async def _invoke_extraction_response_with_retries(
@@ -406,6 +408,7 @@ class ExtractionChain:
                 instructions=EVIDENCE_VERIFICATION_PROMPT,
                 user_text=user_message,
                 text_format=EvidenceVerification,
+                action=LlmAction.PIPELINE_RELATION_VERIFICATION,
             ),
         )
 

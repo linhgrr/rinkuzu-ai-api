@@ -17,6 +17,7 @@ from api.shared.llm import (
     invoke_text_completion,
     serialize_responses_sse_event,
 )
+from api.shared.llm_usage import LlmAction
 from api.shared.retry import llm_retry_call
 
 from .tutor_chat import (
@@ -87,6 +88,7 @@ def _request_quiz_tutor_text(
         model=model,
         temperature=0.7,
         timeout=timeout_sec,
+        action=LlmAction.QUIZ_TUTOR,
     )
 
 
@@ -101,6 +103,7 @@ async def _open_quiz_tutor_stream(
         model=model,
         temperature=0.7,
         timeout=timeout_sec,
+        action=LlmAction.QUIZ_TUTOR,
     )
 
 
