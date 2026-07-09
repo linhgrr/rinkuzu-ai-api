@@ -38,7 +38,6 @@ from .core.content_pipeline.infrastructure.runtime import (
 from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import ChunkChromaStore
 from .core.learning.exercise_service import ExerciseService
 from .core.learning.session import SessionManager
-from .core.quiz.draft_tasks import quiz_draft_task_manager
 from .core.shared import mongo_store
 from .core.shared.persistence import (
     load_pipeline_job,
@@ -46,6 +45,9 @@ from .core.shared.persistence import (
     save_pipeline_job,
 )
 from .core.shared.persistence.pipeline_jobs import list_active_pipeline_jobs
+from .domains.quiz.draft_tasks import quiz_draft_task_manager
+from .domains.quiz.router import drafts_router as quiz_drafts_router
+from .domains.quiz.router import tutor_router as quiz_tutor_router
 from .exceptions import error_json_response, register_exception_handlers
 from .middleware.request_context import RequestContextMiddleware
 from .observability import setup_otel, shutdown_otel
@@ -54,8 +56,6 @@ from .routers import admin_usage as admin_usage_router
 from .routers import history as history_router
 from .routers import knowledge as knowledge_router
 from .routers import pipeline as pipeline_router
-from .routers import quiz_drafts as quiz_drafts_router
-from .routers import quiz_tutor as quiz_tutor_router
 from .routers import session as session_router
 from .schemas.common import InfoResponse, ReadinessResponse, StandardResponse, ok
 
@@ -394,8 +394,8 @@ app.include_router(session_router.router)
 app.include_router(knowledge_router.router)
 app.include_router(pipeline_router.router)
 app.include_router(history_router.router)
-app.include_router(quiz_drafts_router.router)
-app.include_router(quiz_tutor_router.router)
+app.include_router(quiz_drafts_router)
+app.include_router(quiz_tutor_router)
 app.include_router(admin_usage_router.router)
 
 

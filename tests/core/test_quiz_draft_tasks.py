@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from api.core.quiz import draft_tasks as draft_tasks_module
-from api.core.quiz.draft_tasks import QuizDraftTaskManager
+from api.domains.quiz import draft_tasks as draft_tasks_module
+from api.domains.quiz.draft_tasks import QuizDraftTaskManager
 
 
 class FakeService:

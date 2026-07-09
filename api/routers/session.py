@@ -11,11 +11,6 @@ from loguru import logger
 
 from api.config import get_settings
 from api.core.learning.bloom import BLOOM_LABELS
-from api.core.quiz.tutor_chat import (
-    create_tutor_chat_stream,
-    generate_tutor_chat_response,
-    sanitize_chat_input,
-)
 from api.core.shared.llm import SSE_STREAM_HEADERS
 from api.dependencies import (
     get_chunk_chroma_store,
@@ -23,6 +18,11 @@ from api.dependencies import (
     get_session_manager,
     get_session_service,
     resolve_user_session,
+)
+from api.domains.quiz.tutor_chat import (
+    create_tutor_chat_stream,
+    generate_tutor_chat_response,
+    sanitize_chat_input,
 )
 from api.exceptions import (
     AppError,

@@ -3,23 +3,23 @@ from fastapi.testclient import TestClient
 import pytest
 
 from api.dependencies import get_current_user
+from api.domains.quiz import router as quiz_router
 from api.exceptions import register_exception_handlers
 from api.rate_limit import limiter
-from api.routers import quiz_drafts
 
 
 def _build_client() -> TestClient:
     app = FastAPI()
     register_exception_handlers(app)
     app.state.limiter = limiter
-    app.include_router(quiz_drafts.router)
+    app.include_router(quiz_router.drafts_router)
     app.dependency_overrides[get_current_user] = lambda: "user-1"
     return TestClient(app, raise_server_exceptions=False)
 
 
 @pytest.fixture(autouse=True)
 def _no_rate_limit(monkeypatch):
-    monkeypatch.setattr(quiz_drafts, "is_admin_request", lambda *a, **k: True)
+    monkeypatch.setattr(quiz_router, "is_admin_request", lambda *a, **k: True)
 
 
 def test_quiz_draft_openapi_schemas_are_not_untyped_dict():

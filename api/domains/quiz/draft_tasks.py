@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, Protocol
 
 from loguru import logger
 
-from api.core.quiz.draft_service import QuizDraftService
 from api.core.shared.persistence.quiz_drafts import list_recoverable_quiz_drafts
+
+from .draft_service import QuizDraftService
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -11,11 +11,6 @@ import fitz
 from loguru import logger
 
 from api.config import get_settings, normalize_endpoint
-from api.core.quiz.extraction import (
-    build_extraction_prompt,
-    invoke_document_text_extract_llm,
-    validate_quiz_extract_dependencies,
-)
 from api.core.shared import mongo_store
 from api.core.shared.document_text import (
     ExtractedDocumentText,
@@ -32,8 +27,14 @@ from api.core.shared.persistence import (
 )
 from api.core.shared.s3 import get_quiz_draft_s3_client, get_s3_client
 
+from .extraction import (
+    build_extraction_prompt,
+    invoke_document_text_extract_llm,
+    validate_quiz_extract_dependencies,
+)
+
 if TYPE_CHECKING:
-    from api.schemas.quiz_draft import QuizDraftCreateRequest, QuizDraftPatchRequest
+    from .schemas import QuizDraftCreateRequest, QuizDraftPatchRequest
 
 EXPIRY_HOURS = 48
 TOTAL_STEPS = 3
