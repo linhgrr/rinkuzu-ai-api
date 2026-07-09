@@ -348,7 +348,7 @@ def custom_openapi() -> dict[str, Any]:
         "/api/ready": {"get"},
         "/api/health": {"get"},
         "/api/info": {"get"},
-        "/api/pipeline/status": {"get"},
+        "/api/v1/pipeline/status": {"get"},
     }
     for path, methods in public_operations.items():
         path_item = openapi_schema.get("paths", {}).get(path, {})

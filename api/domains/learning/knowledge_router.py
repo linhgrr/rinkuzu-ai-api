@@ -17,7 +17,7 @@ from api.schemas.validators import PathID
 
 from .schemas import ConceptDetailResponse, KnowledgeGraphResponse, MasteryMatrixResponse
 
-router = APIRouter(prefix="/api/session", tags=["knowledge"])
+router = APIRouter(prefix="/api/v1/session", tags=["knowledge"])
 
 
 async def _get_session_resource(

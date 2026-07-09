@@ -35,7 +35,7 @@ from .schemas import (
     SubjectProgressListResponse,
 )
 
-router = APIRouter(prefix="/api/history", tags=["history"])
+router = APIRouter(prefix="/api/v1/history", tags=["history"])
 _MASTERED_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
 
 

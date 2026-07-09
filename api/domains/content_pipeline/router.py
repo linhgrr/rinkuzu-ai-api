@@ -53,7 +53,7 @@ from .schemas import (
     PipelineSessionCreateResponse,
 )
 
-router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
+router = APIRouter(prefix="/api/v1/pipeline", tags=["pipeline"])
 
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -275,11 +275,11 @@ async def process_document(  # noqa: C901
             "file_size": save_path.stat().st_size,
             "subject_id": job.subject_id,
             "status": job.status.value,
-            "status_url": f"/api/pipeline/jobs/{job.job_id}",
+            "status_url": f"/api/v1/pipeline/jobs/{job.job_id}",
             "page_batch_size": job.page_batch_size,
             "retry_after_seconds": get_settings().content_pipeline_default_retry_after_sec,
         },
-        meta={"message": "Processing started. Poll /api/pipeline/jobs/{job_id} for progress."},
+        meta={"message": "Processing started. Poll /api/v1/pipeline/jobs/{job_id} for progress."},
     )
 
 
@@ -585,7 +585,7 @@ async def retry_job_endpoint(
         {
             "job_id": job_id,
             "status": job.status.value,
-            "status_url": f"/api/pipeline/jobs/{job_id}",
+            "status_url": f"/api/v1/pipeline/jobs/{job_id}",
             "retry_count": job.retry_count,
         },
         meta={"message": "Retry started."},

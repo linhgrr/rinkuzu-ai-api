@@ -31,9 +31,9 @@ def test_pipeline_status_openapi_schema_is_not_untyped_dict():
     client = _build_client()
 
     schema = client.app.openapi()
-    response_schema = schema["paths"]["/api/pipeline/status"]["get"]["responses"]["200"]["content"][
-        "application/json"
-    ]["schema"]
+    response_schema = schema["paths"]["/api/v1/pipeline/status"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]
 
     assert response_schema["$ref"].endswith("StandardResponse_PipelineRuntimeStatusResponse_")
 
@@ -41,7 +41,7 @@ def test_pipeline_status_openapi_schema_is_not_untyped_dict():
 def test_pipeline_status_returns_runtime_status():
     client = _build_client()
 
-    response = client.get("/api/pipeline/status")
+    response = client.get("/api/v1/pipeline/status")
 
     assert response.status_code == 200
     assert response.json()["data"] == {

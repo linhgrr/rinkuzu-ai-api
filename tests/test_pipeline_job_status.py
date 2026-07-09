@@ -1,7 +1,7 @@
 """
 tests/test_pipeline_job_status.py
 
-Tests for GET /api/pipeline/jobs/{job_id} — verifies that eta_seconds and
+Tests for GET /api/v1/pipeline/jobs/{job_id} — verifies that eta_seconds and
 retry_count are present in the response payload.
 """
 
@@ -68,7 +68,7 @@ def test_get_job_status_returns_404_when_not_found(monkeypatch):
     _patch_load(monkeypatch, None)
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs/missing-job")
+    response = client.get("/api/v1/pipeline/jobs/missing-job")
 
     assert response.status_code == 404
 
@@ -86,7 +86,7 @@ def test_get_job_status_includes_eta_seconds_and_retry_count(monkeypatch):
     )
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs/job-1")
+    response = client.get("/api/v1/pipeline/jobs/job-1")
 
     assert response.status_code == 200
     payload = response.json()
@@ -107,7 +107,7 @@ def test_get_job_status_eta_seconds_defaults_to_none(monkeypatch):
     )
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs/job-2")
+    response = client.get("/api/v1/pipeline/jobs/job-2")
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -125,7 +125,7 @@ def test_get_job_status_retry_count_defaults_to_zero(monkeypatch):
     )
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs/job-3")
+    response = client.get("/api/v1/pipeline/jobs/job-3")
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -171,7 +171,7 @@ def test_create_session_reuses_existing_active_session(monkeypatch):
     exercise_svc = FakeExerciseService()
     client = _build_client(manager=manager, exercise_svc=exercise_svc)
 
-    response = client.post("/api/pipeline/jobs/job-1/create-session")
+    response = client.post("/api/v1/pipeline/jobs/job-1/create-session")
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -199,7 +199,7 @@ def test_create_session_active_fast_path_skips_persistence_reads(monkeypatch):
             )
 
     client = _build_client(manager=FakeManager(), exercise_svc=SimpleNamespace())
-    response = client.post("/api/pipeline/jobs/job-1/create-session")
+    response = client.post("/api/v1/pipeline/jobs/job-1/create-session")
 
     assert response.status_code == 200
     assert response.json()["data"]["source"] == "existing_session"

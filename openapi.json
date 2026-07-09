@@ -6,14 +6,14 @@
     "version": "1.0.0"
   },
   "paths": {
-    "/api/session/start": {
+    "/api/v1/session/start": {
       "post": {
         "tags": [
           "session"
         ],
         "summary": "Start Session",
         "description": "Create a new adaptive learning session.",
-        "operationId": "start_session_api_session_start_post",
+        "operationId": "start_session_api_v1_session_start_post",
         "parameters": [
           {
             "name": "x-user-id",
@@ -82,14 +82,14 @@
         }
       }
     },
-    "/api/session/{session_id}/next-concept": {
+    "/api/v1/session/{session_id}/next-concept": {
       "post": {
         "tags": [
           "session"
         ],
         "summary": "Next Concept",
         "description": "Recommend the next concept to study based on mastery and prerequisites.",
-        "operationId": "next_concept_api_session__session_id__next_concept_post",
+        "operationId": "next_concept_api_v1_session__session_id__next_concept_post",
         "parameters": [
           {
             "name": "session_id",
@@ -162,14 +162,14 @@
         }
       }
     },
-    "/api/session/{session_id}/theory": {
+    "/api/v1/session/{session_id}/theory": {
       "get": {
         "tags": [
           "session"
         ],
         "summary": "Theory",
         "description": "Retrieve theory content for the current pending concept.",
-        "operationId": "theory_api_session__session_id__theory_get",
+        "operationId": "theory_api_v1_session__session_id__theory_get",
         "parameters": [
           {
             "name": "session_id",
@@ -242,14 +242,14 @@
         }
       }
     },
-    "/api/session/{session_id}/exercise": {
+    "/api/v1/session/{session_id}/exercise": {
       "post": {
         "tags": [
           "session"
         ],
         "summary": "Generate Exercise",
         "description": "Generate an exercise for the current concept at the appropriate Bloom level.",
-        "operationId": "generate_exercise_api_session__session_id__exercise_post",
+        "operationId": "generate_exercise_api_v1_session__session_id__exercise_post",
         "parameters": [
           {
             "name": "session_id",
@@ -322,14 +322,14 @@
         }
       }
     },
-    "/api/session/{session_id}/submit": {
+    "/api/v1/session/{session_id}/submit": {
       "post": {
         "tags": [
           "session"
         ],
         "summary": "Submit Answer",
         "description": "Evaluate the user's answer and update BKT mastery estimates.",
-        "operationId": "submit_answer_api_session__session_id__submit_post",
+        "operationId": "submit_answer_api_v1_session__session_id__submit_post",
         "parameters": [
           {
             "name": "session_id",
@@ -412,14 +412,14 @@
         }
       }
     },
-    "/api/session/{session_id}/chat": {
+    "/api/v1/session/{session_id}/chat": {
       "post": {
         "tags": [
           "session"
         ],
         "summary": "Chat About Exercise",
         "description": "Chat with an AI tutor about the current exercise, with optional RAG context.",
-        "operationId": "chat_about_exercise_api_session__session_id__chat_post",
+        "operationId": "chat_about_exercise_api_v1_session__session_id__chat_post",
         "parameters": [
           {
             "name": "session_id",
@@ -502,14 +502,14 @@
         }
       }
     },
-    "/api/session/{session_id}/status": {
+    "/api/v1/session/{session_id}/status": {
       "get": {
         "tags": [
           "session"
         ],
         "summary": "Session Status",
         "description": "Return the current status and progress of a learning session.",
-        "operationId": "session_status_api_session__session_id__status_get",
+        "operationId": "session_status_api_v1_session__session_id__status_get",
         "parameters": [
           {
             "name": "session_id",
@@ -582,14 +582,14 @@
         }
       }
     },
-    "/api/session/{session_id}/graph": {
+    "/api/v1/session/{session_id}/graph": {
       "get": {
         "tags": [
           "knowledge"
         ],
         "summary": "Get Knowledge Graph",
         "description": "Return the prerequisite knowledge graph for a session.",
-        "operationId": "get_knowledge_graph_api_session__session_id__graph_get",
+        "operationId": "get_knowledge_graph_api_v1_session__session_id__graph_get",
         "parameters": [
           {
             "name": "session_id",
@@ -662,14 +662,14 @@
         }
       }
     },
-    "/api/session/{session_id}/mastery-matrix": {
+    "/api/v1/session/{session_id}/mastery-matrix": {
       "get": {
         "tags": [
           "knowledge"
         ],
         "summary": "Get Mastery Matrix",
         "description": "Return the concept x Bloom-level mastery matrix for a session.",
-        "operationId": "get_mastery_matrix_api_session__session_id__mastery_matrix_get",
+        "operationId": "get_mastery_matrix_api_v1_session__session_id__mastery_matrix_get",
         "parameters": [
           {
             "name": "session_id",
@@ -742,14 +742,14 @@
         }
       }
     },
-    "/api/session/{session_id}/concept/{concept_id}": {
+    "/api/v1/session/{session_id}/concept/{concept_id}": {
       "get": {
         "tags": [
           "knowledge"
         ],
         "summary": "Get Concept Detail",
         "description": "Return detailed information about a specific concept.",
-        "operationId": "get_concept_detail_api_session__session_id__concept__concept_id__get",
+        "operationId": "get_concept_detail_api_v1_session__session_id__concept__concept_id__get",
         "parameters": [
           {
             "name": "session_id",
@@ -836,14 +836,14 @@
         }
       }
     },
-    "/api/pipeline/status": {
+    "/api/v1/pipeline/status": {
       "get": {
         "tags": [
           "pipeline"
         ],
         "summary": "Pipeline Status",
         "description": "Check if content pipeline runtime modules are available.",
-        "operationId": "pipeline_status_api_pipeline_status_get",
+        "operationId": "pipeline_status_api_v1_pipeline_status_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -859,14 +859,14 @@
         "security": []
       }
     },
-    "/api/pipeline/process": {
+    "/api/v1/pipeline/process": {
       "post": {
         "tags": [
           "pipeline"
         ],
         "summary": "Process Document",
         "description": "Run the full content processing pipeline from an S3 uploaded file.",
-        "operationId": "process_document_api_pipeline_process_post",
+        "operationId": "process_document_api_v1_pipeline_process_post",
         "parameters": [
           {
             "name": "x-user-id",
@@ -935,14 +935,14 @@
         }
       }
     },
-    "/api/pipeline/jobs": {
+    "/api/v1/pipeline/jobs": {
       "get": {
         "tags": [
           "pipeline"
         ],
         "summary": "List Jobs",
         "description": "List recent pipeline jobs of all statuses for the current user.\n\nReturns per-job live fields the frontend library needs: progress, retryable,\neta_seconds, retry_after_seconds, is_terminal, is_delayed.",
-        "operationId": "list_jobs_api_pipeline_jobs_get",
+        "operationId": "list_jobs_api_v1_pipeline_jobs_get",
         "parameters": [
           {
             "name": "limit",
@@ -1013,13 +1013,13 @@
         }
       }
     },
-    "/api/pipeline/jobs/{job_id}": {
+    "/api/v1/pipeline/jobs/{job_id}": {
       "get": {
         "tags": [
           "pipeline"
         ],
         "summary": "Get Job Status",
-        "operationId": "get_job_status_api_pipeline_jobs__job_id__get",
+        "operationId": "get_job_status_api_v1_pipeline_jobs__job_id__get",
         "parameters": [
           {
             "name": "job_id",
@@ -1092,14 +1092,14 @@
         }
       }
     },
-    "/api/pipeline/jobs/{job_id}/create-session": {
+    "/api/v1/pipeline/jobs/{job_id}/create-session": {
       "post": {
         "tags": [
           "pipeline"
         ],
         "summary": "Create Session From Pipeline",
         "description": "Create a learning session from a completed pipeline job.",
-        "operationId": "create_session_from_pipeline_api_pipeline_jobs__job_id__create_session_post",
+        "operationId": "create_session_from_pipeline_api_v1_pipeline_jobs__job_id__create_session_post",
         "parameters": [
           {
             "name": "job_id",
@@ -1184,14 +1184,14 @@
         }
       }
     },
-    "/api/pipeline/jobs/{job_id}/cancel": {
+    "/api/v1/pipeline/jobs/{job_id}/cancel": {
       "post": {
         "tags": [
           "pipeline"
         ],
         "summary": "Cancel Job",
         "description": "Request cancellation of a pipeline job.\n\nWorks regardless of pipeline runtime availability so a stuck job can always\nbe cancelled. No-ops when the job has already reached a terminal state.",
-        "operationId": "cancel_job_api_pipeline_jobs__job_id__cancel_post",
+        "operationId": "cancel_job_api_v1_pipeline_jobs__job_id__cancel_post",
         "parameters": [
           {
             "name": "job_id",
@@ -1264,14 +1264,14 @@
         }
       }
     },
-    "/api/pipeline/jobs/{job_id}/retry": {
+    "/api/v1/pipeline/jobs/{job_id}/retry": {
       "post": {
         "tags": [
           "pipeline"
         ],
         "summary": "Retry Job Endpoint",
         "description": "Retry a terminal, retryable pipeline job by re-fetching its S3 source.",
-        "operationId": "retry_job_endpoint_api_pipeline_jobs__job_id__retry_post",
+        "operationId": "retry_job_endpoint_api_v1_pipeline_jobs__job_id__retry_post",
         "parameters": [
           {
             "name": "job_id",
@@ -1344,13 +1344,13 @@
         }
       }
     },
-    "/api/history/subjects": {
+    "/api/v1/history/subjects": {
       "get": {
         "tags": [
           "history"
         ],
         "summary": "List Subjects",
-        "operationId": "list_subjects_api_history_subjects_get",
+        "operationId": "list_subjects_api_v1_history_subjects_get",
         "parameters": [
           {
             "name": "limit",
@@ -1421,13 +1421,13 @@
         }
       }
     },
-    "/api/history/subjects/progress": {
+    "/api/v1/history/subjects/progress": {
       "get": {
         "tags": [
           "history"
         ],
         "summary": "List Subject Progress",
-        "operationId": "list_subject_progress_api_history_subjects_progress_get",
+        "operationId": "list_subject_progress_api_v1_history_subjects_progress_get",
         "parameters": [
           {
             "name": "limit",
@@ -1498,13 +1498,13 @@
         }
       }
     },
-    "/api/history/subjects/{job_id}": {
+    "/api/v1/history/subjects/{job_id}": {
       "get": {
         "tags": [
           "history"
         ],
         "summary": "Get Subject History",
-        "operationId": "get_subject_history_api_history_subjects__job_id__get",
+        "operationId": "get_subject_history_api_v1_history_subjects__job_id__get",
         "parameters": [
           {
             "name": "job_id",
@@ -1581,7 +1581,7 @@
           "history"
         ],
         "summary": "Delete Subject",
-        "operationId": "delete_subject_api_history_subjects__job_id__delete",
+        "operationId": "delete_subject_api_v1_history_subjects__job_id__delete",
         "parameters": [
           {
             "name": "job_id",
@@ -1664,13 +1664,13 @@
         }
       }
     },
-    "/api/history/pipeline-jobs": {
+    "/api/v1/history/pipeline-jobs": {
       "get": {
         "tags": [
           "history"
         ],
         "summary": "List Pipeline Jobs",
-        "operationId": "list_pipeline_jobs_api_history_pipeline_jobs_get",
+        "operationId": "list_pipeline_jobs_api_v1_history_pipeline_jobs_get",
         "parameters": [
           {
             "name": "limit",
@@ -1741,13 +1741,13 @@
         }
       }
     },
-    "/api/history/pipeline-jobs/{job_id}": {
+    "/api/v1/history/pipeline-jobs/{job_id}": {
       "get": {
         "tags": [
           "history"
         ],
         "summary": "Get Pipeline Job",
-        "operationId": "get_pipeline_job_api_history_pipeline_jobs__job_id__get",
+        "operationId": "get_pipeline_job_api_v1_history_pipeline_jobs__job_id__get",
         "parameters": [
           {
             "name": "job_id",
@@ -1820,14 +1820,14 @@
         }
       }
     },
-    "/api/quiz/drafts": {
+    "/api/v1/quiz/drafts": {
       "post": {
         "tags": [
           "quiz-drafts"
         ],
         "summary": "Create Quiz Draft",
         "description": "Create a new quiz draft and enqueue AI processing.",
-        "operationId": "create_quiz_draft_api_quiz_drafts_post",
+        "operationId": "create_quiz_draft_api_v1_quiz_drafts_post",
         "parameters": [
           {
             "name": "x-user-id",
@@ -1901,7 +1901,7 @@
         ],
         "summary": "List Quiz Drafts",
         "description": "List recent quiz drafts for the authenticated user.",
-        "operationId": "list_quiz_drafts_api_quiz_drafts_get",
+        "operationId": "list_quiz_drafts_api_v1_quiz_drafts_get",
         "parameters": [
           {
             "name": "limit",
@@ -1972,14 +1972,14 @@
         }
       }
     },
-    "/api/quiz/drafts/{draft_id}": {
+    "/api/v1/quiz/drafts/{draft_id}": {
       "get": {
         "tags": [
           "quiz-drafts"
         ],
         "summary": "Get Quiz Draft",
         "description": "Retrieve a single quiz draft by ID.",
-        "operationId": "get_quiz_draft_api_quiz_drafts__draft_id__get",
+        "operationId": "get_quiz_draft_api_v1_quiz_drafts__draft_id__get",
         "parameters": [
           {
             "name": "draft_id",
@@ -2057,7 +2057,7 @@
         ],
         "summary": "Patch Quiz Draft",
         "description": "Update fields of an existing quiz draft.",
-        "operationId": "patch_quiz_draft_api_quiz_drafts__draft_id__patch",
+        "operationId": "patch_quiz_draft_api_v1_quiz_drafts__draft_id__patch",
         "parameters": [
           {
             "name": "draft_id",
@@ -2145,7 +2145,7 @@
         ],
         "summary": "Delete Quiz Draft",
         "description": "Delete a quiz draft owned by the authenticated user.",
-        "operationId": "delete_quiz_draft_api_quiz_drafts__draft_id__delete",
+        "operationId": "delete_quiz_draft_api_v1_quiz_drafts__draft_id__delete",
         "parameters": [
           {
             "name": "draft_id",
@@ -2218,14 +2218,14 @@
         }
       }
     },
-    "/api/quiz/drafts/{draft_id}/submit": {
+    "/api/v1/quiz/drafts/{draft_id}/submit": {
       "post": {
         "tags": [
           "quiz-drafts"
         ],
         "summary": "Submit Quiz Draft",
         "description": "Finalize a quiz draft and persist it as a published quiz.",
-        "operationId": "submit_quiz_draft_api_quiz_drafts__draft_id__submit_post",
+        "operationId": "submit_quiz_draft_api_v1_quiz_drafts__draft_id__submit_post",
         "parameters": [
           {
             "name": "draft_id",
@@ -2308,14 +2308,14 @@
         }
       }
     },
-    "/api/quiz/ask-ai": {
+    "/api/v1/quiz/ask-ai": {
       "post": {
         "tags": [
           "quiz"
         ],
         "summary": "Ask Ai About Quiz",
         "description": "Ask an AI tutor for help understanding a quiz question (stream or single response).",
-        "operationId": "ask_ai_about_quiz_api_quiz_ask_ai_post",
+        "operationId": "ask_ai_about_quiz_api_v1_quiz_ask_ai_post",
         "parameters": [
           {
             "name": "x-user-id",
@@ -5723,7 +5723,7 @@
           "avg_mastery": {
             "type": "number",
             "title": "Avg Mastery",
-            "description": "Average BKT mastery across unlocked concepts."
+            "description": "Average SAINT mastery across unlocked concepts."
           },
           "progress_percent": {
             "type": "integer",

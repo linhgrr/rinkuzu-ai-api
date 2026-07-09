@@ -47,7 +47,7 @@ from .schemas import (
     TutorChatResponse,
 )
 
-router = APIRouter(prefix="/api/session", tags=["session"])
+router = APIRouter(prefix="/api/v1/session", tags=["session"])
 
 
 def _build_exercise_response_payload(

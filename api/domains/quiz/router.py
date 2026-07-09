@@ -33,8 +33,8 @@ from .schemas import (
     QuizTutorResponseData,
 )
 
-drafts_router = APIRouter(prefix="/api/quiz/drafts", tags=["quiz-drafts"])
-tutor_router = APIRouter(prefix="/api/quiz", tags=["quiz"])
+drafts_router = APIRouter(prefix="/api/v1/quiz/drafts", tags=["quiz-drafts"])
+tutor_router = APIRouter(prefix="/api/v1/quiz", tags=["quiz"])
 
 
 def _service_error_to_http(exc: Exception) -> HTTPException:

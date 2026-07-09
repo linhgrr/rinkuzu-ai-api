@@ -28,20 +28,20 @@ def test_quiz_draft_openapi_schemas_are_not_untyped_dict():
     schema = client.app.openapi()
     paths = schema["paths"]
 
-    assert paths["/api/quiz/drafts"]["get"]["responses"]["200"]["content"]["application/json"][
+    assert paths["/api/v1/quiz/drafts"]["get"]["responses"]["200"]["content"]["application/json"][
         "schema"
     ]["$ref"].endswith("StandardResponse_QuizDraftListResponse_")
-    assert paths["/api/quiz/drafts"]["post"]["responses"]["200"]["content"]["application/json"][
+    assert paths["/api/v1/quiz/drafts"]["post"]["responses"]["200"]["content"]["application/json"][
         "schema"
     ]["$ref"].endswith("StandardResponse_QuizDraftSingleResponse_")
 
-    draft_path = paths["/api/quiz/drafts/{draft_id}"]
+    draft_path = paths["/api/v1/quiz/drafts/{draft_id}"]
     for method in ("get", "patch", "delete"):
         assert draft_path[method]["responses"]["200"]["content"]["application/json"]["schema"][
             "$ref"
         ].endswith("StandardResponse_QuizDraftSingleResponse_")
 
-    assert paths["/api/quiz/drafts/{draft_id}/submit"]["post"]["responses"]["200"]["content"][
+    assert paths["/api/v1/quiz/drafts/{draft_id}/submit"]["post"]["responses"]["200"]["content"][
         "application/json"
     ]["schema"]["$ref"].endswith("StandardResponse_QuizDraftSingleResponse_")
 

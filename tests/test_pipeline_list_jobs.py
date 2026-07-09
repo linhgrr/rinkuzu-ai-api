@@ -1,7 +1,7 @@
 """
 tests/test_pipeline_list_jobs.py
 
-Tests for GET /api/pipeline/jobs — user-scoped listing of recent pipeline
+Tests for GET /api/v1/pipeline/jobs — user-scoped listing of recent pipeline
 jobs of all statuses, with per-job live fields (is_terminal, is_delayed,
 retry_after_seconds, progress, retryable, eta_seconds).
 """
@@ -107,7 +107,7 @@ def _no_rate_limit(monkeypatch):
 
 
 def test_list_jobs_returns_200_with_jobs(monkeypatch):
-    """GET /api/pipeline/jobs returns 200 with data.jobs and data.count."""
+    """GET /api/v1/pipeline/jobs returns 200 with data.jobs and data.count."""
 
     async def _fake_list(*, user_id: str, limit: int) -> list:
         return list(_FAKE_JOBS)
@@ -115,7 +115,7 @@ def test_list_jobs_returns_200_with_jobs(monkeypatch):
     monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _fake_list)
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs")
+    response = client.get("/api/v1/pipeline/jobs")
 
     assert response.status_code == 200
     payload = response.json()
@@ -126,13 +126,13 @@ def test_list_jobs_returns_200_with_jobs(monkeypatch):
 
 
 def test_list_jobs_openapi_schema_is_not_untyped_dict():
-    """GET /api/pipeline/jobs must export a concrete contract for generated clients."""
+    """GET /api/v1/pipeline/jobs must export a concrete contract for generated clients."""
     client = _build_client()
 
     schema = client.app.openapi()
-    response_schema = schema["paths"]["/api/pipeline/jobs"]["get"]["responses"]["200"]["content"][
-        "application/json"
-    ]["schema"]
+    response_schema = schema["paths"]["/api/v1/pipeline/jobs"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]
 
     assert response_schema["$ref"].endswith("StandardResponse_PipelineJobListResponse_")
 
@@ -146,7 +146,7 @@ def test_list_jobs_each_job_has_live_fields(monkeypatch):
     monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _fake_list)
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs")
+    response = client.get("/api/v1/pipeline/jobs")
 
     assert response.status_code == 200
     jobs = response.json()["data"]["jobs"]
@@ -170,7 +170,7 @@ def test_list_jobs_failed_job_is_terminal(monkeypatch):
     monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _fake_list)
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs")
+    response = client.get("/api/v1/pipeline/jobs")
 
     jobs = {j["job_id"]: j for j in response.json()["data"]["jobs"]}
     failed = jobs["job-fail-1"]
@@ -187,7 +187,7 @@ def test_list_jobs_processing_job_is_not_terminal(monkeypatch):
     monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _fake_list)
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs")
+    response = client.get("/api/v1/pipeline/jobs")
 
     jobs = {j["job_id"]: j for j in response.json()["data"]["jobs"]}
     proc = jobs["job-proc-1"]
@@ -203,7 +203,7 @@ def test_list_jobs_empty_returns_zero_count(monkeypatch):
     monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _fake_list)
     client = _build_client()
 
-    response = client.get("/api/pipeline/jobs")
+    response = client.get("/api/v1/pipeline/jobs")
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -222,6 +222,6 @@ def test_list_jobs_custom_limit_is_forwarded(monkeypatch):
     monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _fake_list)
     client = _build_client()
 
-    client.get("/api/pipeline/jobs?limit=10")
+    client.get("/api/v1/pipeline/jobs?limit=10")
 
     assert received == [10]

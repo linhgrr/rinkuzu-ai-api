@@ -12,12 +12,12 @@ class ApiUser(HttpUser):
 
     @task(2)
     def quiz_drafts(self):
-        self.client.get("/api/quiz/drafts")
+        self.client.get("/api/v1/quiz/drafts")
 
     @task(1)
     def session_status(self):
-        self.client.get("/api/session/status")
+        self.client.get("/api/v1/session/status")
 
     @task(1)
     def pipeline_status(self):
-        self.client.get("/api/pipeline/status")
+        self.client.get("/api/v1/pipeline/status")

@@ -92,7 +92,7 @@ def test_cancel_running_job_requests_cancellation(monkeypatch):
     )
     client = _build_client(service)
 
-    response = client.post("/api/pipeline/jobs/job-1/cancel")
+    response = client.post("/api/v1/pipeline/jobs/job-1/cancel")
 
     assert response.status_code == 202
     payload = response.json()
@@ -107,12 +107,12 @@ def test_retry_cancel_openapi_schemas_are_not_untyped_dict():
     client = _build_client(FakePipelineService())
 
     schema = client.app.openapi()
-    cancel_schema = schema["paths"]["/api/pipeline/jobs/{job_id}/cancel"]["post"]["responses"][
+    cancel_schema = schema["paths"]["/api/v1/pipeline/jobs/{job_id}/cancel"]["post"]["responses"][
         "202"
     ]["content"]["application/json"]["schema"]
-    retry_schema = schema["paths"]["/api/pipeline/jobs/{job_id}/retry"]["post"]["responses"]["202"][
-        "content"
-    ]["application/json"]["schema"]
+    retry_schema = schema["paths"]["/api/v1/pipeline/jobs/{job_id}/retry"]["post"]["responses"][
+        "202"
+    ]["content"]["application/json"]["schema"]
 
     assert cancel_schema["$ref"].endswith("StandardResponse_PipelineJobCancelResponse_")
     assert retry_schema["$ref"].endswith("StandardResponse_PipelineJobRetryResponse_")
@@ -126,7 +126,7 @@ def test_cancel_terminal_job_is_noop(monkeypatch):
     )
     client = _build_client(service)
 
-    response = client.post("/api/pipeline/jobs/job-1/cancel")
+    response = client.post("/api/v1/pipeline/jobs/job-1/cancel")
 
     assert response.status_code in (200, 202)
     payload = response.json()
@@ -141,7 +141,7 @@ def test_retry_unknown_job_returns_404(monkeypatch):
     _patch_load(monkeypatch, None)
     client = _build_client(service)
 
-    response = client.post("/api/pipeline/jobs/missing/retry")
+    response = client.post("/api/v1/pipeline/jobs/missing/retry")
 
     assert response.status_code == 404
     assert service.retry_job_calls == []
@@ -155,7 +155,7 @@ def test_retry_non_terminal_job_returns_409(monkeypatch):
     )
     client = _build_client(service)
 
-    response = client.post("/api/pipeline/jobs/job-1/retry")
+    response = client.post("/api/v1/pipeline/jobs/job-1/retry")
 
     assert response.status_code == 409
     assert service.retry_job_calls == []
@@ -169,7 +169,7 @@ def test_retry_not_retryable_job_returns_400(monkeypatch):
     )
     client = _build_client(service)
 
-    response = client.post("/api/pipeline/jobs/job-1/retry")
+    response = client.post("/api/v1/pipeline/jobs/job-1/retry")
 
     assert response.status_code == 400
     payload = response.json()
@@ -190,14 +190,14 @@ def test_retry_terminal_retryable_job_returns_202(monkeypatch):
     )
     client = _build_client(service)
 
-    response = client.post("/api/pipeline/jobs/job-1/retry")
+    response = client.post("/api/v1/pipeline/jobs/job-1/retry")
 
     assert response.status_code == 202
     payload = response.json()
     data = payload["data"]
     assert data["job_id"] == "job-1"
     assert data["status"] == PipelineStatus.QUEUED.value
-    assert data["status_url"] == "/api/pipeline/jobs/job-1"
+    assert data["status_url"] == "/api/v1/pipeline/jobs/job-1"
     assert data["retry_count"] == 1
 
     assert len(service.retry_job_calls) == 1
@@ -214,7 +214,7 @@ def test_retry_unavailable_pipeline_returns_503(monkeypatch):
     )
     client = _build_client(service, available=False)
 
-    response = client.post("/api/pipeline/jobs/job-1/retry")
+    response = client.post("/api/v1/pipeline/jobs/job-1/retry")
 
     assert response.status_code == 503
     assert service.retry_job_calls == []
