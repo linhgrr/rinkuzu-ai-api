@@ -3,8 +3,8 @@ import time
 
 import pytest
 
-from api.core.content_pipeline.application.stages.execution import run_process_stage
-from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
+from api.domains.content_pipeline.application.stages.execution import run_process_stage
+from api.domains.content_pipeline.domain.errors import PipelineStageTimeoutError
 
 
 def _sleep_and_return(delay: float, value: str) -> str:

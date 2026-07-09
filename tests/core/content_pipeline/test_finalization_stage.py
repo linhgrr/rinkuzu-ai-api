@@ -2,15 +2,15 @@ import asyncio
 
 from pydantic import BaseModel
 
-from api.core.content_pipeline.application.stages.execution import resolve_timeout_policy
-from api.core.content_pipeline.application.stages.finalization import (
+from api.domains.content_pipeline.application.stages.execution import resolve_timeout_policy
+from api.domains.content_pipeline.application.stages.finalization import (
     classify_terminal_failure,
     complete_pipeline_job,
     persist_terminal_failure,
     upload_result_cache,
 )
-from api.core.content_pipeline.domain.errors import PipelineStageTimeoutError
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.errors import PipelineStageTimeoutError
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def test_complete_pipeline_job_persists_completed_status():

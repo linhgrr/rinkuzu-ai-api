@@ -7,7 +7,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.core.content_pipeline.domain.jobs import PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineStatus
+from api.domains.content_pipeline.schemas import PipelineJobListItemResponse
 from api.schemas.enums import (
     BloomLabel,
     ConceptStatus,
@@ -15,7 +16,6 @@ from api.schemas.enums import (
     SubjectHistoryStatus,
     SubjectProgressStatus,
 )
-from api.schemas.pipeline import PipelineJobListItemResponse
 
 from .exercise_types import ExerciseType
 from .exercise_types.payloads import ExercisePayload, MatchingPairPayload

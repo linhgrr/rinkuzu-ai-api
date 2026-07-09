@@ -17,7 +17,7 @@ def test_find_recent_active_job_by_source_exists():
 
 
 def test_non_terminal_statuses_excludes_terminal():
-    from api.core.content_pipeline.domain.jobs import PipelineStatus
+    from api.domains.content_pipeline.domain.jobs import PipelineStatus
 
     statuses = set(pipeline_jobs._NON_TERMINAL_STATUSES)
     assert PipelineStatus.COMPLETED.value not in statuses

@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import networkx as nx
 
-from api.core.content_pipeline.application.stages import graph_optimization
-from api.core.content_pipeline.application.stages.graph_optimization import optimize_graph
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.application.stages import graph_optimization
+from api.domains.content_pipeline.application.stages.graph_optimization import optimize_graph
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def test_optimize_graph_runs_cycle_removal_and_reduction_when_needed():

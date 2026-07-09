@@ -1,13 +1,13 @@
 import asyncio
 from types import SimpleNamespace
 
-from api.core.content_pipeline.application.stages.relation_verification import (
+from api.domains.content_pipeline.application.stages.relation_verification import (
     build_pairs_to_verify,
     filter_verified_relations,
     verify_candidate_relations,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
-from api.core.content_pipeline.domain.relations import RelationCandidate
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.relations import RelationCandidate
 
 
 def _verification(*, has_relation=True, confidence=0.9, direction="A_to_B"):

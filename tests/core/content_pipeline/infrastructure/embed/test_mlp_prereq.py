@@ -13,10 +13,10 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from api.core.content_pipeline.infrastructure.embed.mlp_prereq import (
+from api.domains.content_pipeline.infrastructure.embed.mlp_prereq import (
     MLPPrerequisiteRanker,
 )
-from api.core.content_pipeline.infrastructure.embed.mlp_prereq import ranker as ranker_mod
+from api.domains.content_pipeline.infrastructure.embed.mlp_prereq import ranker as ranker_mod
 
 if TYPE_CHECKING:
     from pathlib import Path

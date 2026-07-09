@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 
-from api.core.content_pipeline.infrastructure.llm.extract_chain import ExtractionChain
-from api.core.content_pipeline.infrastructure.llm.schemas import EvidenceVerification
+from api.domains.content_pipeline.infrastructure.llm.extract_chain import ExtractionChain
+from api.domains.content_pipeline.infrastructure.llm.schemas import EvidenceVerification
 
 # ---------------------------------------------------------------------------
 # Helpers / stubs

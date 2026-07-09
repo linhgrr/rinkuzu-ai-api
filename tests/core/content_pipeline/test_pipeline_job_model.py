@@ -1,4 +1,4 @@
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def _job() -> PipelineJob:

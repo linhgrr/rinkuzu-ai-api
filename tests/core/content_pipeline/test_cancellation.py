@@ -6,11 +6,11 @@ import asyncio
 
 import pytest
 
-from api.core.content_pipeline.application.cancellation import (
+from api.domains.content_pipeline.application.cancellation import (
     JobCancelledError,
     raise_if_cancelled,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 # ---------------------------------------------------------------------------
 # PART A — raise_if_cancelled primitive
@@ -36,7 +36,7 @@ def test_raise_if_cancelled_raises_when_requested():
 
 def test_check_cancelled_sets_flag_and_raises_when_doc_has_cancel_requested():
     """_check_cancelled should read the cancel flag and raise if cancel_requested."""
-    from api.core.content_pipeline.application.pipeline_runner import PipelineRunner
+    from api.domains.content_pipeline.application.pipeline_runner import PipelineRunner
 
     saved: list[PipelineJob] = []
 
@@ -71,7 +71,7 @@ def test_check_cancelled_sets_flag_and_raises_when_doc_has_cancel_requested():
 
 def test_check_cancelled_noop_when_doc_has_no_cancel_flag():
     """_check_cancelled should be silent when cancel_requested is False."""
-    from api.core.content_pipeline.application.pipeline_runner import PipelineRunner
+    from api.domains.content_pipeline.application.pipeline_runner import PipelineRunner
 
     async def load_job(job_id: str):
         return None
@@ -98,7 +98,7 @@ def test_check_cancelled_noop_when_doc_has_no_cancel_flag():
 
 def test_check_cancelled_noop_when_doc_missing():
     """_check_cancelled should be silent when the cancel flag read returns False."""
-    from api.core.content_pipeline.application.pipeline_runner import PipelineRunner
+    from api.domains.content_pipeline.application.pipeline_runner import PipelineRunner
 
     async def load_job(job_id: str):
         return None
@@ -130,7 +130,7 @@ def test_check_cancelled_noop_when_doc_missing():
 
 def test_persist_cancelled_sets_cancelled_state():
     """_persist_cancelled must persist CANCELLED status, right error_code, retryable=True."""
-    from api.core.content_pipeline.application.pipeline_runner import PipelineRunner
+    from api.domains.content_pipeline.application.pipeline_runner import PipelineRunner
 
     saved: list[PipelineJob] = []
 

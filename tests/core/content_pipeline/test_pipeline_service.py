@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from api.core.content_pipeline.application.pipeline_service import PipelineService
-from api.core.content_pipeline.domain.jobs import PipelineStatus
+from api.domains.content_pipeline.application.pipeline_service import PipelineService
+from api.domains.content_pipeline.domain.jobs import PipelineStatus
 
 
 @pytest.mark.anyio

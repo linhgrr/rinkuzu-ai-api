@@ -1,12 +1,12 @@
 import asyncio
 from types import SimpleNamespace
 
-from api.core.content_pipeline.application.pipeline_runner import (
+from api.domains.content_pipeline.application.pipeline_runner import (
     PipelineRunner,
     _resolve_effective_job_timeout,
     populate_job_metrics_from_result,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob
+from api.domains.content_pipeline.domain.jobs import PipelineJob
 
 
 def test_populate_job_metrics_from_result_derives_summary_fields():
@@ -70,11 +70,11 @@ def test_resolve_effective_job_timeout_exceeds_extraction_timeout(monkeypatch):
         return 2400.0
 
     monkeypatch.setattr(
-        "api.core.content_pipeline.application.pipeline_runner._resolve_extraction_timeout",
+        "api.domains.content_pipeline.application.pipeline_runner._resolve_extraction_timeout",
         fake_resolve_extraction_timeout,
     )
     monkeypatch.setattr(
-        "api.core.content_pipeline.application.pipeline_runner.resolve_timeout_policy",
+        "api.domains.content_pipeline.application.pipeline_runner.resolve_timeout_policy",
         lambda: (1800.0, 300.0),
     )
 

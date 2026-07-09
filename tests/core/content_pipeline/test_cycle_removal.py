@@ -3,9 +3,12 @@ import asyncio
 import networkx as nx
 import pytest
 
-from api.core.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
-from api.core.content_pipeline.infrastructure.graph.cycle_removal import CycleRemover
-from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
+from api.domains.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
+from api.domains.content_pipeline.infrastructure.graph.cycle_removal import CycleRemover
+from api.domains.content_pipeline.infrastructure.llm.schemas import (
+    CycleRemovalDecision,
+    EdgeDecision,
+)
 
 
 def test_cycle_remover_uses_langchain_structured_output():
@@ -73,7 +76,7 @@ def test_make_dag_with_llm_is_async_compatible():
         reasoning="Giữ A -> B.",
     )
 
-    from api.core.content_pipeline.infrastructure.graph.cycle_removal import make_dag_with_llm
+    from api.domains.content_pipeline.infrastructure.graph.cycle_removal import make_dag_with_llm
 
     async def fake_ainvoke_structured_completion(**kwargs):
         assert kwargs["schema"] is CycleRemovalDecision

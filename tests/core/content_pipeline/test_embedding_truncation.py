@@ -23,7 +23,7 @@ sys.modules.setdefault("torch", torch_module)
 
 
 def test_compute_embeddings_batch_truncates_with_tokenizer(monkeypatch):
-    embed_module = importlib.import_module("api.core.content_pipeline.infrastructure.embed")
+    embed_module = importlib.import_module("api.domains.content_pipeline.infrastructure.embed")
     recorded_texts = []
 
     class FakeTokenizer:

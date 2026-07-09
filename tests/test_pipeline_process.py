@@ -1,7 +1,7 @@
 from pydantic import ValidationError
 import pytest
 
-from api.routers.pipeline import ProcessDocumentRequest
+from api.domains.content_pipeline.router import ProcessDocumentRequest
 
 
 def test_process_request_has_source_s3_key_field():

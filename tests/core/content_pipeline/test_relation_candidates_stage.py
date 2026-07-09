@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 
-from api.core.content_pipeline.application.stages.relation_candidates import (
+from api.domains.content_pipeline.application.stages.relation_candidates import (
     extract_relation_candidates,
     merge_relation_candidates,
 )
-from api.core.content_pipeline.domain.relations import RelationCandidate
+from api.domains.content_pipeline.domain.relations import RelationCandidate
 
 
 def test_extract_relation_candidates_converts_extracted_relation_direction():

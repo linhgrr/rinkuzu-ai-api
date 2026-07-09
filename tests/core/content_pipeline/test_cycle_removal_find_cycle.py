@@ -3,9 +3,12 @@ import asyncio
 import networkx as nx
 import pytest
 
-from api.core.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
-from api.core.content_pipeline.infrastructure.graph.cycle_removal import CycleRemover
-from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
+from api.domains.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
+from api.domains.content_pipeline.infrastructure.graph.cycle_removal import CycleRemover
+from api.domains.content_pipeline.infrastructure.llm.schemas import (
+    CycleRemovalDecision,
+    EdgeDecision,
+)
 
 
 def test_cycle_remover_uses_find_cycle_for_three_node_cycle(monkeypatch):

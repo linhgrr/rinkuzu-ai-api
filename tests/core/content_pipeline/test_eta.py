@@ -1,5 +1,5 @@
-from api.core.content_pipeline.application.eta import estimate_eta_seconds
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.domains.content_pipeline.application.eta import estimate_eta_seconds
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
 
 def _job(progress: float, pages: int = 10) -> PipelineJob:

@@ -1,8 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
-from api.core.content_pipeline.application.stages.concept_merge import merge_duplicate_concepts
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.application.stages.concept_merge import merge_duplicate_concepts
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def test_merge_duplicate_concepts_updates_job_metrics_and_partial_graph():

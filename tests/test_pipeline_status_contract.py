@@ -3,9 +3,9 @@ from fastapi.testclient import TestClient
 import pytest
 
 from api.dependencies import get_content_pipeline_availability
+from api.domains.content_pipeline import router as pipeline
 from api.exceptions import register_exception_handlers
 from api.rate_limit import limiter
-from api.routers import pipeline
 
 
 def _build_client() -> TestClient:

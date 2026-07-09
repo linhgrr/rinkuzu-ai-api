@@ -1,11 +1,11 @@
 import asyncio
 
-from api.core.content_pipeline.application.stages import cache_restore as cache_restore_stage
-from api.core.content_pipeline.application.stages.cache_restore import (
+from api.domains.content_pipeline.application.stages import cache_restore as cache_restore_stage
+from api.domains.content_pipeline.application.stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 async def _load_completed_job(job_id: str):

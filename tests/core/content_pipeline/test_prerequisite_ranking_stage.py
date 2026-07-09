@@ -1,11 +1,11 @@
 import asyncio
 from types import SimpleNamespace
 
-from api.core.content_pipeline.application.stages.prerequisite_ranking import (
+from api.domains.content_pipeline.application.stages.prerequisite_ranking import (
     rank_candidate_prerequisites,
 )
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
-from api.core.content_pipeline.domain.relations import RelationCandidate
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.relations import RelationCandidate
 
 
 def test_rank_candidate_prerequisites_updates_progress_and_returns_candidates():

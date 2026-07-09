@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 import pytest
 
 from api.dependencies import get_current_user, get_session_manager, get_session_service
+from api.domains.content_pipeline import router as pipeline
 from api.exceptions import register_exception_handlers
 from api.rate_limit import limiter
-from api.routers import pipeline
 
 
 def _build_client(*, manager=None, exercise_svc=None) -> TestClient:

@@ -2,10 +2,12 @@ import asyncio
 
 import pytest
 
-from api.core.content_pipeline.application.stages import document_loading as document_loading_stage
-from api.core.content_pipeline.application.stages.document_loading import load_document_chunks
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 from api.core.shared.document_text import DocumentPageText, ExtractedDocumentText
+from api.domains.content_pipeline.application.stages import (
+    document_loading as document_loading_stage,
+)
+from api.domains.content_pipeline.application.stages.document_loading import load_document_chunks
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 
 def test_load_document_chunks_updates_progress_and_total_chunks():

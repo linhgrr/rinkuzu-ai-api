@@ -6,8 +6,8 @@ from typing import Any
 from beanie.odm.enums import SortDirection
 from loguru import logger
 
-from api.core.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 from api.core.shared import mongo_store
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
 
 from .common import (
     epoch_to_utc,

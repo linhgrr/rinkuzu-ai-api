@@ -5,11 +5,14 @@ from types import SimpleNamespace
 
 import networkx as nx
 
-from api.core.content_pipeline.infrastructure.embed import compute_embeddings_batch
-from api.core.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
-from api.core.content_pipeline.infrastructure.graph.cycle_removal import make_dag_with_llm
-from api.core.content_pipeline.infrastructure.llm.schemas import CycleRemovalDecision, EdgeDecision
-import api.core.content_pipeline.infrastructure.utils.text as text_utils
+from api.domains.content_pipeline.infrastructure.embed import compute_embeddings_batch
+from api.domains.content_pipeline.infrastructure.graph import cycle_removal as cycle_removal_module
+from api.domains.content_pipeline.infrastructure.graph.cycle_removal import make_dag_with_llm
+from api.domains.content_pipeline.infrastructure.llm.schemas import (
+    CycleRemovalDecision,
+    EdgeDecision,
+)
+import api.domains.content_pipeline.infrastructure.utils.text as text_utils
 
 
 def test_clean_text_smoke(monkeypatch, benchmark):
@@ -39,15 +42,15 @@ def test_compute_embeddings_batch_smoke(monkeypatch, benchmark):
             return [[float(len(text))] for text in texts]
 
     monkeypatch.setattr(
-        "api.core.content_pipeline.infrastructure.embed.EmbeddingClient",
+        "api.domains.content_pipeline.infrastructure.embed.EmbeddingClient",
         FakeEmbeddingClient,
     )
     monkeypatch.setattr(
-        "api.core.content_pipeline.infrastructure.embed.settings",
+        "api.domains.content_pipeline.infrastructure.embed.settings",
         SimpleNamespace(embedding_model="model-x"),
     )
     monkeypatch.setattr(
-        "api.core.content_pipeline.infrastructure.embed.logger.debug",
+        "api.domains.content_pipeline.infrastructure.embed.logger.debug",
         lambda *args, **kwargs: None,
     )
 

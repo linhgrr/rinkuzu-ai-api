@@ -60,7 +60,7 @@ def test_build_pipeline_janitor_wires_settings_and_closures() -> None:
 
     janitor = main_module._build_pipeline_janitor(service, settings)
 
-    from api.core.content_pipeline.application.recovery import PipelineJanitor
+    from api.domains.content_pipeline.application.recovery import PipelineJanitor
 
     assert isinstance(janitor, PipelineJanitor)
     # The janitor stores the interval (clamped to a minimum of 10s internally).

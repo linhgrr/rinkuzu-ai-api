@@ -8,7 +8,7 @@ from beanie import Document, Insert, Replace, SaveChanges, before_event
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING, IndexModel
 
-from api.core.content_pipeline.domain.jobs import PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineStatus
 
 from .common import utc_now
 

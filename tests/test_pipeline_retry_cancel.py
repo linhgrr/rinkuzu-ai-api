@@ -5,15 +5,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from api.core.content_pipeline import PipelineStatus
 from api.dependencies import (
     get_content_pipeline_availability,
     get_content_pipeline_service,
     get_current_user,
 )
+from api.domains.content_pipeline import PipelineStatus
+from api.domains.content_pipeline import router as pipeline
 from api.exceptions import register_exception_handlers
 from api.rate_limit import limiter
-from api.routers import pipeline
 
 
 class FakePipelineService:

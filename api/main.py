@@ -20,22 +20,6 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from .config import Settings, get_settings
-from .core.content_pipeline.application.pipeline_runner import PipelineRunner
-from .core.content_pipeline.application.pipeline_service import PipelineService
-from .core.content_pipeline.application.recovery import PipelineJanitor
-from .core.content_pipeline.application.source_fetch import download_source_to_dir
-from .core.content_pipeline.application.stages.execution import shutdown_pipeline_executor
-from .core.content_pipeline.application.stages.model_worker import (
-    shutdown_sentence_transformer_worker,
-)
-from .core.content_pipeline.domain.jobs import PipelineJob
-from .core.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
-from .core.content_pipeline.infrastructure.runtime import (
-    CONTENT_PROCESSOR_AVAILABLE,
-    CONTENT_PROCESSOR_ERROR,
-    CONTENT_PROCESSOR_SRC,
-)
-from .core.content_pipeline.infrastructure.storage.chunk_chroma_store import ChunkChromaStore
 from .core.shared import mongo_store
 from .core.shared.persistence import (
     load_pipeline_job,
@@ -43,6 +27,23 @@ from .core.shared.persistence import (
     save_pipeline_job,
 )
 from .core.shared.persistence.pipeline_jobs import list_active_pipeline_jobs
+from .domains.content_pipeline import router as pipeline_router
+from .domains.content_pipeline.application.pipeline_runner import PipelineRunner
+from .domains.content_pipeline.application.pipeline_service import PipelineService
+from .domains.content_pipeline.application.recovery import PipelineJanitor
+from .domains.content_pipeline.application.source_fetch import download_source_to_dir
+from .domains.content_pipeline.application.stages.execution import shutdown_pipeline_executor
+from .domains.content_pipeline.application.stages.model_worker import (
+    shutdown_sentence_transformer_worker,
+)
+from .domains.content_pipeline.domain.jobs import PipelineJob
+from .domains.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
+from .domains.content_pipeline.infrastructure.runtime import (
+    CONTENT_PROCESSOR_AVAILABLE,
+    CONTENT_PROCESSOR_ERROR,
+    CONTENT_PROCESSOR_SRC,
+)
+from .domains.content_pipeline.infrastructure.storage.chunk_chroma_store import ChunkChromaStore
 from .domains.learning import history_router, knowledge_router
 from .domains.learning import router as session_router
 from .domains.learning.exercise_service import ExerciseService
@@ -55,7 +56,6 @@ from .middleware.request_context import RequestContextMiddleware
 from .observability import setup_otel, shutdown_otel
 from .rate_limit import limiter
 from .routers import admin_usage as admin_usage_router
-from .routers import pipeline as pipeline_router
 from .schemas.common import InfoResponse, ReadinessResponse, StandardResponse, ok
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"

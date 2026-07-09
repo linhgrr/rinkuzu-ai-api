@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import networkx as nx
 
-from api.core.content_pipeline.application.stages.result_assembly import (
+from api.domains.content_pipeline.application.stages.result_assembly import (
     assemble_pipeline_result,
     build_graph_nodes,
     serialize_concepts,
