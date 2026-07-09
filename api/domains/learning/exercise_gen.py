@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from loguru import logger
 from pydantic import BaseModel
 
-from api.core.shared.llm import (
+from api.shared.llm import (
     _resolve_shared_llm_model,
     invoke_structured_completion,
 )
-from api.core.shared.retry import llm_retry_call
+from api.shared.retry import llm_retry_call
 
 from .exercise_types import ExerciseType, ShortAnswerEvaluationOutput, select_exercise_type
 from .exercise_types.registry import get_handler

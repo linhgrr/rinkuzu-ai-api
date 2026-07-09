@@ -15,8 +15,8 @@ import contextvars
 from loguru import logger
 
 from api.config import get_settings
-from api.core.shared import mongo_store
-from api.core.shared.persistence.documents import LlmUsageDocument
+from api.shared import mongo_store
+from api.shared.persistence.documents import LlmUsageDocument
 
 # Set by get_current_user for the duration of a request; None outside a request
 # (e.g. background pipeline jobs) — usage is still recorded with user_id=None.

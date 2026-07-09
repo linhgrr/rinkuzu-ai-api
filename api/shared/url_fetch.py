@@ -12,7 +12,7 @@ import aiofiles
 import httpx
 
 from api.config import get_settings
-from api.core.shared.retry import async_transient_retry
+from api.shared.retry import async_transient_retry
 
 if TYPE_CHECKING:
     from pathlib import Path

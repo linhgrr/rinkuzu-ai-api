@@ -7,7 +7,7 @@ from typing import Protocol, TypeVar
 from pydantic import BaseModel
 
 from api.config import get_settings
-from api.core.shared.llm import (
+from api.shared.llm import (
     LiteLLMClient,
     LLMClient,
     LLMConfigurationError,

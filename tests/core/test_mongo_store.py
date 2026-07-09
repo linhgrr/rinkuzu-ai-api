@@ -1,6 +1,6 @@
 import asyncio
 
-from api.core.shared import mongo_store
+from api.shared import mongo_store
 
 
 class _ClientStub:

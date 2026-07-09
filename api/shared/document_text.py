@@ -13,8 +13,8 @@ import httpx
 from loguru import logger
 
 from api.config import get_settings
-from api.core.shared import mongo_store
-from api.core.shared.persistence import load_document_ocr_record, save_document_ocr_record
+from api.shared import mongo_store
+from api.shared.persistence import load_document_ocr_record, save_document_ocr_record
 
 
 class DocumentTextConfigurationError(RuntimeError):

@@ -20,13 +20,6 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from .config import Settings, get_settings
-from .core.shared import mongo_store
-from .core.shared.persistence import (
-    load_pipeline_job,
-    load_pipeline_job_cancel_requested,
-    save_pipeline_job,
-)
-from .core.shared.persistence.pipeline_jobs import list_active_pipeline_jobs
 from .domains.content_pipeline import router as pipeline_router
 from .domains.content_pipeline.application.pipeline_runner import PipelineRunner
 from .domains.content_pipeline.application.pipeline_service import PipelineService
@@ -57,6 +50,13 @@ from .observability import setup_otel, shutdown_otel
 from .rate_limit import limiter
 from .routers import admin_usage as admin_usage_router
 from .schemas.common import InfoResponse, ReadinessResponse, StandardResponse, ok
+from .shared import mongo_store
+from .shared.persistence import (
+    load_pipeline_job,
+    load_pipeline_job_cancel_requested,
+    save_pipeline_job,
+)
+from .shared.persistence.pipeline_jobs import list_active_pipeline_jobs
 
 _UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 _UPLOAD_MAX_AGE_SECS = 86400
@@ -177,7 +177,7 @@ def _build_pipeline_janitor(
 
 
 def _log_llm_config(settings: Settings) -> None:
-    from .core.shared.llm import normalize_llm_base_url
+    from .shared.llm import normalize_llm_base_url
 
     base_url = normalize_llm_base_url(settings.llm_base_url)
     model = settings.llm_model or "(not set)"

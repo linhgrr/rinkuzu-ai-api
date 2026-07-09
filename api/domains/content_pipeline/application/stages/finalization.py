@@ -10,12 +10,12 @@ from typing import Any
 
 from loguru import logger
 
-from api.core.shared.persistence.common import normalize_for_bson
 from api.domains.content_pipeline.domain.errors import (
     PipelineQualityGateError,
     PipelineStageTimeoutError,
 )
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.shared.persistence.common import normalize_for_bson
 
 from ..ports import PersistJobStateFn, SaveJobFn  # noqa: TC001
 from .execution import run_blocking_stage, safe_run

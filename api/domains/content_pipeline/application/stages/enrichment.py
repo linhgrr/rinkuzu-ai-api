@@ -8,8 +8,8 @@ from typing import Any
 
 from loguru import logger
 
-from api.core.shared.persistence.common import normalize_for_bson
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.shared.persistence.common import normalize_for_bson
 
 from .execution import resolve_timeout_policy, run_blocking_stage, safe_run
 from .model_worker import encode_texts_with_sentence_transformer_worker

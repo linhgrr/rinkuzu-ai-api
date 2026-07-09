@@ -10,14 +10,14 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.config import Settings, get_settings
-from api.core.shared.document_text import (
+from api.shared.document_text import (
     DocumentTextConfigurationError,
     ExtractedDocumentText,
     build_ocr_api_config,
     extract_document_text_from_bytes,
 )
-from api.core.shared.llm import invoke_structured_completion, resolve_llm_api_key
-from api.core.shared.retry import llm_retry_call
+from api.shared.llm import invoke_structured_completion, resolve_llm_api_key
+from api.shared.retry import llm_retry_call
 
 EXTRACTION_PROMPT = """
 You are given educational content that may include questions, explanations, and references to images or diagrams.

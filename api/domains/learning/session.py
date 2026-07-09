@@ -22,7 +22,7 @@ from sentence_transformers import SentenceTransformer
 import torch
 
 from api.config import get_settings
-from api.core.shared.persistence import (
+from api.shared.persistence import (
     load_pipeline_job_for_user,
     load_subject_progress_by_session_for_user,
     load_subject_progress_for_user,

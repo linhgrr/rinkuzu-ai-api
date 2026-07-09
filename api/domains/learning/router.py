@@ -10,7 +10,6 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from api.config import get_settings
-from api.core.shared.llm import SSE_STREAM_HEADERS
 from api.dependencies import (
     get_chunk_chroma_store,
     get_current_user,
@@ -33,6 +32,7 @@ from api.exceptions import (
 from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
+from api.shared.llm import SSE_STREAM_HEADERS
 
 from .schemas import (
     ExerciseResponse,

@@ -3,15 +3,14 @@ chunk_chroma_store.py — ChromaDB storage for document chunks (RAG source).
 """
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from langchain_core.documents import Document
 from loguru import logger
 
-from ._base import init_chroma_store
+from api.config import get_settings
 
-_DEFAULT_PERSIST_DIRECTORY = str(Path(__file__).parent.parent.parent.parent / "chroma_db")
+from ._base import init_chroma_store
 
 
 class ChunkChromaStore:
@@ -23,7 +22,7 @@ class ChunkChromaStore:
         persist_directory: str | None = None,
         embedding_client: Any | None = None,
     ):
-        self.persist_directory = persist_directory or _DEFAULT_PERSIST_DIRECTORY
+        self.persist_directory = persist_directory or get_settings().chroma_persist_dir
         self.collection_name = collection_name
 
         self.chroma_client, self.vectorstore, self.embedding_client = init_chroma_store(

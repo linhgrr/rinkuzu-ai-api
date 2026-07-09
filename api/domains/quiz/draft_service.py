@@ -11,21 +11,21 @@ import fitz
 from loguru import logger
 
 from api.config import get_settings, normalize_endpoint
-from api.core.shared import mongo_store
-from api.core.shared.document_text import (
+from api.shared import mongo_store
+from api.shared.document_text import (
     ExtractedDocumentText,
     calculate_pdf_bytes_hash,
     extract_document_text_from_bytes,
     load_or_extract_document_text_cached,
 )
-from api.core.shared.persistence import (
+from api.shared.persistence import (
     create_quiz_draft,
     delete_quiz_draft_for_user,
     list_recent_quiz_drafts_for_user,
     load_quiz_draft_for_user,
     update_quiz_draft_for_user,
 )
-from api.core.shared.s3 import get_quiz_draft_s3_client, get_s3_client
+from api.shared.s3 import get_quiz_draft_s3_client, get_s3_client
 
 from .extraction import (
     build_extraction_prompt,

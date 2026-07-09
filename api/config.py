@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     dqn_path: str = str(BASE_DIR / "models" / "dqn_best.pt")
     mlp_weights_path: str = str(BASE_DIR / "models" / "prereq_vimath_bgem3_namedef_concat_rich.pth")
 
+    # ChromaDB persistence dir. Kept under api/core/ (its historical home) so the
+    # existing on-disk store survives the domains/ refactor; override via env.
+    chroma_persist_dir: str = str(BASE_DIR / "api" / "core" / "chroma_db")
+
     # ── App Config ──────────────────────────────────────────
     environment: str = "dev"  # dev | staging | prod — controls docs visibility
     cors_origins: list[str] = ["*"]

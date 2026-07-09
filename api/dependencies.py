@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any, cast
 from fastapi import Header, Request
 
 from .config import Settings, get_settings
-from .core.shared.llm_usage import current_user_id
 from .exceptions import AppError, ServiceUnavailableError, SessionNotFoundError
+from .shared.llm_usage import current_user_id
 
 if TYPE_CHECKING:
     from .domains.learning.exercise_service import ExerciseService

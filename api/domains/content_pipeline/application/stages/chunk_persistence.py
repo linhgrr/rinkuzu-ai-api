@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from api.core.shared.persistence import replace_job_chunks
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.shared.persistence import replace_job_chunks
 
 from .execution import run_blocking_stage, safe_run
 

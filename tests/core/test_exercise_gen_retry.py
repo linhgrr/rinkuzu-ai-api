@@ -3,12 +3,12 @@ from types import SimpleNamespace
 from pydantic import BaseModel
 
 import api.config as config_module
-from api.core.shared import llm as llm_module
-from api.core.shared.llm import (
+from api.shared import llm as llm_module
+from api.shared.llm import (
     _resolve_shared_llm_model,
     invoke_structured_completion,
 )
-from api.core.shared.retry import resolve_llm_retry_policy
+from api.shared.retry import resolve_llm_retry_policy
 
 
 class OutputSchema(BaseModel):

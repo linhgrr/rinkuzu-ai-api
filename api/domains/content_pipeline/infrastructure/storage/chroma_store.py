@@ -1,12 +1,12 @@
 """ChromaDB storage for concepts with LangChain integration."""
 
-from pathlib import Path
 from typing import Any
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from loguru import logger
 
+from api.config import get_settings
 from api.domains.content_pipeline.infrastructure.embed.embedding_client import EmbeddingClient
 from api.domains.content_pipeline.infrastructure.llm.schemas import Concept
 
@@ -25,7 +25,7 @@ class ConceptChromaStore:
         self.collection_name = collection_name
 
         if persist_directory is None:
-            persist_directory = str(Path(__file__).parent.parent.parent / "chroma_db")
+            persist_directory = get_settings().chroma_persist_dir
 
         self.persist_directory = persist_directory
 

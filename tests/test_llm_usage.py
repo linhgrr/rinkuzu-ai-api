@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from api.core.shared import llm_usage
+from api.shared import llm_usage
 
 
 def test_compute_cost_flash_1m_in_1m_out():

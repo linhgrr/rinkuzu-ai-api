@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from api.config import get_settings
-from api.core.shared.llm import (
+from api.shared.llm import (
     LLMConfigurationError,
     _resolve_shared_llm_model,
     astream_text_completion,
     invoke_text_completion,
     serialize_responses_sse_event,
 )
-from api.core.shared.retry import llm_retry_call
+from api.shared.retry import llm_retry_call
 
 from .tutor_chat import (
     TUTOR_SYSTEM_PROMPT,

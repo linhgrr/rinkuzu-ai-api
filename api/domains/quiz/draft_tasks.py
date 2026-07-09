@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from loguru import logger
 
-from api.core.shared.persistence.quiz_drafts import list_recoverable_quiz_drafts
+from api.shared.persistence.quiz_drafts import list_recoverable_quiz_drafts
 
 from .draft_service import QuizDraftService
 

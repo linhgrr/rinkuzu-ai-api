@@ -16,14 +16,6 @@ from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from api.config import get_settings
-from api.core.shared import mongo_store
-from api.core.shared.persistence import (
-    find_recent_active_job_by_source,
-    load_pipeline_job_for_user,
-    load_subject_progress_for_user,
-)
-from api.core.shared.persistence.pipeline_jobs import list_recent_pipeline_jobs_all_status
-from api.core.shared.url_fetch import UnsafeURLError, stream_download
 from api.dependencies import (
     get_content_pipeline_availability,
     get_content_pipeline_service,
@@ -40,6 +32,14 @@ from api.exceptions import (
 from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
+from api.shared import mongo_store
+from api.shared.persistence import (
+    find_recent_active_job_by_source,
+    load_pipeline_job_for_user,
+    load_subject_progress_for_user,
+)
+from api.shared.persistence.pipeline_jobs import list_recent_pipeline_jobs_all_status
+from api.shared.url_fetch import UnsafeURLError, stream_download
 
 from . import PipelineStatus
 from .application.source_fetch import download_source_to_dir

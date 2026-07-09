@@ -5,13 +5,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.core.shared.document_text import ExtractedDocumentText
 from api.domains.quiz import draft_service as draft_service_module
 from api.domains.quiz.draft_service import (
     QuizDraftService,
     QuizDraftValidationError,
     public_draft,
 )
+from api.shared.document_text import ExtractedDocumentText
 
 
 def test_quiz_draft_s3_key_must_belong_to_user():

@@ -15,18 +15,18 @@ if TYPE_CHECKING:
     from api.domains.content_pipeline.domain.relations import PipelineDebugArtifact
 
 from api.config import get_settings
-from api.core.shared.document_text import (
-    DocumentTextExtractor,
-    ExtractedDocumentText,
-    build_document_text_extractor,
-    build_text_batches,
-)
-from api.core.shared.retry import llm_async_retry
 from api.domains.content_pipeline.infrastructure.prompts import (
     EVIDENCE_VERIFICATION_PROMPT,
     EXTRACTION_PROMPT,
 )
 from api.domains.content_pipeline.infrastructure.utils.timeit import atimeit
+from api.shared.document_text import (
+    DocumentTextExtractor,
+    ExtractedDocumentText,
+    build_document_text_extractor,
+    build_text_batches,
+)
+from api.shared.retry import llm_async_retry
 
 from .schemas import (
     ConceptExtraction,

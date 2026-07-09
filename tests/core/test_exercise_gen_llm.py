@@ -1,4 +1,3 @@
-from api.core.shared import retry as retry_module
 from api.domains.learning import exercise_gen
 from api.domains.learning.exercise_types import (
     ExerciseOptions,
@@ -7,6 +6,7 @@ from api.domains.learning.exercise_types import (
     ShortAnswerEvaluationOutput,
 )
 from api.domains.learning.prompts.grading import TheoryOutput
+from api.shared import retry as retry_module
 
 
 def test_generate_exercise_retries_and_serializes(monkeypatch):

@@ -8,7 +8,7 @@ from typing import Any
 import uuid
 
 from api.config import get_settings
-from api.core.shared.s3 import get_s3_client
+from api.shared.s3 import get_s3_client
 
 
 def _bucket_name() -> str | None:

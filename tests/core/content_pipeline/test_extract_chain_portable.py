@@ -3,18 +3,18 @@ import asyncio
 from pydantic import ValidationError
 import pytest
 
-from api.core.shared.document_text import (
-    DocumentPageText,
-    ExtractedDocumentText,
-    build_page_batches,
-    extract_document_text_from_file,
-    extracted_document_text_to_content_payload,
-)
 from api.domains.content_pipeline.infrastructure.llm.extract_chain import ExtractionChain
 from api.domains.content_pipeline.infrastructure.llm.schemas import (
     ConceptExtraction,
     ConceptExtractionPayload,
     materialize_concept_extraction,
+)
+from api.shared.document_text import (
+    DocumentPageText,
+    ExtractedDocumentText,
+    build_page_batches,
+    extract_document_text_from_file,
+    extracted_document_text_to_content_payload,
 )
 
 
@@ -178,7 +178,7 @@ def test_extract_document_text_from_file_can_be_reshaped_for_chunking(tmp_path):
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(
-        "api.core.shared.document_text.build_document_text_extractor",
+        "api.shared.document_text.build_document_text_extractor",
         _build_extractor,
     )
 

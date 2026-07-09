@@ -1,6 +1,6 @@
 import inspect
 
-from api.core.shared.persistence import pipeline_jobs
+from api.shared.persistence import pipeline_jobs
 
 
 def test_active_query_helpers_exist_with_expected_signatures():

@@ -3,11 +3,11 @@ from types import SimpleNamespace
 import pytest
 
 from api.config import Settings
-from api.core.shared import llm as llm_module
 from api.domains.content_pipeline.infrastructure.llm.structured_generation import (
     ProviderConfigError,
     build_provider_config,
 )
+from api.shared import llm as llm_module
 
 
 def test_normalize_llm_base_url_requires_explicit_value():
@@ -67,7 +67,7 @@ def test_build_provider_config_requires_llm_settings(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "api.core.shared.llm.get_settings",
+        "api.shared.llm.get_settings",
         lambda: SimpleNamespace(
             llm_base_url="",
             llm_api_key="",
@@ -92,7 +92,7 @@ def test_build_provider_config_uses_pipeline_timeout(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "api.core.shared.llm.get_settings",
+        "api.shared.llm.get_settings",
         lambda: SimpleNamespace(
             llm_base_url="https://api.deepseek.com",
             llm_api_key="test-key",  # pragma: allowlist secret

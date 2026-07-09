@@ -8,14 +8,14 @@ from typing import Any
 
 from loguru import logger
 
-from api.core.shared.document_text import (
+from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.domains.content_pipeline.infrastructure.processors.factory import chunk_document_content
+from api.domains.content_pipeline.infrastructure.runtime import calculate_file_hash
+from api.shared.document_text import (
     extract_document_text_from_file,
     extracted_document_text_to_content_payload,
     load_or_extract_document_text_cached,
 )
-from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
-from api.domains.content_pipeline.infrastructure.processors.factory import chunk_document_content
-from api.domains.content_pipeline.infrastructure.runtime import calculate_file_hash
 
 from .execution import run_blocking_stage
 

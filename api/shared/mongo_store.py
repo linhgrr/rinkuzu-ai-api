@@ -11,7 +11,7 @@ from loguru import logger
 from pymongo import AsyncMongoClient
 
 from api.config import get_settings
-from api.core.shared.persistence.documents import (
+from api.shared.persistence.documents import (
     DocumentChunkDocument,
     DocumentOCRRecordDocument,
     LlmUsageDocument,

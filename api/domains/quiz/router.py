@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from api.config import get_settings
-from api.core.shared.llm import SSE_STREAM_HEADERS
 from api.dependencies import get_current_user
 from api.exceptions import AppError
 from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
+from api.shared.llm import SSE_STREAM_HEADERS
 
 from .draft_service import (
     QuizDraftDependencyError,

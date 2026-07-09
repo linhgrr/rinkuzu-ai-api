@@ -1,4 +1,4 @@
-"""Tests for the standardized LLM retry layer in api.core.shared.retry."""
+"""Tests for the standardized LLM retry layer in api.shared.retry."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.core.shared import retry as retry_module
-from api.core.shared.retry import (
+from api.shared import retry as retry_module
+from api.shared.retry import (
     is_retryable_llm_error,
     llm_async_retry,
     llm_retry_call,

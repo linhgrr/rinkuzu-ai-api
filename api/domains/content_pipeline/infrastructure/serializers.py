@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from api.core.shared.persistence.common import normalize_for_bson
-from api.core.shared.persistence.pipeline_jobs import pipeline_job_to_document
+from api.shared.persistence.common import normalize_for_bson
+from api.shared.persistence.pipeline_jobs import pipeline_job_to_document
 
 __all__ = ["normalize_for_bson", "pipeline_job_to_document"]
 

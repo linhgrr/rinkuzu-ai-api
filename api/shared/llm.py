@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
 from api.config import get_settings
-from api.core.shared.llm_usage import extract_usage, record_llm_usage
+from api.shared.llm_usage import extract_usage, record_llm_usage
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
