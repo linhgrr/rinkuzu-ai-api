@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from api import main as main_module
+from api import lifespan as main_module
 from api.config import get_settings
 
 
