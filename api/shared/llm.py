@@ -9,8 +9,8 @@ from dataclasses import dataclass
 import json
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
-from json_repair import loads as repair_json_loads
-from litellm import acompletion, completion, get_supported_openai_params
+import instructor
+from litellm import acompletion, completion
 from loguru import logger
 from pydantic import BaseModel
 
@@ -21,6 +21,8 @@ from api.config import get_settings
 from api.shared.llm_usage import extract_usage, record_llm_usage
 from api.shared.retry import (
     async_retry,
+    build_async_retrying,
+    build_retrying,
     is_retryable_llm_error,
     resolve_llm_retry_policy,
     sync_retry,
@@ -28,7 +30,6 @@ from api.shared.retry import (
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
-_JSON_OBJECT_RESPONSE_FORMAT: dict[str, str] = {"type": "json_object"}
 _DEEPSEEK_PROVIDER = "deepseek"
 
 
@@ -174,10 +175,6 @@ def build_llm_provider_config(
     )
 
 
-def _default_headers() -> dict[str, str]:
-    return {"ngrok-skip-browser-warning": "true"}
-
-
 def _normalize_message_content(content: object) -> str:  # noqa: C901
     if isinstance(content, str):
         return content
@@ -219,66 +216,23 @@ def _normalize_message_content(content: object) -> str:  # noqa: C901
     return str(content).strip()
 
 
-def _resolve_message_role(message: object) -> str:
-    if isinstance(message, dict):
-        role = message.get("role")
-        return str(role) if role else "user"
-
-    message_type = getattr(message, "type", None)
-    if message_type == "system":
-        return "system"
-    if message_type == "human":
-        return "user"
-    if message_type == "ai":
-        return "assistant"
-    if message_type == "tool":
-        return "tool"
-    return "user"
-
-
 def normalize_chat_messages(messages: Sequence[object]) -> list[dict[str, Any]]:
+    """Normalize chat messages to litellm's ``{"role", "content"}`` dict shape.
+
+    Every call site passes dicts (optionally with a multimodal ``content`` list);
+    the ``content`` is flattened to text for the current text-only providers.
+    """
     normalized: list[dict[str, Any]] = []
     for message in messages:
-        if isinstance(message, dict):
-            content = _normalize_message_content(message.get("content", ""))
-            role = str(message.get("role") or "user")
-            payload: dict[str, Any] = {"role": role, "content": content}
-            if role == "tool" and message.get("tool_call_id"):
-                payload["tool_call_id"] = message["tool_call_id"]
-            normalized.append(payload)
-            continue
-
-        normalized.append(
-            {
-                "role": _resolve_message_role(message),
-                "content": _normalize_message_content(getattr(message, "content", "")),
-            }
-        )
+        if not isinstance(message, dict):
+            raise TypeError(f"Expected a chat-message dict, got {type(message).__name__}.")
+        content = _normalize_message_content(message.get("content", ""))
+        role = str(message.get("role") or "user")
+        payload: dict[str, Any] = {"role": role, "content": content}
+        if role == "tool" and message.get("tool_call_id"):
+            payload["tool_call_id"] = message["tool_call_id"]
+        normalized.append(payload)
     return normalized
-
-
-def _augment_messages_for_schema(
-    messages: Sequence[object],
-    *,
-    schema: type[StructuredModelT],
-) -> list[dict[str, Any]]:
-    normalized = normalize_chat_messages(messages)
-    schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
-    guidance = (
-        "Return valid json only. Không dùng markdown code fence. "
-        "JSON phải khớp chính xác schema sau:\n"
-        f"{schema_json}\n"
-        "Nếu thiếu dữ liệu, vẫn phải trả về JSON hợp lệ và dùng giá trị rỗng/null phù hợp schema."
-    )
-
-    if normalized and normalized[0]["role"] == "system":
-        normalized[0] = {
-            **normalized[0],
-            "content": f"{normalized[0]['content'].rstrip()}\n\n{guidance}",
-        }
-        return normalized
-
-    return [{"role": "system", "content": guidance}, *normalized]
 
 
 def _extract_choice_content(choice: object) -> object:
@@ -351,7 +305,6 @@ def _litellm_kwargs(
         "base_url": config.base_url,
         "timeout": config.timeout_sec,
         "num_retries": config.max_retries,
-        "extra_headers": _default_headers(),
         "temperature": temperature,
         "stream": stream,
         **({"stream_options": {"include_usage": True}} if stream else {}),
@@ -366,27 +319,33 @@ def _litellm_kwargs(
     return payload
 
 
-def _supports_openai_param(config: LLMProviderConfig, param: str) -> bool:
-    try:
-        supported = get_supported_openai_params(
-            model=config.model,
-            custom_llm_provider=config.custom_llm_provider,
-        )
-    except Exception as exc:
-        logger.debug(
-            "[LLM] could not resolve supported params for model={} provider={}: {}",
-            config.model,
-            config.custom_llm_provider or "(auto)",
-            exc,
-        )
-        return False
-    return param in (supported or [])
+def _structured_litellm_kwargs(
+    *,
+    config: LLMProviderConfig,
+    temperature: float,
+    max_tokens: int | None,
+    thinking_enabled: bool,
+) -> dict[str, Any]:
+    """litellm kwargs for instructor's structured path.
 
-
-def _structured_response_format(config: LLMProviderConfig) -> dict[str, Any] | None:
-    if not _supports_openai_param(config, "response_format"):
-        return None
-    return _JSON_OBJECT_RESPONSE_FORMAT
+    instructor owns ``messages`` and ``response_model`` (JSON-mode schema
+    injection + validation reask), so this passes only provider/model routing
+    and generation params — no ``response_format``.
+    """
+    payload: dict[str, Any] = {
+        "model": config.model,
+        "api_key": config.api_key,
+        "base_url": config.base_url,
+        "timeout": config.timeout_sec,
+        "num_retries": config.max_retries,
+        "temperature": temperature,
+        **_thinking_kwargs(thinking_enabled),
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    if config.custom_llm_provider:
+        payload["custom_llm_provider"] = config.custom_llm_provider
+    return payload
 
 
 # Hold strong references to fire-and-forget tasks so they are not garbage
@@ -570,25 +529,25 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> StructuredModelT:
-        @self._sync_retry("generate_structured")
-        def _call() -> StructuredModelT:
-            response = completion(
-                **_litellm_kwargs(
-                    config=self.config,
-                    messages=_augment_messages_for_schema(messages, schema=schema),
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    thinking_enabled=thinking_enabled,
-                    response_format=_structured_response_format(self.config),
-                )
-            )
-            _record_usage_sync(self.config, response, action)
-            content = extract_llm_text(_extract_response_content(response))
-            if not content:
-                raise TypeError("LLM returned empty structured output.")
-            return schema.model_validate(repair_json_loads(content))
-
-        return cast("StructuredModelT", _call())
+        client = instructor.from_litellm(completion, mode=instructor.Mode.JSON)
+        result, raw = client.chat.completions.create_with_completion(
+            response_model=schema,
+            messages=cast("Any", normalize_chat_messages(messages)),
+            max_retries=build_retrying(
+                label="generate_structured",
+                max_attempts=self._max_attempts,
+                base_delay_sec=self._base_delay_sec,
+                retry_on=is_retryable_llm_error,
+            ),
+            **_structured_litellm_kwargs(
+                config=self.config,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking_enabled=thinking_enabled,
+            ),
+        )
+        _record_usage_sync(self.config, raw, action)
+        return result
 
     async def agenerate_structured(
         self,
@@ -600,25 +559,31 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> StructuredModelT:
-        @self._async_retry("agenerate_structured")
-        async def _call() -> StructuredModelT:
-            response = await acompletion(
-                **_litellm_kwargs(
-                    config=self.config,
-                    messages=_augment_messages_for_schema(messages, schema=schema),
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    thinking_enabled=thinking_enabled,
-                    response_format=_structured_response_format(self.config),
-                )
-            )
-            await _record_usage_async(self.config, response, action)
-            content = extract_llm_text(_extract_response_content(response))
-            if not content:
-                raise TypeError("LLM returned empty structured output.")
-            return schema.model_validate(repair_json_loads(content))
-
-        return cast("StructuredModelT", await _call())
+        client = cast(
+            "instructor.AsyncInstructor",
+            instructor.from_litellm(acompletion, mode=instructor.Mode.JSON),
+        )
+        result, raw = await client.chat.completions.create_with_completion(
+            response_model=schema,
+            messages=cast("Any", normalize_chat_messages(messages)),
+            max_retries=cast(
+                "Any",
+                build_async_retrying(
+                    label="agenerate_structured",
+                    max_attempts=self._max_attempts,
+                    base_delay_sec=self._base_delay_sec,
+                    retry_on=is_retryable_llm_error,
+                ),
+            ),
+            **_structured_litellm_kwargs(
+                config=self.config,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking_enabled=thinking_enabled,
+            ),
+        )
+        await _record_usage_async(self.config, raw, action)
+        return result
 
 
 def get_default_llm_client(

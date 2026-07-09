@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-
 from api.domains.learning.exercise_types import BLOOM_VERBS, ExerciseType
 from api.domains.learning.history_formatter import format_exercise_history
 
@@ -176,16 +174,17 @@ class PromptBuilder:
     def build_messages(
         self,
         recent_exercises: Sequence[dict[str, Any]] | None = None,
-    ) -> list[BaseMessage]:
+    ) -> list[dict[str, Any]]:
         return [
-            SystemMessage(content=self.build_system_message()),
-            HumanMessage(
-                content=self.build_user_message(
+            {"role": "system", "content": self.build_system_message()},
+            {
+                "role": "user",
+                "content": self.build_user_message(
                     type_spec=self.spec.instruction,
                     negative_constraints=self.spec.negative_constraints,
                     recent_exercises=recent_exercises,
-                )
-            ),
+                ),
+            },
         ]
 
 
@@ -196,7 +195,7 @@ def build_exercise_messages(
     exercise_type: ExerciseType,
     recent_exercises: Sequence[dict[str, Any]] | None = None,
     subject_context: str = "",
-) -> list[BaseMessage]:
+) -> list[dict[str, Any]]:
     builder = PromptBuilder(
         concept_name=concept_name,
         concept_definition=concept_definition,

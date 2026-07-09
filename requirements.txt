@@ -39,6 +39,7 @@ pymongo>=4.6.0
 
 # AI Provider
 litellm>=1.85.1
+instructor>=1.15.4
 
 # Utilities
 loguru>=0.7.0

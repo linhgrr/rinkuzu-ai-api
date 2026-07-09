@@ -69,6 +69,48 @@ def _make_before_sleep(label: str) -> Callable[[Any], None]:
     return _before_sleep
 
 
+def build_retrying(
+    *,
+    label: str,
+    max_attempts: int,
+    base_delay_sec: float,
+    retry_on: Callable[[BaseException], bool] = is_transient_error,
+    max_wait_sec: float = 60,
+) -> Retrying:
+    """A configured sync tenacity ``Retrying`` (exp backoff, reraise).
+
+    Exposed as an object so callers that take one directly (e.g. instructor's
+    ``max_retries``) share the same policy as the ``sync_retry`` decorator.
+    """
+    return Retrying(
+        stop=stop_after_attempt(max(1, max_attempts)),
+        wait=wait_exponential(multiplier=max(0.0, base_delay_sec), max=max_wait_sec),
+        retry=retry_if_exception(retry_on),
+        reraise=True,
+        sleep=time.sleep,
+        before_sleep=_make_before_sleep(label),
+    )
+
+
+def build_async_retrying(
+    *,
+    label: str,
+    max_attempts: int,
+    base_delay_sec: float,
+    retry_on: Callable[[BaseException], bool] = is_transient_error,
+    max_wait_sec: float = 60,
+) -> AsyncRetrying:
+    """Async counterpart of ``build_retrying``."""
+    return AsyncRetrying(
+        stop=stop_after_attempt(max(1, max_attempts)),
+        wait=wait_exponential(multiplier=max(0.0, base_delay_sec), max=max_wait_sec),
+        retry=retry_if_exception(retry_on),
+        reraise=True,
+        sleep=asyncio.sleep,
+        before_sleep=_make_before_sleep(label),
+    )
+
+
 def async_retry(
     *,
     label: str,
@@ -82,13 +124,12 @@ def async_retry(
     def decorator(fn: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitable[_T]]:
         @wraps(fn)
         async def wrapped(*args: object, **kwargs: object) -> _T:
-            retrying = AsyncRetrying(
-                stop=stop_after_attempt(max(1, max_attempts)),
-                wait=wait_exponential(multiplier=max(0.0, base_delay_sec), max=max_wait_sec),
-                retry=retry_if_exception(retry_on),
-                reraise=True,
-                sleep=asyncio.sleep,
-                before_sleep=_make_before_sleep(label),
+            retrying = build_async_retrying(
+                label=label,
+                max_attempts=max_attempts,
+                base_delay_sec=base_delay_sec,
+                retry_on=retry_on,
+                max_wait_sec=max_wait_sec,
             )
 
             async def _call() -> _T:
@@ -114,13 +155,12 @@ def sync_retry(
     def decorator(fn: Callable[..., _T]) -> Callable[..., _T]:
         @wraps(fn)
         def wrapped(*args: object, **kwargs: object) -> _T:
-            retrying = Retrying(
-                stop=stop_after_attempt(max(1, max_attempts)),
-                wait=wait_exponential(multiplier=max(0.0, base_delay_sec), max=max_wait_sec),
-                retry=retry_if_exception(retry_on),
-                reraise=True,
-                sleep=time.sleep,
-                before_sleep=_make_before_sleep(label),
+            retrying = build_retrying(
+                label=label,
+                max_attempts=max_attempts,
+                base_delay_sec=base_delay_sec,
+                retry_on=retry_on,
+                max_wait_sec=max_wait_sec,
             )
 
             def _call() -> _T:

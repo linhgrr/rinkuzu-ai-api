@@ -28,8 +28,6 @@ from .prompts import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from langchain_core.messages import BaseMessage
-
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
 
@@ -56,7 +54,7 @@ def _build_generation_spec(
 def _invoke_structured_llm(
     *,
     schema: type[StructuredModelT],
-    messages: Sequence[BaseMessage],
+    messages: Sequence[dict[str, object]],
     action: str,
     temperature: float = 0.3,
 ) -> StructuredModelT:

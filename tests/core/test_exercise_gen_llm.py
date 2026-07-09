@@ -10,9 +10,9 @@ from api.shared import retry as retry_module
 
 
 def test_generate_exercise_serializes_structured_output(monkeypatch):
-    # Retry now lives in the LLM client (see test_llm_json_repair for the
-    # attempt-count contract). Here we only verify exercise_gen serializes a
-    # structured result into the API payload shape.
+    # Retry + reask live in the LLM client (see test_llm_structured_instructor
+    # for the attempt-count contract). Here we only verify exercise_gen
+    # serializes a structured result into the API payload shape.
     def _select_type(_bloom_level, _mastery):
         return ExerciseType.MCQ
 

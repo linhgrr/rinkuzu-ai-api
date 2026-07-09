@@ -9,8 +9,8 @@ def test_grading_prompt_contains_score_anchors():
         student_answer="HS",
     )
 
-    assert "Thang điểm tham chiếu (0-10)" in messages[0].content
-    assert "Không phạt vì khác wording" in messages[0].content
+    assert "Thang điểm tham chiếu (0-10)" in messages[0]["content"]
+    assert "Không phạt vì khác wording" in messages[0]["content"]
 
 
 def test_theory_prompt_contains_example_constraint():
@@ -19,5 +19,5 @@ def test_theory_prompt_contains_example_constraint():
         concept_definition="Động năng là năng lượng do chuyển động.",
     )
 
-    assert "BÀI TOÁN CỤ THỂ" in messages[0].content
-    assert "ví dụ cụ thể có lời giải ngắn" in messages[1].content
+    assert "BÀI TOÁN CỤ THỂ" in messages[0]["content"]
+    assert "ví dụ cụ thể có lời giải ngắn" in messages[1]["content"]

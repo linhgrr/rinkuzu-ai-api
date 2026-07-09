@@ -1,5 +1,3 @@
-from langchain_core.messages import HumanMessage, SystemMessage
-
 from api.domains.learning.exercise_types import ExerciseType
 from api.domains.learning.prompts import PromptBuilder
 
@@ -62,8 +60,8 @@ def test_few_shot_included_for_each_type():
             exercise_type=exercise_type,
         )
         messages = builder.build_messages()
-        human = next(message for message in messages if isinstance(message, HumanMessage))
-        assert "Few-shot JSON mẫu" in human.content
+        human = next(message for message in messages if message["role"] == "user")
+        assert "Few-shot JSON mẫu" in human["content"]
 
 
 def test_negative_constraints_included():
@@ -76,7 +74,7 @@ def test_negative_constraints_included():
 
     user_message = builder.build_messages()[1]
 
-    assert "Ràng buộc negative constraints" in user_message.content
+    assert "Ràng buộc negative constraints" in user_message["content"]
 
 
 def test_meta_validation_checklist_present():
@@ -89,8 +87,8 @@ def test_meta_validation_checklist_present():
 
     system_message, user_message = builder.build_messages()
 
-    assert isinstance(system_message, SystemMessage)
-    assert "Checklist tự kiểm tra trước khi trả lời" in user_message.content
+    assert system_message["role"] == "system"
+    assert "Checklist tự kiểm tra trước khi trả lời" in user_message["content"]
 
 
 def test_recent_exercises_dedup_block():
@@ -109,6 +107,6 @@ def test_recent_exercises_dedup_block():
 
     assert (
         "Các bài gần nhất cùng concept (TRÁNH trùng lặp với các bài dưới đây)"
-        in messages[1].content
+        in messages[1]["content"]
     )
-    assert '"Q1"' in messages[1].content
+    assert '"Q1"' in messages[1]["content"]
