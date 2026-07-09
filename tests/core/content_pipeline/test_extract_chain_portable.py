@@ -137,7 +137,7 @@ def test_extract_single_batch_returns_error_payload_when_client_fails():
     async def fake_invoke(**_kwargs):
         raise RuntimeError("provider down")
 
-    chain._invoke_extraction_response_with_retries = fake_invoke  # type: ignore[method-assign]
+    chain._invoke_extraction_response = fake_invoke  # type: ignore[method-assign]
 
     async def _run():
         return await chain._extract_single_batch(

@@ -25,14 +25,10 @@ def _get_settings():
     return import_module("api.config").get_settings()
 
 
-def _get_chroma_store_types() -> tuple[type, type]:
-    concept_store = import_module(
-        "api.domains.content_pipeline.infrastructure.storage.chroma_store"
-    ).ConceptChromaStore
-    chunk_store = import_module(
+def _get_chunk_chroma_store_type() -> type:
+    return import_module(
         "api.domains.content_pipeline.infrastructure.storage.chunk_chroma_store"
     ).ChunkChromaStore
-    return concept_store, chunk_store
 
 
 async def reset_mongo() -> None:
@@ -51,11 +47,9 @@ async def reset_mongo() -> None:
 
 
 def reset_chroma() -> None:
-    concept_chroma_store_type, chunk_chroma_store_type = _get_chroma_store_types()
+    chunk_chroma_store_type = _get_chunk_chroma_store_type()
     chunk_chroma_store_type().reset_collection()
     logger.info("reset chroma collection: document_chunks")
-    concept_chroma_store_type().reset_collection()
-    logger.info("reset chroma collection: concepts")
 
 
 async def main() -> None:
