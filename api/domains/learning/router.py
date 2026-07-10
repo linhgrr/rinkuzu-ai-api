@@ -35,6 +35,7 @@ from api.shared.llm import SSE_STREAM_HEADERS
 
 from .schemas import (
     ExerciseResponse,
+    LearningStepResponse,
     NextConceptResponse,
     SessionCreateRequest,
     SessionCreateResponse,
@@ -84,6 +85,17 @@ def _build_exercise_response_payload(
         case "short_answer":
             payload["rubric"] = content["rubric"]
 
+    return payload
+
+
+def _build_public_exercise_payload(session: Any, exercise: Any) -> dict[str, Any]:
+    env_stats = session.env.get_session_stats()
+
+    from api.domains.learning.exercise_types.registry import get_handler
+
+    content = get_handler(exercise.payload.exercise_type).to_response_dict(exercise)
+    payload = _build_exercise_response_payload(exercise, env_stats, content)
+    payload["recommendation_reason"] = session._current_recommendation_reason
     return payload
 
 
@@ -258,14 +270,41 @@ async def generate_exercise(
     if not exercise:
         raise ExerciseGenerationError
 
-    env_stats = session.env.get_session_stats()
+    if not await manager.persist_subject_progress(session):
+        manager.remove_session(session.session_id)
+        raise ExerciseGenerationError("Failed to persist current exercise")
 
-    from api.domains.learning.exercise_types.registry import get_handler
-
-    content = get_handler(exercise.payload.exercise_type).to_response_dict(exercise)
-    payload = _build_exercise_response_payload(exercise, env_stats, content)
-    payload["recommendation_reason"] = session._current_recommendation_reason
+    payload = _build_public_exercise_payload(session, exercise)
     return ok(payload)
+
+
+@router.post("/{session_id}/step", response_model=StandardResponse[LearningStepResponse])
+@limiter.limit(get_settings().rate_limit_session, exempt_when=is_admin_request)
+async def learning_step(
+    request: Request,
+    session_id: PathID,
+    background_tasks: BackgroundTasks,
+    manager: Any = Depends(get_session_manager),
+    exercise_svc: Any = Depends(get_session_service),
+    user_id: str = Depends(get_current_user),
+) -> Any:
+    """Return the current learning step, creating and persisting one when needed."""
+    del request
+    session = await resolve_user_session(manager, session_id, user_id)
+    if session.status != "active":
+        raise SessionCompletedError(session_id)
+
+    step = await exercise_svc.get_or_create_learning_step(session, background_tasks)
+    if not step:
+        raise ExerciseGenerationError("Failed to prepare learning step")
+
+    payload = {
+        "concept": step["concept"],
+        "theory": step["theory"],
+        "exercise": _build_public_exercise_payload(session, step["exercise"]),
+        "cache_status": step["cache_status"],
+    }
+    return ok(LearningStepResponse(**payload).model_dump())
 
 
 @router.post("/{session_id}/submit", response_model=StandardResponse[SubmitAnswerResponse])
@@ -283,7 +322,13 @@ async def submit_answer(
     del request
     session = await resolve_user_session(manager, session_id, user_id)
 
-    result = await exercise_svc.submit_answer(session, req.answer.model_dump(), background_tasks)
+    result = await exercise_svc.submit_answer(
+        session,
+        req.answer.model_dump(),
+        background_tasks,
+        exercise_id=req.exercise_id,
+        idempotency_key=req.idempotency_key,
+    )
     if not result:
         raise ExerciseGenerationError("No pending exercise or session not found")
 

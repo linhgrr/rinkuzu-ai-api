@@ -68,6 +68,33 @@ async def test_record_llm_usage_persists_action(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_record_llm_usage_persists_current_user(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeDoc:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def insert(self):
+            return None
+
+    monkeypatch.setattr(llm_usage.mongo_store, "is_available", lambda: True)
+    monkeypatch.setattr(llm_usage, "LlmUsageDocument", _FakeDoc)
+    token = llm_usage.current_user_id.set("user-1")
+    try:
+        await llm_usage.record_llm_usage(
+            model="deepseek-v4-flash",
+            provider="deepseek",
+            usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            action=llm_usage.LlmAction.ADAPTIVE_EXERCISE,
+        )
+    finally:
+        llm_usage.current_user_id.reset(token)
+
+    assert captured["user_id"] == "user-1"
+
+
+@pytest.mark.anyio
 async def test_record_usage_async_creates_task_on_running_loop(monkeypatch):
     """LLM calls are async-native now: usage recording fires from within an async
     context via _record_usage_async, awaited on the same running loop the Mongo

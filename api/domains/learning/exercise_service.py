@@ -17,7 +17,8 @@ import numpy as np
 from pydantic import TypeAdapter
 
 from api.config import settings
-from api.exceptions import ExerciseGenerationError
+from api.exceptions import AppError, ExerciseGenerationError
+from api.shared.llm_usage import current_user_id
 
 from .agent import decode_action, select_action, select_next_concept_action
 from .answer_eval import evaluate_answer, serialize_answer_for_history
@@ -32,6 +33,7 @@ _PAYLOAD_ADAPTER: TypeAdapter[ExercisePayload] = TypeAdapter(ExercisePayload)
 
 # Threshold below which max_steps is considered unset (likely a default placeholder)
 _MAX_STEPS_UNSET_THRESHOLD = 50
+_THEORY_BLOOM_LEVEL_MAX = 2
 T = TypeVar("T")
 
 
@@ -156,16 +158,24 @@ class ExerciseService:
             return await existing
 
         async def _run() -> dict[str, Any] | None:
-            return await self._run_llm_call(
-                lambda: generate_exercise(
-                    concept_name,
-                    concept_def,
-                    bloom_level,
-                    mastery,
-                    recent_same_concept_exercises,
-                ),
-                timeout_sec=timeout_sec,
-            )
+            user_token = None
+            session_user_id = getattr(session, "user_id", None)
+            if session_user_id:
+                user_token = current_user_id.set(str(session_user_id))
+            try:
+                return await self._run_llm_call(
+                    lambda: generate_exercise(
+                        concept_name,
+                        concept_def,
+                        bloom_level,
+                        mastery,
+                        recent_same_concept_exercises,
+                    ),
+                    timeout_sec=timeout_sec,
+                )
+            finally:
+                if user_token is not None:
+                    current_user_id.reset(user_token)
 
         task = asyncio.create_task(_run())
         self._exercise_inflight[key] = task
@@ -371,6 +381,57 @@ class ExerciseService:
 
         return exercise
 
+    async def get_or_create_learning_step(
+        self, session: SessionState, background_tasks: Any = None
+    ) -> dict[str, Any] | None:
+        """Return the currently served exercise or create and persist the next step."""
+        if session.status != "active":
+            return None
+
+        if session.current_exercise:
+            env_stats = session.env.get_session_stats()
+            return {
+                "concept": {
+                    "concept_name": session.current_exercise.concept_name,
+                    "concept_idx": session.current_exercise.concept_idx,
+                    "bloom_level": session.current_exercise.bloom_level,
+                    "bloom_label": BLOOM_LABELS.get(
+                        session.current_exercise.bloom_level, "Unknown"
+                    ),
+                    "step": env_stats["step"],
+                    "max_steps": env_stats["max_steps"],
+                },
+                "theory": session.current_exercise.theory,
+                "exercise": session.current_exercise,
+                "cache_status": "served",
+            }
+
+        concept_info = await self.get_next_concept(session)
+        if not concept_info:
+            return None
+
+        theory = None
+        if int(concept_info["bloom_level"]) <= _THEORY_BLOOM_LEVEL_MAX:
+            theory = await self.get_theory(session)
+
+        exercise = await self.generate_exercise(session, background_tasks)
+        if not exercise:
+            return None
+        exercise.theory = theory
+
+        if self._session_manager and not await self._session_manager.persist_subject_progress(
+            session
+        ):
+            self._session_manager.remove_session(session.session_id)
+            raise ExerciseGenerationError("Failed to persist current exercise")
+
+        return {
+            "concept": concept_info,
+            "theory": theory,
+            "exercise": exercise,
+            "cache_status": "created",
+        }
+
     def _evaluate_answer(self, exercise: Any, answer: dict[str, Any]) -> tuple[bool, str]:
         """Evaluate CPU-only exercise types (everything except short-answer)."""
         return evaluate_answer(exercise, answer)
@@ -397,15 +458,36 @@ class ExerciseService:
         return bool(grading["is_correct"]), student
 
     async def submit_answer(
-        self, session: SessionState, answer: dict[str, Any], _background_tasks: Any = None
+        self,
+        session: SessionState,
+        answer: dict[str, Any],
+        _background_tasks: Any = None,
+        *,
+        exercise_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any] | None:
         """Process user's answer, update environment, return result."""
 
         async with session._lock:
+            receipt_key = None
+            if exercise_id and idempotency_key:
+                receipt_key = f"{exercise_id}:{idempotency_key}"
+                cached = session.submission_receipts.get(receipt_key)
+                if cached and isinstance(cached.get("result"), dict):
+                    return cast("dict[str, Any]", cached["result"])
+
             if not session.current_exercise:
                 return None
 
             exercise = session.current_exercise
+            if exercise_id and exercise.exercise_id != exercise_id:
+                raise AppError(
+                    code="conflict",
+                    message="Conflict",
+                    detail="Submitted exercise does not match the current learning step.",
+                    status_code=409,
+                )
+
             if exercise.payload.exercise_type == ExerciseType.SHORT_ANSWER:
                 is_correct, answer_summary = await self._evaluate_short_answer(exercise, answer)
             else:
@@ -456,6 +538,31 @@ class ExerciseService:
             mastery_val = float(concept_mastery[exercise.concept_idx])
             avg_mastery = float(np.mean(concept_mastery))
 
+            result = {
+                "is_correct": is_correct,
+                "explanation": explanation,
+                "correct_option": correct_option,
+                "concept_name": exercise.concept_name,
+                "bloom_level": exercise.bloom_level,
+                "mastery_after": mastery_val,
+                "avg_mastery": avg_mastery,
+                "step": info["step"],
+                "session_completed": session.status == "completed",
+                "stats": {
+                    "total_correct": session.total_correct,
+                    "total_answered": session.total_answered,
+                    "accuracy": session.total_correct / max(session.total_answered, 1),
+                },
+            }
+            if receipt_key:
+                session.submission_receipts = {
+                    receipt_key: {
+                        "exercise_id": exercise.exercise_id,
+                        "idempotency_key": idempotency_key,
+                        "result": result,
+                    }
+                }
+
         logger.info(
             "[Exercise] Mastery: {:.3f} | Avg: {:.3f} | Step: {} | Status: {}",
             mastery_val,
@@ -475,22 +582,7 @@ class ExerciseService:
                 self._session_manager.remove_session(session.session_id)
                 raise ExerciseGenerationError("Failed to persist subject progress")
 
-        return {
-            "is_correct": is_correct,
-            "explanation": explanation,
-            "correct_option": correct_option,
-            "concept_name": exercise.concept_name,
-            "bloom_level": exercise.bloom_level,
-            "mastery_after": mastery_val,
-            "avg_mastery": avg_mastery,
-            "step": info["step"],
-            "session_completed": session.status == "completed",
-            "stats": {
-                "total_correct": session.total_correct,
-                "total_answered": session.total_answered,
-                "accuracy": session.total_correct / max(session.total_answered, 1),
-            },
-        }
+        return result
 
     async def eager_generate_first_exercise(self, session: SessionState) -> None:
         """Background: pre-generate the first exercise when a session starts."""

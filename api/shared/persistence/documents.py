@@ -186,11 +186,22 @@ class SubjectProgressDocument(Document):
     step: int = 0
     max_steps: int = 9999
     avg_mastery: float = 0.0
+    unlocked_concepts: int = 0
+    locked_concepts: int = 0
+    mastered_concepts: int = 0
+    progress_percent: int = 0
     concept_names: dict[str, str] = Field(default_factory=dict)
     concept_indices: dict[str, int] = Field(default_factory=dict)
     concept_mastery: dict[str, ConceptMasteryEntry] = Field(default_factory=dict)
     bloom_mastery: dict[str, BloomMasteryEntry] = Field(default_factory=dict)
     exercise_history: list[ExerciseEntry] = Field(default_factory=list)
+    current_exercise: ExerciseEntry | None = None
+    pending_concept_idx: int | None = None
+    pending_bloom_level: int | None = None
+    pending_action: int | None = None
+    recommendation_reason: dict[str, Any] | None = None
+    submission_receipts: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    version: int = 0
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -215,6 +226,10 @@ class SubjectProgressSummaryProjection(BaseModel):
     total_answered: int = 0
     accuracy: float = 0.0
     avg_mastery: float = 0.0
+    unlocked_concepts: int = 0
+    locked_concepts: int = 0
+    mastered_concepts: int = 0
+    progress_percent: int = 0
     step: int = 0
     max_steps: int = 9999
     created_at: datetime

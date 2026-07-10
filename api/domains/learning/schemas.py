@@ -127,6 +127,8 @@ class SubmitAnswerPayload(BaseModel):
 
 
 class SubmitAnswerRequest(BaseModel):
+    exercise_id: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1, max_length=128)
     answer: SubmitAnswerPayload
 
 
@@ -147,6 +149,13 @@ class SubmitAnswerResponse(BaseModel):
     step: int
     session_completed: bool
     stats: SubmitAnswerStats
+
+
+class LearningStepResponse(BaseModel):
+    concept: NextConceptResponse
+    theory: TheoryResponse | None = None
+    exercise: ExerciseResponse
+    cache_status: Literal["served", "created"]
 
 
 class TutorChatMessage(BaseModel):
