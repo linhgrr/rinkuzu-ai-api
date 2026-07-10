@@ -175,6 +175,35 @@ class PipelineJobActiveProjection(BaseModel):
     completed_at: datetime | None = None
 
 
+class PipelineJobStatusProjection(BaseModel):
+    job_id: str
+    filename: str
+    subject_id: str
+    status: PipelineStatus
+    current_step: str = ""
+    progress: float = 0.0
+    total_chunks: int = 0
+    page_batch_size: int = 10
+    batch_count: int = 0
+    failed_batch_count: int = 0
+    partial_success: bool = False
+    concepts_extracted: int = 0
+    concepts_after_merge: int = 0
+    relations_verified: int = 0
+    graph_stats: dict[str, Any] = Field(default_factory=dict)
+    quality_report: dict[str, Any] | None = None
+    partial_graph: dict[str, Any] | None = None
+    error_message: str | None = None
+    error_code: str | None = None
+    user_message: str | None = None
+    retryable: bool = False
+    retry_count: int = 0
+    eta_seconds: float | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    heartbeat_at: datetime = Field(default_factory=utc_now)
+
+
 class SubjectProgressDocument(Document):
     job_id: str
     user_id: str

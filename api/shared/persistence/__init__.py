@@ -20,6 +20,7 @@ from .pipeline_jobs import (
     load_pipeline_job,
     load_pipeline_job_cancel_requested,
     load_pipeline_job_for_user,
+    load_pipeline_job_status_for_user,
     pipeline_job_to_document,
     save_pipeline_job,
 )
@@ -62,6 +63,7 @@ __all__ = [
     "load_pipeline_job",
     "load_pipeline_job_cancel_requested",
     "load_pipeline_job_for_user",
+    "load_pipeline_job_status_for_user",
     "load_quiz_draft_for_user",
     "load_subject_progress_by_session_for_user",
     "load_subject_progress_for_user",

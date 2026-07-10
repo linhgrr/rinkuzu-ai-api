@@ -36,6 +36,7 @@ from api.shared import mongo_store
 from api.shared.persistence import (
     find_recent_active_job_by_source,
     load_pipeline_job_for_user,
+    load_pipeline_job_status_for_user,
     load_subject_progress_for_user,
 )
 from api.shared.persistence.pipeline_jobs import list_recent_pipeline_jobs_all_status
@@ -324,10 +325,16 @@ async def get_job_status(
     request: Request,
     job_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
+    *,
+    include_debug: Annotated[bool, Query()] = False,
 ) -> Any:
     del request
     """Get pipeline job status and progress."""
-    job_doc = await load_pipeline_job_for_user(job_id, user_id)
+    job_doc = await load_pipeline_job_status_for_user(
+        job_id,
+        user_id,
+        include_debug=include_debug,
+    )
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
@@ -391,7 +398,6 @@ async def get_job_status(
     }
     if status_value == PipelineStatus.COMPLETED.value and result:
         concept_map = result.get("concept_map", {})
-        concept_embeddings = result.get("concept_embeddings", [])
         response["result"] = {
             "graph": result.get("graph", {"nodes": [], "edges": []}),
             "stats": result.get("stats", {}),
@@ -399,9 +405,7 @@ async def get_job_status(
             "n_concepts": len(concept_map) if isinstance(concept_map, dict) else 0,
             "concepts_data": result.get("concepts_data", {}),
             "concept_map": concept_map,
-            "concept_embedding_count": len(concept_embeddings)
-            if isinstance(concept_embeddings, list)
-            else 0,
+            "concept_embedding_count": result.get("concept_embedding_count", 0),
             "prereq_edges": result.get("prereq_edges", []),
             "failed_batches": failed_batches if isinstance(failed_batches, list) else [],
             "warnings": warnings if isinstance(warnings, list) else [],
