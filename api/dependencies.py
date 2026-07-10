@@ -54,6 +54,22 @@ def get_current_user(
     return x_user_id
 
 
+def get_current_admin_user(
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+    x_service_token: str | None = Header(default=None),
+) -> str:
+    user_id = get_current_user(x_user_id=x_user_id, x_service_token=x_service_token)
+    if x_user_role != "admin":
+        raise AppError(
+            code="forbidden",
+            message="Admin access required",
+            detail="x-user-role must be admin",
+            status_code=403,
+        )
+    return user_id
+
+
 def get_app_settings() -> Settings:
     """Provide application settings."""
     return get_settings()

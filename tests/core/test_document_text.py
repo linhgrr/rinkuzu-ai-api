@@ -8,9 +8,13 @@ from api.shared.document_text import (
     ExtractedDocumentText,
     LandingAIDocumentTextExtractor,
     OCRApiConfig,
+    OCRKeyCandidate,
+    OCRProviderRequestError,
     _landing_ai_to_extracted_text,
+    _should_disable_key_for_status,
     build_document_text_extractor,
     build_ocr_api_config,
+    extract_document_text_from_bytes_with_key_pool,
     load_or_extract_document_text_cached,
 )
 
@@ -133,6 +137,113 @@ def test_landing_ai_document_text_extractor_posts_pdf_to_api():
     assert file_payload[0] == "scan.pdf"
     assert file_payload[1] == b"%PDF-demo"
     assert file_payload[2] == "application/pdf"
+
+
+def test_ocr_key_disable_policy_only_disables_key_specific_statuses():
+    assert _should_disable_key_for_status(401) is True
+    assert _should_disable_key_for_status(402) is True
+    assert _should_disable_key_for_status(403) is True
+    assert _should_disable_key_for_status(400) is False
+    assert _should_disable_key_for_status(422) is False
+    assert _should_disable_key_for_status(429) is False
+
+
+@pytest.mark.asyncio
+async def test_extract_document_text_with_key_pool_retries_failed_key(monkeypatch):
+    candidates = [
+        OCRKeyCandidate(
+            api_key="bad-key",  # pragma: allowlist secret
+            source="db",
+            key_id="key-1",
+            masked_key="bad••key",
+        ),
+        OCRKeyCandidate(
+            api_key="good-key",  # pragma: allowlist secret
+            source="db",
+            key_id="key-2",
+            masked_key="good••key",
+        ),
+    ]
+    attempts: list[str] = []
+    failures: list[dict[str, object]] = []
+    successes: list[str] = []
+
+    async def fake_resolve_candidates(_settings):
+        return candidates
+
+    async def fake_record_failure(
+        *,
+        key_id: str,
+        error_code: str,
+        error_message: str,
+        disable: bool,
+    ):
+        failures.append(
+            {
+                "key_id": key_id,
+                "error_code": error_code,
+                "error_message": error_message,
+                "disable": disable,
+            }
+        )
+
+    async def fake_record_success(*, key_id: str):
+        successes.append(key_id)
+
+    class FakeExtractor:
+        def __init__(self, *, config):
+            self.config = config
+
+        def extract_bytes(self, _pdf_bytes: bytes, *, filename: str | None = None):
+            attempts.append(self.config.api_key)
+            if self.config.api_key == "bad-key":  # pragma: allowlist secret
+                raise OCRProviderRequestError(
+                    message="provider rejected key",
+                    error_code="ocr_http_401",
+                    status_code=401,
+                    disable_key=True,
+                )
+            return ExtractedDocumentText(
+                text="## Trang 1\nOK",
+                pages=[DocumentPageText(page_number=1, text="OK")],
+                metadata={"file_name": filename, "provider": "landingai", "page_count": 1},
+            )
+
+    monkeypatch.setattr(
+        "api.shared.document_text._resolve_ocr_key_candidates",
+        fake_resolve_candidates,
+    )
+    monkeypatch.setattr(
+        "api.shared.document_text.record_ocr_key_failure",
+        fake_record_failure,
+    )
+    monkeypatch.setattr(
+        "api.shared.document_text.record_ocr_key_success",
+        fake_record_success,
+    )
+    monkeypatch.setattr("api.shared.document_text.LandingAIDocumentTextExtractor", FakeExtractor)
+
+    result = await extract_document_text_from_bytes_with_key_pool(
+        b"%PDF-demo",
+        filename="scan.pdf",
+        settings=SimpleNamespace(
+            ocr_base_url="https://api.va.landing.ai/v1/ade/parse",
+            ocr_model="dpt-2-mini",
+            ocr_timeout_sec=30,
+        ),
+    )
+
+    assert result.text == "## Trang 1\nOK"
+    assert attempts == ["bad-key", "good-key"]
+    assert failures == [
+        {
+            "key_id": "key-1",
+            "error_code": "ocr_http_401",
+            "error_message": "provider rejected key",
+            "disable": True,
+        }
+    ]
+    assert successes == ["key-2"]
 
 
 @pytest.mark.asyncio

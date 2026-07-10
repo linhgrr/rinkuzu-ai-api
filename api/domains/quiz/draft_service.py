@@ -15,7 +15,7 @@ from api.shared import mongo_store
 from api.shared.document_text import (
     ExtractedDocumentText,
     calculate_pdf_bytes_hash,
-    extract_document_text_from_bytes,
+    extract_document_text_from_bytes_with_key_pool,
     load_or_extract_document_text_cached,
 )
 from api.shared.persistence import (
@@ -379,8 +379,7 @@ class QuizDraftService:
             file_hash=calculate_pdf_bytes_hash(pdf_bytes),
             file_name=filename,
             file_size_bytes=len(pdf_bytes),
-            extract_document_text=lambda: asyncio.to_thread(
-                extract_document_text_from_bytes,
+            extract_document_text=lambda: extract_document_text_from_bytes_with_key_pool(
                 pdf_bytes,
                 filename=filename,
             ),

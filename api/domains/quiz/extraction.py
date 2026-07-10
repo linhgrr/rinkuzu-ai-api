@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
+from typing import TYPE_CHECKING
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.config import Settings, get_settings
 from api.domains.quiz.schemas import QuizQuestionShape
-from api.shared.document_text import (
-    DocumentTextConfigurationError,
-    ExtractedDocumentText,
-    build_ocr_api_config,
-    extract_document_text_from_bytes,
-)
+from api.shared.document_text import extract_document_text_from_bytes_with_key_pool
 from api.shared.llm import ainvoke_structured_completion, resolve_llm_api_key
 from api.shared.llm_usage import LlmAction
+
+if TYPE_CHECKING:
+    from api.shared.document_text import ExtractedDocumentText
 
 EXTRACTION_PROMPT = """
 You are given educational content that may include questions, explanations, and references to images or diagrams.
@@ -91,9 +89,8 @@ async def _extract_questions_from_pdf_bytes(
     model: str,
     timeout_sec: float,
 ) -> list[dict[str, str | int | list[str] | list[int]]]:
-    # PDF parsing is CPU/blocking — keep it off the event loop; the LLM call is async.
-    document_text = await asyncio.to_thread(
-        extract_document_text_from_bytes, pdf_bytes, filename=filename
+    document_text = await extract_document_text_from_bytes_with_key_pool(
+        pdf_bytes, filename=filename
     )
     return await _extract_questions_from_document_text(
         document_text,
@@ -159,7 +156,5 @@ def validate_quiz_extract_dependencies(settings: Settings, s3_client: object) ->
         raise ValueError("LLM configuration is missing.")
     if not resolve_llm_api_key():
         raise ValueError("LLM API key is missing.")
-    try:
-        build_ocr_api_config(settings)
-    except DocumentTextConfigurationError as exc:
-        raise ValueError("OCR configuration is missing.") from exc
+    if not settings.ocr_base_url or not settings.ocr_model:
+        raise ValueError("OCR configuration is missing.")

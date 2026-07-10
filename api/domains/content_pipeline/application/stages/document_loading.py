@@ -12,7 +12,7 @@ from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgre
 from api.domains.content_pipeline.infrastructure.processors.factory import chunk_document_content
 from api.domains.content_pipeline.infrastructure.runtime import calculate_file_hash
 from api.shared.document_text import (
-    extract_document_text_from_file,
+    extract_document_text_from_file_with_key_pool,
     extracted_document_text_to_content_payload,
     load_or_extract_document_text_cached,
 )
@@ -57,11 +57,7 @@ async def load_document_chunks(
     document_text = await load_or_extract_document_text_cached(
         file_hash=file_hash,
         file_name=Path(file_path).name,
-        extract_document_text=lambda: run_blocking_stage(
-            extract_document_text_from_file,
-            file_path,
-            stage_name="document_ocr_loading",
-        ),
+        extract_document_text=lambda: extract_document_text_from_file_with_key_pool(file_path),
         resolve_file_size_bytes=lambda: run_blocking_stage(
             _file_size_bytes,
             file_path,

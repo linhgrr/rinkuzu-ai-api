@@ -313,6 +313,42 @@ class DocumentOCRRecordDocument(Document):
         ]
 
 
+class OcrProviderKeyDocument(Document):
+    key_id: str
+    provider: str = "landingai"
+    label: str
+    encrypted_key: str
+    key_fingerprint: str
+    masked_key: str
+    enabled: bool = True
+    health_status: Literal["untested", "healthy", "failed", "disabled"] = "untested"
+    priority: int = 100
+    success_count: int = 0
+    failure_count: int = 0
+    last_used_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_error_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_message: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    created_by: str | None = None
+    updated_by: str | None = None
+
+    @before_event([Insert, Replace, SaveChanges])
+    def touch_updated_at(self) -> None:
+        self.updated_at = utc_now()
+
+    class Settings:
+        name = "ocr_provider_keys"
+        indexes: ClassVar[list[IndexModel]] = [
+            IndexModel([("key_id", ASCENDING)], unique=True),
+            IndexModel([("provider", ASCENDING), ("key_fingerprint", ASCENDING)], unique=True),
+            IndexModel([("provider", ASCENDING), ("enabled", ASCENDING), ("priority", ASCENDING)]),
+            IndexModel([("updated_at", DESCENDING)]),
+        ]
+
+
 class DocumentChunkDocument(Document):
     job_id: str
     subject_id: str
