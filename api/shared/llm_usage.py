@@ -36,6 +36,7 @@ class LlmAction:
     ADAPTIVE_THEORY = "adaptive_theory"
     ADAPTIVE_SHORT_ANSWER_EVAL = "adaptive_short_answer_eval"
     ADAPTIVE_TUTOR_CHAT = "adaptive_tutor_chat"
+    TUTOR_CHAT_SUMMARY = "tutor_chat_summary"
     QUIZ_EXTRACTION = "quiz_extraction"
     QUIZ_TUTOR = "quiz_tutor"
     PIPELINE_CONCEPT_EXTRACTION = "pipeline_concept_extraction"

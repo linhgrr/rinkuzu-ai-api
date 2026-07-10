@@ -3,7 +3,7 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from sse_starlette import EventSourceResponse
 
 from api.config import get_settings
 from api.dependencies import get_current_user
@@ -171,10 +171,11 @@ async def ask_ai_about_quiz(
                 question_image=req.question_image,
                 option_images=req.option_images,
             )
-            return StreamingResponse(
+            return EventSourceResponse(
                 stream,
-                media_type="text/event-stream",
                 headers=SSE_STREAM_HEADERS,
+                ping=15,
+                send_timeout=30,
             )
 
         payload = await generate_quiz_tutor_response(

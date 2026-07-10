@@ -147,8 +147,22 @@ class QuizTutorRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=12000)
     options: list[str] = Field(..., min_length=2, max_length=8)
     user_question: str | None = Field(default=None, alias="userQuestion", max_length=1000)
-    question_image: str | None = Field(default=None, alias="questionImage")
-    option_images: list[str | None] = Field(default_factory=list, alias="optionImages")
+    question_image: str | None = Field(
+        default=None,
+        alias="questionImage",
+        description=(
+            "Optional image URL/data URL. Accepted only when the configured tutor "
+            "LLM model supports vision."
+        ),
+    )
+    option_images: list[str | None] = Field(
+        default_factory=list,
+        alias="optionImages",
+        description=(
+            "Optional option image URLs/data URLs. Accepted only when the configured "
+            "tutor LLM model supports vision."
+        ),
+    )
     chat_history: list[QuizTutorChatMessage] = Field(default_factory=list, alias="chatHistory")
     stream: bool = False
 

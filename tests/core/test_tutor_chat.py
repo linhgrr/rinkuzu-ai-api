@@ -34,10 +34,33 @@ def test_build_chat_context_falls_back_when_summary_generation_fails(monkeypatch
         raise RuntimeError("upstream unavailable")
 
     monkeypatch.setattr(tutor_chat, "_request_text_response", _raise_summary_failure)
+    monkeypatch.setattr(tutor_chat, "_CHAT_HISTORY_TOKEN_BUDGET", 1)
 
-    history = [{"role": "user", "content": f"Câu hỏi {index}"} for index in range(7)]
+    history = [{"role": "user", "content": f"Câu hỏi {index}"} for index in range(8)]
 
-    assert asyncio.run(tutor_chat.build_chat_context(history)) == ""
+    context = asyncio.run(tutor_chat.build_chat_context(history))
+    assert "HỘI THOẠI GẦN ĐÂY" in context
+    assert "Câu hỏi 2" in context
+    assert "Câu hỏi 7" in context
+
+
+def test_build_tutor_prompt_excludes_current_user_question_from_history():
+    prompt = asyncio.run(
+        tutor_chat.build_tutor_prompt(
+            question="2 + 2 bằng bao nhiêu?",
+            options=["3", "4", "5", "6"],
+            user_question="Giải thích giúp mình",
+            chat_history=[
+                {"role": "user", "content": "Nhắc lại cách cộng"},
+                {"role": "assistant", "content": "Ta cộng từng đơn vị."},
+                {"role": "user", "content": "Giải thích giúp mình"},
+            ],
+        )
+    )
+
+    assert prompt.count("Giải thích giúp mình") == 1
+    assert "Nhắc lại cách cộng" in prompt
+    assert "Không chào lại" in prompt
 
 
 @pytest.mark.anyio
@@ -45,8 +68,8 @@ async def test_create_tutor_chat_stream_emits_streaming_sse_events(monkeypatch):
     # Retry + first-token priming now live in the LLM client; the tutor just
     # shapes the already-extracted token stream into SSE. Mock at the
     # astream_text_completion boundary (what tutor_core consumes).
-    def fake_astream(*, messages, model, temperature, timeout, action):
-        del messages, model, temperature, timeout, action
+    def fake_astream(*, messages, model, temperature, timeout, max_tokens, action):
+        del messages, model, temperature, timeout, max_tokens, action
 
         async def iterator():
             for chunk in ["Xin ", "chào"]:

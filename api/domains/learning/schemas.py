@@ -158,7 +158,14 @@ class TutorChatRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     user_question: str = Field(..., alias="userQuestion", min_length=1, max_length=1000)
-    chat_history: list[TutorChatMessage] = Field(default_factory=list, alias="chatHistory")
+    chat_history: list[TutorChatMessage] = Field(
+        default_factory=list,
+        alias="chatHistory",
+        description=(
+            "Deprecated for adaptive tutor chat. Adaptive chat history is owned by "
+            "the server session and this field is ignored."
+        ),
+    )
     stream: bool = False
 
 

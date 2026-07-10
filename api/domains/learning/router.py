@@ -5,8 +5,8 @@ Session router — Session lifecycle endpoints.
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from fastapi.responses import StreamingResponse
 from loguru import logger
+from sse_starlette import EventSourceResponse
 
 from api.config import get_settings
 from api.dependencies import (
@@ -324,6 +324,8 @@ async def chat_about_exercise(
     question = _resolve_exercise_question(exercise)
     options = _resolve_exercise_options(exercise)
 
+    # Adaptive chat history is server-owned so browser refreshes or forged
+    # chatHistory payloads cannot alter the session's tutor context.
     chat_history = await _get_tutor_chat_history(session, exercise.exercise_id)
 
     # RAG: retrieve relevant document chunks for this question
@@ -355,10 +357,11 @@ async def chat_about_exercise(
                 rag_context=rag_context,
                 on_complete=persist_chat_history,
             )
-            return StreamingResponse(
+            return EventSourceResponse(
                 stream,
-                media_type="text/event-stream",
                 headers=SSE_STREAM_HEADERS,
+                ping=15,
+                send_timeout=30,
             )
 
         explanation = await generate_tutor_chat_response(

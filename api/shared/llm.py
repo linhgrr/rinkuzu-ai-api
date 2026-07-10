@@ -9,7 +9,7 @@ import json
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 import instructor
-from litellm import acompletion
+from litellm import acompletion, supports_vision
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
@@ -159,10 +159,51 @@ def build_llm_provider_config(
     )
 
 
-def _normalize_message_content(content: object) -> str:  # noqa: C901
+def _image_url_payload(url: str) -> dict[str, Any]:
+    return {"type": "image_url", "image_url": {"url": url.strip()}}
+
+
+def _normalize_message_content(content: object, *, preserve_multimodal: bool = False) -> object:  # noqa: C901
     if isinstance(content, str):
         return content
     if isinstance(content, list):
+        if preserve_multimodal:
+            blocks: list[dict[str, Any]] = []
+            for item in content:
+                if isinstance(item, str):
+                    if item.strip():
+                        blocks.append({"type": "text", "text": item.strip()})
+                    continue
+                if not isinstance(item, dict):
+                    text = str(item).strip()
+                    if text:
+                        blocks.append({"type": "text", "text": text})
+                    continue
+
+                item_type = str(item.get("type", "")).lower()
+                if item_type in {"text", "input_text"}:
+                    raw_text = item.get("text")
+                    if isinstance(raw_text, str) and raw_text.strip():
+                        blocks.append({"type": "text", "text": raw_text.strip()})
+                    continue
+
+                if item_type in {"image", "image_url", "input_image"}:
+                    image_value: object = item.get("url") or item.get("file_url")
+                    if not image_value:
+                        nested_image = item.get("image_url")
+                        if isinstance(nested_image, dict):
+                            image_value = nested_image.get("url")
+                        else:
+                            image_value = nested_image
+                    if isinstance(image_value, str) and image_value.strip():
+                        blocks.append(_image_url_payload(image_value))
+                    continue
+
+                raw_text = item.get("text")
+                if isinstance(raw_text, str) and raw_text.strip():
+                    blocks.append({"type": "text", "text": raw_text.strip()})
+            return blocks
+
         parts: list[str] = []
         for item in content:
             if isinstance(item, str):
@@ -173,9 +214,9 @@ def _normalize_message_content(content: object) -> str:  # noqa: C901
                 continue
             item_type = str(item.get("type", "")).lower()
             if item_type in {"text", "input_text"}:
-                text = item.get("text")
-                if isinstance(text, str) and text.strip():
-                    parts.append(text.strip())
+                raw_text = item.get("text")
+                if isinstance(raw_text, str) and raw_text.strip():
+                    parts.append(raw_text.strip())
                 continue
             if item_type in {"image", "image_url", "input_image"}:
                 url = item.get("url") or item.get("image_url") or item.get("file_url")
@@ -193,24 +234,55 @@ def _normalize_message_content(content: object) -> str:  # noqa: C901
                         + filename.strip()
                     )
                 continue
-            text = item.get("text")
-            if isinstance(text, str) and text.strip():
-                parts.append(text.strip())
+            raw_text = item.get("text")
+            if isinstance(raw_text, str) and raw_text.strip():
+                parts.append(raw_text.strip())
         return "\n\n".join(part for part in parts if part.strip()).strip()
     return str(content).strip()
 
 
-def normalize_chat_messages(messages: Sequence[object]) -> list[dict[str, Any]]:
+def _messages_contain_images(messages: Sequence[object]) -> bool:
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if isinstance(item, dict) and str(item.get("type", "")).lower() in {
+                "image",
+                "image_url",
+                "input_image",
+            }:
+                return True
+    return False
+
+
+def normalize_chat_messages(
+    messages: Sequence[object],
+    *,
+    model: str | None = None,
+    custom_llm_provider: str | None = None,
+) -> list[dict[str, Any]]:
     """Normalize chat messages to litellm's ``{"role", "content"}`` dict shape.
 
-    Every call site passes dicts (optionally with a multimodal ``content`` list);
-    the ``content`` is flattened to text for the current text-only providers.
+    Text-only providers receive flattened text. Vision-capable models keep
+    OpenAI-compatible ``image_url`` content blocks so LiteLLM can route them
+    natively.
     """
     normalized: list[dict[str, Any]] = []
+    preserve_multimodal = bool(
+        model
+        and _messages_contain_images(messages)
+        and supports_vision(model=model, custom_llm_provider=custom_llm_provider)
+    )
     for message in messages:
         if not isinstance(message, dict):
             raise TypeError(f"Expected a chat-message dict, got {type(message).__name__}.")
-        content = _normalize_message_content(message.get("content", ""))
+        content = _normalize_message_content(
+            message.get("content", ""),
+            preserve_multimodal=preserve_multimodal,
+        )
         role = str(message.get("role") or "user")
         payload: dict[str, Any] = {"role": role, "content": content}
         if role == "tool" and message.get("tool_call_id"):
@@ -284,7 +356,11 @@ def _litellm_kwargs(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": config.model,
-        "messages": normalize_chat_messages(messages),
+        "messages": normalize_chat_messages(
+            messages,
+            model=config.model,
+            custom_llm_provider=config.custom_llm_provider,
+        ),
         "api_key": config.api_key,
         "base_url": config.base_url,
         "timeout": config.timeout_sec,

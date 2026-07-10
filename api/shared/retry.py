@@ -16,6 +16,14 @@ import time
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import httpx
+from litellm.exceptions import (
+    AuthenticationError,
+    BadRequestError,
+    ContentPolicyViolationError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnprocessableEntityError,
+)
 from loguru import logger
 from tenacity import (
     AsyncRetrying,
@@ -31,6 +39,14 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 _TRANSIENT_STATUS = {408, 425, 429, 500, 502, 503, 504}
+_NON_RETRYABLE_LLM_ERRORS = (
+    AuthenticationError,
+    BadRequestError,
+    NotFoundError,
+    PermissionDeniedError,
+    ContentPolicyViolationError,
+    UnprocessableEntityError,
+)
 
 
 def is_transient_error(exc: BaseException) -> bool:
@@ -43,8 +59,13 @@ def is_transient_error(exc: BaseException) -> bool:
 
 
 def is_retryable_llm_error(exc: BaseException) -> bool:
-    """LLM calls: failures are predominantly transient (provider 5xx, timeouts,
-    rate limits, malformed streams). Retry broadly on Exception."""
+    """True for LLM failures that may recover on a later attempt.
+
+    Provider auth/config/request-policy errors are deterministic and should
+    surface immediately instead of being hidden behind exponential backoff.
+    """
+    if isinstance(exc, _NON_RETRYABLE_LLM_ERRORS):
+        return False
     return isinstance(exc, Exception)
 
 

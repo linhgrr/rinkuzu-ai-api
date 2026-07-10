@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import httpx
+import litellm
 import pytest
 
 from api.shared import retry as retry_module
@@ -21,10 +23,40 @@ from api.shared.retry import (
 )
 
 
-def test_is_retryable_llm_error_broad():
+def test_is_retryable_llm_error_retries_transient_or_unknown_exceptions():
     assert is_retryable_llm_error(ValueError("bad")) is True
     assert is_retryable_llm_error(RuntimeError("x")) is True
+    assert (
+        is_retryable_llm_error(
+            litellm.RateLimitError("limited", llm_provider="openai", model="gpt")
+        )
+        is True
+    )
     assert is_retryable_llm_error(KeyboardInterrupt()) is False  # not an Exception
+
+
+def test_is_retryable_llm_error_excludes_non_retryable_litellm_errors():
+    response = httpx.Response(400, request=httpx.Request("POST", "https://llm.test"))
+    non_retryable = [
+        litellm.AuthenticationError("bad key", llm_provider="openai", model="gpt"),
+        litellm.BadRequestError("bad request", model="gpt", llm_provider="openai"),
+        litellm.NotFoundError("missing model", model="gpt", llm_provider="openai"),
+        litellm.PermissionDeniedError(
+            "forbidden",
+            llm_provider="openai",
+            model="gpt",
+            response=response,
+        ),
+        litellm.ContentPolicyViolationError("blocked", model="gpt", llm_provider="openai"),
+        litellm.UnprocessableEntityError(
+            "unprocessable",
+            model="gpt",
+            llm_provider="openai",
+            response=response,
+        ),
+    ]
+
+    assert all(is_retryable_llm_error(exc) is False for exc in non_retryable)
 
 
 def test_resolve_llm_retry_policy_reads_settings(monkeypatch):

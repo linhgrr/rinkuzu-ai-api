@@ -29,6 +29,7 @@ async def generate_tutor_text(
     model: str,
     timeout_sec: float,
     action: str,
+    max_tokens: int | None = None,
 ) -> str:
     """Non-stream tutor reply. The client retries transient failures."""
     return await ainvoke_text_completion(
@@ -36,6 +37,7 @@ async def generate_tutor_text(
         model=model,
         temperature=0.7,
         timeout=timeout_sec,
+        max_tokens=max_tokens,
         action=action,
     )
 
@@ -46,44 +48,50 @@ async def stream_tutor_sse(
     model: str,
     timeout_sec: float,
     action: str,
+    max_tokens: int | None = None,
     on_complete: Callable[[str], Awaitable[None]] | None = None,
 ) -> AsyncIterator[bytes]:
     """SSE stream shared by both tutors.
 
-    The client retries the open→first-token phase; if it still yields nothing it
-    raises before any byte is sent, and that propagates to the caller (surfaced
-    as an unavailable error). Once the first token is sent the stream is
-    committed: a later failure becomes a ``response.failed`` event.
+    The client retries the open→first-token phase inside the returned iterator
+    so ``EventSourceResponse`` can cancel the upstream LLM call if the browser
+    disconnects before the first token. Stream failures are surfaced as a
+    ``response.failed`` event because the HTTP SSE response is already open.
     ``on_complete`` persists the full reply on a clean finish.
     """
-    stream = astream_text_completion(
-        messages=input_messages,
-        model=model,
-        temperature=0.7,
-        timeout=timeout_sec,
-        action=action,
-    )
-    stream_iter = stream.__aiter__()
-
-    # First token: let a pre-first-token failure propagate (no byte sent yet).
-    first_delta = await stream_iter.__anext__()
 
     async def iterator() -> AsyncIterator[bytes]:
-        full_response = first_delta
-        yield serialize_responses_sse_event(
-            {"type": "response.output_text.delta", "delta": first_delta}
+        full_response = ""
+        stream = astream_text_completion(
+            messages=input_messages,
+            model=model,
+            temperature=0.7,
+            timeout=timeout_sec,
+            max_tokens=max_tokens,
+            action=action,
         )
 
         try:
-            async for delta in stream_iter:
+            async for delta in stream:
                 if delta:
                     full_response += delta
                     yield serialize_responses_sse_event(
                         {"type": "response.output_text.delta", "delta": delta}
                     )
+        except GeneratorExit:
+            raise
         except Exception as exc:
             yield serialize_responses_sse_event(
                 {"type": "response.failed", "response": {"error": {"message": str(exc)}}}
+            )
+            return
+
+        if not full_response.strip():
+            yield serialize_responses_sse_event(
+                {
+                    "type": "response.failed",
+                    "response": {"error": {"message": "LLM returned an empty completion"}},
+                }
             )
             return
 
