@@ -175,6 +175,35 @@ class PipelineJobActiveProjection(BaseModel):
     completed_at: datetime | None = None
 
 
+class PipelineJobStatusProjection(BaseModel):
+    job_id: str
+    filename: str
+    subject_id: str
+    status: PipelineStatus
+    current_step: str = ""
+    progress: float = 0.0
+    total_chunks: int = 0
+    page_batch_size: int = 10
+    batch_count: int = 0
+    failed_batch_count: int = 0
+    partial_success: bool = False
+    concepts_extracted: int = 0
+    concepts_after_merge: int = 0
+    relations_verified: int = 0
+    graph_stats: dict[str, Any] = Field(default_factory=dict)
+    quality_report: dict[str, Any] | None = None
+    partial_graph: dict[str, Any] | None = None
+    error_message: str | None = None
+    error_code: str | None = None
+    user_message: str | None = None
+    retryable: bool = False
+    retry_count: int = 0
+    eta_seconds: float | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    heartbeat_at: datetime = Field(default_factory=utc_now)
+
+
 class SubjectProgressDocument(Document):
     job_id: str
     user_id: str
@@ -186,11 +215,22 @@ class SubjectProgressDocument(Document):
     step: int = 0
     max_steps: int = 9999
     avg_mastery: float = 0.0
+    unlocked_concepts: int = 0
+    locked_concepts: int = 0
+    mastered_concepts: int = 0
+    progress_percent: int = 0
     concept_names: dict[str, str] = Field(default_factory=dict)
     concept_indices: dict[str, int] = Field(default_factory=dict)
     concept_mastery: dict[str, ConceptMasteryEntry] = Field(default_factory=dict)
     bloom_mastery: dict[str, BloomMasteryEntry] = Field(default_factory=dict)
     exercise_history: list[ExerciseEntry] = Field(default_factory=list)
+    current_exercise: ExerciseEntry | None = None
+    pending_concept_idx: int | None = None
+    pending_bloom_level: int | None = None
+    pending_action: int | None = None
+    recommendation_reason: dict[str, Any] | None = None
+    submission_receipts: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    version: int = 0
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -215,6 +255,10 @@ class SubjectProgressSummaryProjection(BaseModel):
     total_answered: int = 0
     accuracy: float = 0.0
     avg_mastery: float = 0.0
+    unlocked_concepts: int = 0
+    locked_concepts: int = 0
+    mastered_concepts: int = 0
+    progress_percent: int = 0
     step: int = 0
     max_steps: int = 9999
     created_at: datetime
@@ -294,6 +338,42 @@ class DocumentOCRRecordDocument(Document):
         name = "al_document_ocr_records"
         indexes: ClassVar[list[IndexModel]] = [
             IndexModel([("file_hash", ASCENDING)], unique=True),
+            IndexModel([("updated_at", DESCENDING)]),
+        ]
+
+
+class OcrProviderKeyDocument(Document):
+    key_id: str
+    provider: str = "landingai"
+    label: str
+    encrypted_key: str
+    key_fingerprint: str
+    masked_key: str
+    enabled: bool = True
+    health_status: Literal["untested", "healthy", "failed", "disabled"] = "untested"
+    priority: int = 100
+    success_count: int = 0
+    failure_count: int = 0
+    last_used_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_error_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_message: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    created_by: str | None = None
+    updated_by: str | None = None
+
+    @before_event([Insert, Replace, SaveChanges])
+    def touch_updated_at(self) -> None:
+        self.updated_at = utc_now()
+
+    class Settings:
+        name = "ocr_provider_keys"
+        indexes: ClassVar[list[IndexModel]] = [
+            IndexModel([("key_id", ASCENDING)], unique=True),
+            IndexModel([("provider", ASCENDING), ("key_fingerprint", ASCENDING)], unique=True),
+            IndexModel([("provider", ASCENDING), ("enabled", ASCENDING), ("priority", ASCENDING)]),
             IndexModel([("updated_at", DESCENDING)]),
         ]
 

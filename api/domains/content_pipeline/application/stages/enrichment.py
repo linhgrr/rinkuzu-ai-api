@@ -11,7 +11,7 @@ from loguru import logger
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 from api.shared.persistence.common import normalize_for_bson
 
-from .execution import resolve_timeout_policy, run_blocking_stage, safe_run
+from .execution import resolve_timeout_policy, safe_run
 from .model_worker import encode_texts_with_sentence_transformer_worker
 
 PersistJobStateFn = Callable[[PipelineJob, PipelineStatus, str, float], Awaitable[None]]
@@ -75,7 +75,7 @@ async def generate_concept_theories(
     job: PipelineJob,
     *,
     concepts_data: dict[str, dict[str, Any]],
-    generate_theory: Callable[[str, str], Any],
+    generate_theory: Callable[[str, str], Awaitable[Any]],
     persist_job_state: PersistJobStateFn,
     concurrency: int = 5,
 ) -> None:
@@ -92,12 +92,7 @@ async def generate_concept_theories(
 
         async def generate_one(concept_id: str, name: str, definition: str) -> Any:
             async with semaphore:
-                theory: Any = await run_blocking_stage(
-                    generate_theory,
-                    name,
-                    definition,
-                    stage_name="concept_theory_generation",
-                )
+                theory: Any = await generate_theory(name, definition)
                 return concept_id, theory
 
         tasks = [

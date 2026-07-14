@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 from pydantic import ValidationError
@@ -35,7 +36,7 @@ def test_extracted_quiz_question_rejects_invalid_multiple_indexes():
 def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypatch):
     captured: list[dict[str, object]] = []
 
-    def fake_invoke_structured_completion(**kwargs):
+    async def fake_ainvoke_structured_completion(**kwargs):
         captured.append(kwargs)
         return ExtractedQuizQuestionBatch(
             questions=[
@@ -61,7 +62,7 @@ def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypat
         ),
     )
     monkeypatch.setattr(
-        extraction, "invoke_structured_completion", fake_invoke_structured_completion
+        extraction, "ainvoke_structured_completion", fake_ainvoke_structured_completion
     )
     monkeypatch.setattr(
         extraction,
@@ -69,12 +70,14 @@ def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypat
         lambda: SimpleNamespace(quiz_extract_max_chars=200_000),
     )
 
-    result = extraction._extract_questions_from_pdf_bytes_sync(
-        b"%PDF-demo",
-        "sample.pdf",
-        "extract quiz",
-        "quiz-model",
-        5.0,
+    result = asyncio.run(
+        extraction._extract_questions_from_pdf_bytes(
+            b"%PDF-demo",
+            "sample.pdf",
+            "extract quiz",
+            "quiz-model",
+            5.0,
+        )
     )
 
     assert result[0]["correctIndex"] == 2
@@ -94,13 +97,13 @@ def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypat
 def test_extract_questions_clamps_oversized_document_text(monkeypatch):
     captured: list[dict[str, object]] = []
 
-    def fake_invoke_structured_completion(**kwargs):
+    async def fake_ainvoke_structured_completion(**kwargs):
         captured.append(kwargs)
         return ExtractedQuizQuestionBatch(questions=[])
 
     long_text = "x" * 500
     monkeypatch.setattr(
-        extraction, "invoke_structured_completion", fake_invoke_structured_completion
+        extraction, "ainvoke_structured_completion", fake_ainvoke_structured_completion
     )
     monkeypatch.setattr(
         extraction,
@@ -108,16 +111,18 @@ def test_extract_questions_clamps_oversized_document_text(monkeypatch):
         lambda: SimpleNamespace(quiz_extract_max_chars=100),
     )
 
-    extraction._extract_questions_from_document_text_sync(
-        ExtractedDocumentText(
-            text=long_text,
-            pages=[DocumentPageText(page_number=1, text=long_text)],
-            metadata={"file_name": "big.pdf", "page_count": 1},
-        ),
-        "big.pdf",
-        "extract quiz",
-        "quiz-model",
-        5.0,
+    asyncio.run(
+        extraction._extract_questions_from_document_text(
+            ExtractedDocumentText(
+                text=long_text,
+                pages=[DocumentPageText(page_number=1, text=long_text)],
+                metadata={"file_name": "big.pdf", "page_count": 1},
+            ),
+            "big.pdf",
+            "extract quiz",
+            "quiz-model",
+            5.0,
+        )
     )
 
     assert len(captured) == 1

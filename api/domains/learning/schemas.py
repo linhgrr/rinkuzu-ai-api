@@ -127,6 +127,8 @@ class SubmitAnswerPayload(BaseModel):
 
 
 class SubmitAnswerRequest(BaseModel):
+    exercise_id: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1, max_length=128)
     answer: SubmitAnswerPayload
 
 
@@ -149,6 +151,13 @@ class SubmitAnswerResponse(BaseModel):
     stats: SubmitAnswerStats
 
 
+class LearningStepResponse(BaseModel):
+    concept: NextConceptResponse
+    theory: TheoryResponse | None = None
+    exercise: ExerciseResponse
+    cache_status: Literal["served", "created"]
+
+
 class TutorChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(..., min_length=1, max_length=4000)
@@ -158,7 +167,14 @@ class TutorChatRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     user_question: str = Field(..., alias="userQuestion", min_length=1, max_length=1000)
-    chat_history: list[TutorChatMessage] = Field(default_factory=list, alias="chatHistory")
+    chat_history: list[TutorChatMessage] = Field(
+        default_factory=list,
+        alias="chatHistory",
+        description=(
+            "Deprecated for adaptive tutor chat. Adaptive chat history is owned by "
+            "the server session and this field is ignored."
+        ),
+    )
     stream: bool = False
 
 

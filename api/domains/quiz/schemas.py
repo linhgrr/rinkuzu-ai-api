@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 - Pydantic resolves this at runtime for OpenAPI.
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class QuizDraftQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+class QuizQuestionShape(BaseModel):
+    """Single/multiple-choice question with answer-shape validation.
+
+    Shared by the draft API contract (QuizDraftQuestion) and the LLM
+    extraction schema (ExtractedQuizQuestion); each subclass sets its own
+    model_config. The DB model (persistence.QuizQuestion) intentionally does
+    NOT inherit this — it must model_validate legacy records leniently.
+    """
 
     question: str = Field(min_length=1)
     type: Literal["single", "multiple"]
@@ -18,7 +24,7 @@ class QuizDraftQuestion(BaseModel):
     correct_indexes: list[int] = Field(default_factory=list, alias="correctIndexes")
 
     @model_validator(mode="after")
-    def validate_answer_shape(self) -> QuizDraftQuestion:
+    def validate_answer_shape(self) -> QuizQuestionShape:
         option_count = len(self.options)
         if self.type == "single":
             if self.correct_index is None:
@@ -38,6 +44,22 @@ class QuizDraftQuestion(BaseModel):
         if any(index < 0 or index >= option_count for index in self.correct_indexes):
             raise ValueError("correctIndexes contains an out-of-range value")
         return self
+
+    def to_public_dict(self) -> dict[str, str | int | list[str] | list[int]]:
+        payload: dict[str, str | int | list[str] | list[int]] = {
+            "question": self.question,
+            "type": self.type,
+            "options": self.options,
+        }
+        if self.type == "single":
+            payload["correctIndex"] = cast("int", self.correct_index)
+        else:
+            payload["correctIndexes"] = self.correct_indexes
+        return payload
+
+
+class QuizDraftQuestion(QuizQuestionShape):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class QuizDraftCreateRequest(BaseModel):
@@ -125,8 +147,22 @@ class QuizTutorRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=12000)
     options: list[str] = Field(..., min_length=2, max_length=8)
     user_question: str | None = Field(default=None, alias="userQuestion", max_length=1000)
-    question_image: str | None = Field(default=None, alias="questionImage")
-    option_images: list[str | None] = Field(default_factory=list, alias="optionImages")
+    question_image: str | None = Field(
+        default=None,
+        alias="questionImage",
+        description=(
+            "Optional image URL/data URL. Accepted only when the configured tutor "
+            "LLM model supports vision."
+        ),
+    )
+    option_images: list[str | None] = Field(
+        default_factory=list,
+        alias="optionImages",
+        description=(
+            "Optional option image URLs/data URLs. Accepted only when the configured "
+            "tutor LLM model supports vision."
+        ),
+    )
     chat_history: list[QuizTutorChatMessage] = Field(default_factory=list, alias="chatHistory")
     stream: bool = False
 

@@ -185,6 +185,10 @@ class Settings(BaseSettings):
         validation_alias="OCR_MODEL",
     )
     ocr_api_key: str | None = Field(default=None, validation_alias="OCR_API_KEY")
+    ocr_key_encryption_secret: str | None = Field(
+        default=None,
+        validation_alias="OCR_KEY_ENCRYPTION_SECRET",
+    )
     ocr_timeout_sec: float = Field(default=120, validation_alias="OCR_TIMEOUT_SEC")
 
     # ── Quiz extraction ────────────────────────────────────

@@ -18,8 +18,8 @@ from api.config import get_settings
 from api.shared import mongo_store
 from api.shared.persistence.documents import LlmUsageDocument
 
-# Set by get_current_user for the duration of a request; None outside a request
-# (e.g. background pipeline jobs) — usage is still recorded with user_id=None.
+# Set by get_current_user for request-bound calls. Background work that still
+# belongs to a session should set this explicitly from the persisted owner.
 current_user_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "current_user_id", default=None
 )
@@ -36,6 +36,7 @@ class LlmAction:
     ADAPTIVE_THEORY = "adaptive_theory"
     ADAPTIVE_SHORT_ANSWER_EVAL = "adaptive_short_answer_eval"
     ADAPTIVE_TUTOR_CHAT = "adaptive_tutor_chat"
+    TUTOR_CHAT_SUMMARY = "tutor_chat_summary"
     QUIZ_EXTRACTION = "quiz_extraction"
     QUIZ_TUTOR = "quiz_tutor"
     PIPELINE_CONCEPT_EXTRACTION = "pipeline_concept_extraction"

@@ -97,7 +97,7 @@ def test_generate_concept_theories_fills_missing_theories_only():
         assert job_arg is job
         calls.append((status, step, progress))
 
-    def generate_theory(name: str, definition: str):
+    async def generate_theory(name: str, definition: str):
         return {"body": f"{name}|{definition}"}
 
     asyncio.run(
@@ -132,7 +132,7 @@ def test_generate_concept_theories_normalizes_pydantic_theory_payloads():
     async def persist_job_state(*_args, **_kwargs):
         return None
 
-    def generate_theory(name: str, definition: str):
+    async def generate_theory(name: str, definition: str):
         return _TheoryPayload(content=f"{name}:{definition}", examples=["Ví dụ A"])
 
     asyncio.run(

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from .constants import (
@@ -25,11 +24,12 @@ def build_grading_messages(
     rubric: Sequence[str],
     sample_answer: str,
     student_answer: str,
-) -> list[BaseMessage]:
+) -> list[dict[str, Any]]:
     rubric_lines = "\n".join(f"- {item}" for item in rubric)
     return [
-        SystemMessage(
-            content=(
+        {
+            "role": "system",
+            "content": (
                 "Bạn là giáo viên chấm câu trả lời ngắn theo rubric.\n"
                 "- Chấm khách quan theo rubric được cung cấp.\n"
                 "- Không phạt vì khác wording nếu học sinh đúng bản chất.\n"
@@ -37,17 +37,18 @@ def build_grading_messages(
                 "- Feedback dùng giọng nhẹ nhàng, hướng dẫn. KHÔNG phê phán.\n\n"
                 f"{SCORE_ANCHORS}\n\n"
                 f"{MATH_FORMAT_RULES}"
-            )
-        ),
-        HumanMessage(
-            content=(
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
                 f"<question>\n{question}\n</question>\n\n"
                 f"<rubric>\n{rubric_lines}\n</rubric>\n\n"
                 f"<sample_answer>\n{sample_answer}\n</sample_answer>\n\n"
                 f"<student_answer>\n{student_answer}\n</student_answer>\n\n"
                 "Hãy trả về đánh giá theo schema."
-            )
-        ),
+            ),
+        },
     ]
 
 
@@ -55,7 +56,7 @@ def build_theory_messages(
     concept_name: str,
     concept_definition: str,
     bloom_level: int = 2,
-) -> list[BaseMessage]:
+) -> list[dict[str, Any]]:
     system_parts = [
         "Bạn là chuyên gia giáo dục chuyên viết phần lý thuyết ngắn gọn, rõ ràng.\n"
         "- Nội dung phải dễ hiểu, đúng bản chất.\n"
@@ -65,15 +66,16 @@ def build_theory_messages(
     ]
 
     return [
-        SystemMessage(content="\n\n".join(system_parts)),
-        HumanMessage(
-            content=(
+        {"role": "system", "content": "\n\n".join(system_parts)},
+        {
+            "role": "user",
+            "content": (
                 f"<concept>\n"
                 f"Tên chủ đề: {concept_name}\n"
                 f"Định nghĩa / nội dung chính: {concept_definition}\n"
                 f"Mức Bloom tham chiếu: {bloom_level}\n"
                 f"</concept>\n\n"
                 "Hãy tạo `content` tóm tắt lý thuyết và `examples` gồm các ví dụ cụ thể có lời giải ngắn."
-            )
-        ),
+            ),
+        },
     ]

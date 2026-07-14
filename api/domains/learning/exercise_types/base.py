@@ -8,8 +8,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from pydantic import BaseModel
 
     from api.domains.learning.session import ExerciseRecord
@@ -21,9 +19,6 @@ class ExerciseTypeHandler(ABC):
     exercise_type: ClassVar[ExerciseType]
     output_model: ClassVar[type[ExerciseBaseOutput]]
     payload_model: ClassVar[type[BaseModel]]
-
-    def __init__(self, *, short_answer_grader: Callable[..., dict] | None = None) -> None:
-        self._grader = short_answer_grader
 
     # 1. generation config (replaces PROMPT_REGISTRY entry)
     @abstractmethod
@@ -41,7 +36,17 @@ class ExerciseTypeHandler(ABC):
     @abstractmethod
     def to_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]: ...
 
-    # 4. grading (short_answer uses self._grader; others ignore it)
+    def _base_response_dict(self, exercise: ExerciseRecord) -> dict[str, Any]:
+        """Keys every to_response_dict shares; subclasses merge their own on top."""
+        return {
+            "exercise_type": self.exercise_type.value,
+            "question": exercise.question,
+            "explanation_correct": exercise.explanation_correct,
+            "explanation_incorrect": exercise.explanation_incorrect,
+        }
+
+    # 4. grading — CPU-only comparison. Short-answer is LLM-graded async in the
+    #    service layer (sans-I/O: I/O stays out of the sync handler).
     @abstractmethod
     def evaluate(self, exercise: ExerciseRecord, answer: dict[str, Any]) -> tuple[bool, str]: ...
 

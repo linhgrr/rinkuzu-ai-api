@@ -70,11 +70,8 @@ async def build_knowledge_graph(
         if getattr(concept, "concept_id", None)
     }
     builder = knowledge_graph_builder_factory(job.subject_id)
-    add_nodes = (
-        builder.add_concept_nodes if hasattr(builder, "add_concept_nodes") else builder.add_concepts
-    )
     await run_blocking_stage(
-        add_nodes,
+        builder.add_concept_nodes,
         concepts,
         stage_name="graph_building",
     )

@@ -23,6 +23,7 @@ from .documents import (
     PipelineJobDocument,
     PipelineJobListProjection,
     PipelineJobLookupProjection,
+    PipelineJobStatusProjection,
 )
 from .subject_progress import delete_subject_progress_for_user
 
@@ -115,6 +116,29 @@ def _document_to_runtime_payload(doc: PipelineJobDocument) -> dict[str, Any]:
     }
 
 
+def _status_row_to_runtime_payload(
+    row: PipelineJobStatusProjection | dict[str, Any],
+) -> dict[str, Any]:
+    payload = (
+        row.model_dump(mode="python") if isinstance(row, PipelineJobStatusProjection) else dict(row)
+    )
+    payload.pop("_id", None)
+
+    status = payload.get("status")
+    if isinstance(status, PipelineStatus):
+        payload["status"] = status.value
+
+    for field in ("created_at", "updated_at", "heartbeat_at"):
+        value = payload.get(field)
+        if value is not None:
+            payload[field] = utc_to_epoch(value)
+
+    for field in ("graph_stats", "quality_report", "debug_trace", "result", "partial_graph"):
+        if field in payload:
+            payload[field] = normalize_for_bson(payload[field])
+    return payload
+
+
 async def save_pipeline_job(job: PipelineJob) -> bool:
     try:
         payload = pipeline_job_to_document(job)
@@ -165,6 +189,46 @@ async def load_pipeline_job_for_user(job_id: str, user_id: str) -> dict[str, Any
         )
         return None
     return None if doc is None else _document_to_runtime_payload(doc)
+
+
+async def load_pipeline_job_status_for_user(
+    job_id: str,
+    user_id: str,
+    *,
+    include_debug: bool = False,
+) -> dict[str, Any] | None:
+    try:
+        if include_debug:
+            rows = await PipelineJobDocument.aggregate(
+                [
+                    {"$match": {"job_id": job_id, "user_id": user_id}},
+                    {
+                        "$set": {
+                            "result.concept_embedding_count": {
+                                "$size": {"$ifNull": ["$result.concept_embeddings", []]}
+                            }
+                        }
+                    },
+                    {"$unset": "result.concept_embeddings"},
+                    {"$limit": 1},
+                ]
+            ).to_list()
+            return None if not rows else _status_row_to_runtime_payload(rows[0])
+
+        row = await PipelineJobDocument.find_one(
+            PipelineJobDocument.job_id == job_id,
+            PipelineJobDocument.user_id == user_id,
+            projection_model=PipelineJobStatusProjection,
+        )
+    except Exception:
+        logger.exception(
+            "[PipelineStore] load_status_for_user failed job_id={} user_id={} include_debug={}",
+            job_id,
+            user_id,
+            include_debug,
+        )
+        return None
+    return None if row is None else _status_row_to_runtime_payload(row)
 
 
 async def load_many_pipeline_jobs_for_user(

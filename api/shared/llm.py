@@ -4,14 +4,12 @@ llm.py — Shared LiteLLM-backed abstractions and helpers for the API codebase.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 import json
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
-from json_repair import loads as repair_json_loads
-from litellm import acompletion, completion, get_supported_openai_params
-from loguru import logger
+import instructor
+from litellm import acompletion, supports_vision
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
@@ -19,10 +17,15 @@ if TYPE_CHECKING:
 
 from api.config import get_settings
 from api.shared.llm_usage import extract_usage, record_llm_usage
+from api.shared.retry import (
+    async_retry,
+    build_async_retrying,
+    is_retryable_llm_error,
+    resolve_llm_retry_policy,
+)
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
-_JSON_OBJECT_RESPONSE_FORMAT: dict[str, str] = {"type": "json_object"}
 _DEEPSEEK_PROVIDER = "deepseek"
 
 
@@ -45,7 +48,7 @@ class LLMProviderConfig:
 class LLMClient(Protocol):
     """Unified project-wide LLM capability surface."""
 
-    def generate_text(
+    async def agenerate_text(
         self,
         *,
         messages: Sequence[object],
@@ -65,18 +68,6 @@ class LLMClient(Protocol):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> AsyncIterator[str]:
-        raise NotImplementedError
-
-    def generate_structured(
-        self,
-        *,
-        messages: Sequence[object],
-        schema: type[StructuredModelT],
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        thinking_enabled: bool = False,
-        action: str | None = None,
-    ) -> StructuredModelT:
         raise NotImplementedError
 
     async def agenerate_structured(
@@ -168,14 +159,51 @@ def build_llm_provider_config(
     )
 
 
-def _default_headers() -> dict[str, str]:
-    return {"ngrok-skip-browser-warning": "true"}
+def _image_url_payload(url: str) -> dict[str, Any]:
+    return {"type": "image_url", "image_url": {"url": url.strip()}}
 
 
-def _normalize_message_content(content: object) -> str:  # noqa: C901
+def _normalize_message_content(content: object, *, preserve_multimodal: bool = False) -> object:  # noqa: C901
     if isinstance(content, str):
         return content
     if isinstance(content, list):
+        if preserve_multimodal:
+            blocks: list[dict[str, Any]] = []
+            for item in content:
+                if isinstance(item, str):
+                    if item.strip():
+                        blocks.append({"type": "text", "text": item.strip()})
+                    continue
+                if not isinstance(item, dict):
+                    text = str(item).strip()
+                    if text:
+                        blocks.append({"type": "text", "text": text})
+                    continue
+
+                item_type = str(item.get("type", "")).lower()
+                if item_type in {"text", "input_text"}:
+                    raw_text = item.get("text")
+                    if isinstance(raw_text, str) and raw_text.strip():
+                        blocks.append({"type": "text", "text": raw_text.strip()})
+                    continue
+
+                if item_type in {"image", "image_url", "input_image"}:
+                    image_value: object = item.get("url") or item.get("file_url")
+                    if not image_value:
+                        nested_image = item.get("image_url")
+                        if isinstance(nested_image, dict):
+                            image_value = nested_image.get("url")
+                        else:
+                            image_value = nested_image
+                    if isinstance(image_value, str) and image_value.strip():
+                        blocks.append(_image_url_payload(image_value))
+                    continue
+
+                raw_text = item.get("text")
+                if isinstance(raw_text, str) and raw_text.strip():
+                    blocks.append({"type": "text", "text": raw_text.strip()})
+            return blocks
+
         parts: list[str] = []
         for item in content:
             if isinstance(item, str):
@@ -186,9 +214,9 @@ def _normalize_message_content(content: object) -> str:  # noqa: C901
                 continue
             item_type = str(item.get("type", "")).lower()
             if item_type in {"text", "input_text"}:
-                text = item.get("text")
-                if isinstance(text, str) and text.strip():
-                    parts.append(text.strip())
+                raw_text = item.get("text")
+                if isinstance(raw_text, str) and raw_text.strip():
+                    parts.append(raw_text.strip())
                 continue
             if item_type in {"image", "image_url", "input_image"}:
                 url = item.get("url") or item.get("image_url") or item.get("file_url")
@@ -206,73 +234,61 @@ def _normalize_message_content(content: object) -> str:  # noqa: C901
                         + filename.strip()
                     )
                 continue
-            text = item.get("text")
-            if isinstance(text, str) and text.strip():
-                parts.append(text.strip())
+            raw_text = item.get("text")
+            if isinstance(raw_text, str) and raw_text.strip():
+                parts.append(raw_text.strip())
         return "\n\n".join(part for part in parts if part.strip()).strip()
     return str(content).strip()
 
 
-def _resolve_message_role(message: object) -> str:
-    if isinstance(message, dict):
-        role = message.get("role")
-        return str(role) if role else "user"
-
-    message_type = getattr(message, "type", None)
-    if message_type == "system":
-        return "system"
-    if message_type == "human":
-        return "user"
-    if message_type == "ai":
-        return "assistant"
-    if message_type == "tool":
-        return "tool"
-    return "user"
-
-
-def normalize_chat_messages(messages: Sequence[object]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
+def _messages_contain_images(messages: Sequence[object]) -> bool:
     for message in messages:
-        if isinstance(message, dict):
-            content = _normalize_message_content(message.get("content", ""))
-            role = str(message.get("role") or "user")
-            payload: dict[str, Any] = {"role": role, "content": content}
-            if role == "tool" and message.get("tool_call_id"):
-                payload["tool_call_id"] = message["tool_call_id"]
-            normalized.append(payload)
+        if not isinstance(message, dict):
             continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if isinstance(item, dict) and str(item.get("type", "")).lower() in {
+                "image",
+                "image_url",
+                "input_image",
+            }:
+                return True
+    return False
 
-        normalized.append(
-            {
-                "role": _resolve_message_role(message),
-                "content": _normalize_message_content(getattr(message, "content", "")),
-            }
-        )
-    return normalized
 
-
-def _augment_messages_for_schema(
+def normalize_chat_messages(
     messages: Sequence[object],
     *,
-    schema: type[StructuredModelT],
+    model: str | None = None,
+    custom_llm_provider: str | None = None,
 ) -> list[dict[str, Any]]:
-    normalized = normalize_chat_messages(messages)
-    schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
-    guidance = (
-        "Return valid json only. Không dùng markdown code fence. "
-        "JSON phải khớp chính xác schema sau:\n"
-        f"{schema_json}\n"
-        "Nếu thiếu dữ liệu, vẫn phải trả về JSON hợp lệ và dùng giá trị rỗng/null phù hợp schema."
+    """Normalize chat messages to litellm's ``{"role", "content"}`` dict shape.
+
+    Text-only providers receive flattened text. Vision-capable models keep
+    OpenAI-compatible ``image_url`` content blocks so LiteLLM can route them
+    natively.
+    """
+    normalized: list[dict[str, Any]] = []
+    preserve_multimodal = bool(
+        model
+        and _messages_contain_images(messages)
+        and supports_vision(model=model, custom_llm_provider=custom_llm_provider)
     )
-
-    if normalized and normalized[0]["role"] == "system":
-        normalized[0] = {
-            **normalized[0],
-            "content": f"{normalized[0]['content'].rstrip()}\n\n{guidance}",
-        }
-        return normalized
-
-    return [{"role": "system", "content": guidance}, *normalized]
+    for message in messages:
+        if not isinstance(message, dict):
+            raise TypeError(f"Expected a chat-message dict, got {type(message).__name__}.")
+        content = _normalize_message_content(
+            message.get("content", ""),
+            preserve_multimodal=preserve_multimodal,
+        )
+        role = str(message.get("role") or "user")
+        payload: dict[str, Any] = {"role": role, "content": content}
+        if role == "tool" and message.get("tool_call_id"):
+            payload["tool_call_id"] = message["tool_call_id"]
+        normalized.append(payload)
+    return normalized
 
 
 def _extract_choice_content(choice: object) -> object:
@@ -340,12 +356,15 @@ def _litellm_kwargs(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": config.model,
-        "messages": normalize_chat_messages(messages),
+        "messages": normalize_chat_messages(
+            messages,
+            model=config.model,
+            custom_llm_provider=config.custom_llm_provider,
+        ),
         "api_key": config.api_key,
         "base_url": config.base_url,
         "timeout": config.timeout_sec,
         "num_retries": config.max_retries,
-        "extra_headers": _default_headers(),
         "temperature": temperature,
         "stream": stream,
         **({"stream_options": {"include_usage": True}} if stream else {}),
@@ -360,58 +379,33 @@ def _litellm_kwargs(
     return payload
 
 
-def _supports_openai_param(config: LLMProviderConfig, param: str) -> bool:
-    try:
-        supported = get_supported_openai_params(
-            model=config.model,
-            custom_llm_provider=config.custom_llm_provider,
-        )
-    except Exception as exc:
-        logger.debug(
-            "[LLM] could not resolve supported params for model={} provider={}: {}",
-            config.model,
-            config.custom_llm_provider or "(auto)",
-            exc,
-        )
-        return False
-    return param in (supported or [])
+def _structured_litellm_kwargs(
+    *,
+    config: LLMProviderConfig,
+    temperature: float,
+    max_tokens: int | None,
+    thinking_enabled: bool,
+) -> dict[str, Any]:
+    """litellm kwargs for instructor's structured path.
 
-
-def _structured_response_format(config: LLMProviderConfig) -> dict[str, Any] | None:
-    if not _supports_openai_param(config, "response_format"):
-        return None
-    return _JSON_OBJECT_RESPONSE_FORMAT
-
-
-# Hold strong references to fire-and-forget tasks so they are not garbage
-# collected mid-flight (see RUF006); each task removes itself when done.
-_usage_tasks: set[asyncio.Task[None]] = set()
-
-
-def _record_usage_sync(config: LLMProviderConfig, response: object, action: str | None) -> None:
-    """Fire-and-forget usage recording from a sync context. Best-effort."""
-    usage = extract_usage(response)
-    if not usage:
-        return
-    coro = record_llm_usage(
-        model=config.model,
-        provider=config.custom_llm_provider,
-        usage=usage,
-        action=action,
-    )
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # No running loop (pure sync call) — run to completion best-effort.
-        try:
-            asyncio.run(coro)
-        except Exception as exc:
-            logger.debug("[llm_usage] sync record skipped: {}", exc)
-            coro.close()
-        return
-    task = loop.create_task(coro)
-    _usage_tasks.add(task)
-    task.add_done_callback(_usage_tasks.discard)
+    instructor owns ``messages`` and ``response_model`` (JSON-mode schema
+    injection + validation reask), so this passes only provider/model routing
+    and generation params — no ``response_format``.
+    """
+    payload: dict[str, Any] = {
+        "model": config.model,
+        "api_key": config.api_key,
+        "base_url": config.base_url,
+        "timeout": config.timeout_sec,
+        "num_retries": config.max_retries,
+        "temperature": temperature,
+        **_thinking_kwargs(thinking_enabled),
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    if config.custom_llm_provider:
+        payload["custom_llm_provider"] = config.custom_llm_provider
+    return payload
 
 
 async def _record_usage_async(
@@ -426,12 +420,34 @@ async def _record_usage_async(
 
 
 class LiteLLMClient(LLMClient):
-    """Project-standard LLM client backed by LiteLLM."""
+    """Project-standard LLM client backed by LiteLLM.
 
-    def __init__(self, *, config: LLMProviderConfig) -> None:
+    Retry is a client default: every LLM call retries transient failures
+    (provider 5xx, timeouts, rate limits) using the ``llm_retry_*`` settings.
+    Call sites no longer wrap calls in retry helpers — the client owns it.
+    """
+
+    def __init__(
+        self,
+        *,
+        config: LLMProviderConfig,
+        max_attempts: int | None = None,
+        base_delay_sec: float | None = None,
+    ) -> None:
         self.config = config
+        policy_attempts, policy_delay = resolve_llm_retry_policy()
+        self._max_attempts = policy_attempts if max_attempts is None else max_attempts
+        self._base_delay_sec = policy_delay if base_delay_sec is None else base_delay_sec
 
-    def generate_text(
+    def _async_retry(self, label: str) -> Any:
+        return async_retry(
+            label=label,
+            max_attempts=self._max_attempts,
+            base_delay_sec=self._base_delay_sec,
+            retry_on=is_retryable_llm_error,
+        )
+
+    async def agenerate_text(
         self,
         *,
         messages: Sequence[object],
@@ -440,17 +456,21 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> str:
-        response = completion(
-            **_litellm_kwargs(
-                config=self.config,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
+        @self._async_retry("agenerate_text")
+        async def _call() -> str:
+            response = await acompletion(
+                **_litellm_kwargs(
+                    config=self.config,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_enabled=thinking_enabled,
+                )
             )
-        )
-        _record_usage_sync(self.config, response, action)
-        return extract_llm_text(_extract_response_content(response))
+            await _record_usage_async(self.config, response, action)
+            return extract_llm_text(_extract_response_content(response))
+
+        return cast("str", await _call())
 
     async def stream_text(
         self,
@@ -461,19 +481,36 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> AsyncIterator[str]:
-        stream = await acompletion(
-            **_litellm_kwargs(
-                config=self.config,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
-                stream=True,
+        """Stream tokens, retrying only the open→first-token phase.
+
+        A transient failure (or an empty completion) before the first token is
+        retried transparently. Once the first token is yielded the stream is
+        committed: a later failure surfaces to the caller mid-stream, because a
+        partially-sent reply cannot be restarted.
+        """
+
+        async def _open_to_first_token() -> tuple[str, Any]:
+            stream = await acompletion(
+                **_litellm_kwargs(
+                    config=self.config,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_enabled=thinking_enabled,
+                    stream=True,
+                )
             )
-        )
+            async for chunk in stream:
+                text = self._first_delta_from_chunk(chunk)
+                if text:
+                    return text, stream
+            raise RuntimeError("LLM returned an empty completion")
+
+        first_delta, stream = await self._async_retry("stream_text")(_open_to_first_token)()
+        yield first_delta
+
         final_usage: dict[str, int] | None = None
         async for chunk in stream:
-            # With include_usage the final chunk carries usage (and empty choices).
             chunk_usage = extract_usage(chunk)
             if chunk_usage:
                 final_usage = chunk_usage
@@ -492,31 +529,16 @@ class LiteLLMClient(LLMClient):
                 action=action,
             )
 
-    def generate_structured(
-        self,
-        *,
-        messages: Sequence[object],
-        schema: type[StructuredModelT],
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        thinking_enabled: bool = False,
-        action: str | None = None,
-    ) -> StructuredModelT:
-        response = completion(
-            **_litellm_kwargs(
-                config=self.config,
-                messages=_augment_messages_for_schema(messages, schema=schema),
-                temperature=temperature,
-                max_tokens=max_tokens,
-                thinking_enabled=thinking_enabled,
-                response_format=_structured_response_format(self.config),
-            )
-        )
-        _record_usage_sync(self.config, response, action)
-        content = extract_llm_text(_extract_response_content(response))
-        if not content:
-            raise TypeError("LLM returned empty structured output.")
-        return schema.model_validate(repair_json_loads(content))
+    @staticmethod
+    def _first_delta_from_chunk(chunk: object) -> str:
+        choices = getattr(chunk, "choices", None)
+        if choices is None and isinstance(chunk, dict):
+            choices = chunk.get("choices", [])
+        for choice in choices or []:
+            text = _extract_stream_delta_text(_extract_choice_content(choice))
+            if text:
+                return text
+        return ""
 
     async def agenerate_structured(
         self,
@@ -528,21 +550,31 @@ class LiteLLMClient(LLMClient):
         thinking_enabled: bool = False,
         action: str | None = None,
     ) -> StructuredModelT:
-        response = await acompletion(
-            **_litellm_kwargs(
+        client = cast(
+            "instructor.AsyncInstructor",
+            instructor.from_litellm(acompletion, mode=instructor.Mode.JSON),
+        )
+        result, raw = await client.chat.completions.create_with_completion(
+            response_model=schema,
+            messages=cast("Any", normalize_chat_messages(messages)),
+            max_retries=cast(
+                "Any",
+                build_async_retrying(
+                    label="agenerate_structured",
+                    max_attempts=self._max_attempts,
+                    base_delay_sec=self._base_delay_sec,
+                    retry_on=is_retryable_llm_error,
+                ),
+            ),
+            **_structured_litellm_kwargs(
                 config=self.config,
-                messages=_augment_messages_for_schema(messages, schema=schema),
                 temperature=temperature,
                 max_tokens=max_tokens,
                 thinking_enabled=thinking_enabled,
-                response_format=_structured_response_format(self.config),
-            )
+            ),
         )
-        await _record_usage_async(self.config, response, action)
-        content = extract_llm_text(_extract_response_content(response))
-        if not content:
-            raise TypeError("LLM returned empty structured output.")
-        return schema.model_validate(repair_json_loads(content))
+        await _record_usage_async(self.config, raw, action)
+        return result
 
 
 def get_default_llm_client(
@@ -560,18 +592,18 @@ def get_default_llm_client(
     )
 
 
-def invoke_text_completion(
+async def ainvoke_text_completion(
     *,
     messages: Sequence[object],
     model: str | None = None,
     temperature: float = 0.0,
-    timeout: float | None = None,
+    timeout: float | None = None,  # noqa: ASYNC109
     max_tokens: int | None = None,
     thinking_enabled: bool = False,
     action: str | None = None,
 ) -> str:
     client = get_default_llm_client(model=model, timeout=timeout)
-    return client.generate_text(
+    return await client.agenerate_text(
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -599,28 +631,6 @@ async def astream_text_completion(
         action=action,
     ):
         yield chunk
-
-
-def invoke_structured_completion(
-    *,
-    messages: Sequence[object],
-    schema: type[StructuredModelT],
-    model: str | None = None,
-    temperature: float = 0.0,
-    timeout: float | None = None,
-    max_tokens: int | None = None,
-    thinking_enabled: bool = False,
-    action: str | None = None,
-) -> StructuredModelT:
-    client = get_default_llm_client(model=model, timeout=timeout)
-    return client.generate_structured(
-        messages=messages,
-        schema=schema,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        thinking_enabled=thinking_enabled,
-        action=action,
-    )
 
 
 async def ainvoke_structured_completion(

@@ -90,19 +90,6 @@ class KnowledgeGraphBuilder:
                 out.append(text)
         return out or None
 
-    def add_concepts(self, concepts: list[Concept]) -> Any:
-        """Add multiple concepts to graph."""
-        for concept in concepts:
-            self.add_concept(concept)
-
-    def add_concept(self, concept: Concept) -> Any:
-        """Add a concept node.
-
-        Relation extraction now produces verifier candidates. Edges are added
-        only after verification by the pipeline graph-building stage.
-        """
-        self.add_concept_node(concept)
-
     def add_concept_nodes(self, concepts: list[Concept]) -> Any:
         """Add multiple concept nodes without relation side effects."""
         for concept in concepts:
@@ -196,25 +183,3 @@ class KnowledgeGraphBuilder:
             "density": nx.density(self.graph) if self.graph.number_of_nodes() > 1 else 0.0,
             "has_cycle": has_cycle,
         }
-
-    def get_prerequisites(self, concept_id: str) -> list[str]:
-        """Get prerequisite concepts for a concept (incoming edges with PREREQUISITE)."""
-        if concept_id not in self.graph:
-            return []
-        res: list[str] = []
-        for pred in self.graph.predecessors(concept_id):
-            data = self.graph[pred][concept_id]
-            if self._norm_rel(data.get("relation_type")) == RelationType.PREREQUISITE:
-                res.append(pred)
-        return res
-
-    def get_dependents(self, concept_id: str) -> list[str]:
-        """Get concepts depending on this concept (outgoing PREREQUISITE edges)."""
-        if concept_id not in self.graph:
-            return []
-        res: list[str] = []
-        for succ in self.graph.successors(concept_id):
-            data = self.graph[concept_id][succ]
-            if self._norm_rel(data.get("relation_type")) == RelationType.PREREQUISITE:
-                res.append(succ)
-        return res

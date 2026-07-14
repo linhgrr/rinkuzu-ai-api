@@ -107,3 +107,37 @@ def test_get_current_user_requires_user_id_header(monkeypatch):
         dependencies.get_current_user(x_user_id=None, x_service_token="secret")
 
     assert exc_info.value.status_code == 401
+
+
+def test_get_current_admin_user_accepts_admin_role(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="prod", internal_service_token="secret"),
+    )
+
+    assert (
+        dependencies.get_current_admin_user(
+            x_user_id="admin-1",
+            x_user_role="admin",
+            x_service_token="secret",
+        )
+        == "admin-1"
+    )
+
+
+def test_get_current_admin_user_rejects_non_admin_role(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="prod", internal_service_token="secret"),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        dependencies.get_current_admin_user(
+            x_user_id="user-1",
+            x_user_role="student",
+            x_service_token="secret",
+        )
+
+    assert exc_info.value.status_code == 403

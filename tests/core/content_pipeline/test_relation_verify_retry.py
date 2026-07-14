@@ -63,14 +63,15 @@ class _NoopDocumentExtractor:
 # ---------------------------------------------------------------------------
 
 
-def test_verify_single_relation_retries_and_succeeds(monkeypatch):
-    """Should retry on failure and return the successful result."""
-    # Make retry policy use 4 attempts with zero sleep so the test is fast.
-    import api.shared.retry as retry_module
+def test_verify_single_relation_returns_result_on_success():
+    """A successful parse flows straight through to the verified relation.
 
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (4, 0.0))
-
-    client = _SucceedAfterNClient(fail_times=2)
+    Transient-failure retry now lives in the LLM client (below parse_response);
+    see test_llm_retry_in_client for the attempt-count contract. This fake
+    client sits above the retry point, so it models a single already-resolved
+    call.
+    """
+    client = _SucceedAfterNClient(fail_times=0)
     chain = ExtractionChain(client=client, document_extractor=_NoopDocumentExtractor())
 
     result = asyncio.run(
@@ -78,14 +79,12 @@ def test_verify_single_relation_retries_and_succeeds(monkeypatch):
             concept_a="Định luật Ohm",
             concept_b="Điện trở",
             pair_idx=0,
-            max_retries=4,
         )
     )
 
     assert result.has_relation is True
     assert result.relation_type == "PREREQUISITE"
-    # At minimum 3 calls: 2 failures + 1 success
-    assert client.calls >= 3
+    assert client.calls == 1
 
 
 # ---------------------------------------------------------------------------

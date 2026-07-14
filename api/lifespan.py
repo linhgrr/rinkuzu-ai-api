@@ -84,6 +84,11 @@ def _load_models(app: FastAPI) -> None:
 
 
 def _init_rag_stores(app: FastAPI) -> None:
+    if not get_settings().load_models:
+        app.state.chunk_chroma_store = None
+        logger.info("[RAG] Model loading disabled — skipping ChunkChromaStore")
+        return
+
     app.state.chunk_chroma_store = ChunkChromaStore(embedding_client=EmbeddingClient())
     logger.info("[RAG] ChunkChromaStore initialized")
 

@@ -95,30 +95,41 @@ class SessionState:
     _pending_bloom_level: int | None = None
     _pending_action: int | None = None
     _current_recommendation_reason: dict[str, Any] | None = None
+    submission_receipts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    version: int = 0
+
+    @property
+    def id_to_concept(self) -> dict[int, str]:
+        """Inverse of concept_map (index → concept_id). Rebuilt per access;
+        concept_map is small (per-subject) so caching isn't worth the staleness risk.
+        """
+        return {v: k for k, v in self.concept_map.items()}
 
     @staticmethod
-    def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
+    def _restore_exercise_record(ex: dict[str, Any]) -> ExerciseRecord:
         from pydantic import TypeAdapter
 
         adapter: TypeAdapter[ExercisePayload] = TypeAdapter(ExercisePayload)
+        return ExerciseRecord(
+            exercise_id=ex.get("exercise_id", ""),
+            concept_idx=ex["concept_idx"],
+            concept_name=ex.get("concept_name", ""),
+            bloom_level=ex["bloom_level"],
+            question=ex.get("question", ""),
+            payload=adapter.validate_python(ex["payload"]),
+            explanation=ex.get("explanation", ""),
+            explanation_correct=ex.get("explanation_correct", ""),
+            explanation_incorrect=ex.get("explanation_incorrect", ""),
+            theory=ex.get("theory"),
+            user_answer=ex.get("user_answer"),
+            is_correct=ex.get("is_correct"),
+            timestamp=ex.get("timestamp", 0),
+        )
+
+    @staticmethod
+    def _restore_exercise_records(session: "SessionState", prev_history: list[dict]) -> None:
         for ex in prev_history:
-            session.exercise_history.append(
-                ExerciseRecord(
-                    exercise_id=ex.get("exercise_id", ""),
-                    concept_idx=ex["concept_idx"],
-                    concept_name=ex.get("concept_name", ""),
-                    bloom_level=ex["bloom_level"],
-                    question=ex.get("question", ""),
-                    payload=adapter.validate_python(ex["payload"]),
-                    explanation=ex.get("explanation", ""),
-                    explanation_correct=ex.get("explanation_correct", ""),
-                    explanation_incorrect=ex.get("explanation_incorrect", ""),
-                    theory=ex.get("theory"),
-                    user_answer=ex.get("user_answer"),
-                    is_correct=ex.get("is_correct"),
-                    timestamp=ex.get("timestamp", 0),
-                )
-            )
+            session.exercise_history.append(SessionState._restore_exercise_record(ex))
 
 
 class SessionManager:
@@ -168,14 +179,6 @@ class SessionManager:
         self._subject_session_ids: dict[tuple[str, str], str] = {}
 
     # ── Properties ──────────────────────────────────────────
-
-    @property
-    def concept_map(self) -> Any:
-        return self._concept_map
-
-    @property
-    def concept_names(self) -> Any:
-        return self._concept_names
 
     @property
     def n_concepts(self) -> Any:
@@ -508,6 +511,20 @@ class SessionManager:
             created_at=(history_source_doc or {}).get("created_at", time.time()),
             status=(history_source_doc or {}).get("status", "active"),
             concept_theories=theories,
+            current_exercise=(
+                SessionState._restore_exercise_record(current_exercise_doc)
+                if isinstance(
+                    current_exercise_doc := (history_source_doc or {}).get("current_exercise"),
+                    dict,
+                )
+                else None
+            ),
+            _pending_concept_idx=(history_source_doc or {}).get("pending_concept_idx"),
+            _pending_bloom_level=(history_source_doc or {}).get("pending_bloom_level"),
+            _pending_action=(history_source_doc or {}).get("pending_action"),
+            _current_recommendation_reason=(history_source_doc or {}).get("recommendation_reason"),
+            submission_receipts=dict((history_source_doc or {}).get("submission_receipts") or {}),
+            version=int((history_source_doc or {}).get("version") or 0),
         )
         SessionState._restore_exercise_records(session, prev_history)
 

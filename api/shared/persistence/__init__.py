@@ -1,5 +1,17 @@
 from .document_chunks import delete_chunks_for_job, replace_job_chunks
 from .document_ocr_records import load_document_ocr_record, save_document_ocr_record
+from .ocr_provider_keys import (
+    OcrProviderKeyDuplicateError,
+    create_ocr_provider_key,
+    delete_ocr_provider_key,
+    list_active_ocr_provider_key_secrets,
+    list_ocr_provider_keys,
+    load_ocr_provider_key,
+    load_ocr_provider_key_secret,
+    record_ocr_key_failure,
+    record_ocr_key_success,
+    update_ocr_provider_key,
+)
 from .pipeline_jobs import (
     delete_pipeline_job_for_user,
     find_recent_active_job_by_source,
@@ -8,6 +20,7 @@ from .pipeline_jobs import (
     load_pipeline_job,
     load_pipeline_job_cancel_requested,
     load_pipeline_job_for_user,
+    load_pipeline_job_status_for_user,
     pipeline_job_to_document,
     save_pipeline_job,
 )
@@ -28,28 +41,39 @@ from .subject_progress import (
 )
 
 __all__ = [
+    "OcrProviderKeyDuplicateError",
+    "create_ocr_provider_key",
     "create_quiz_draft",
     "delete_chunks_for_job",
+    "delete_ocr_provider_key",
     "delete_pipeline_job_for_user",
     "delete_quiz_draft_for_user",
     "delete_subject_progress_for_user",
     "find_recent_active_job_by_source",
+    "list_active_ocr_provider_key_secrets",
+    "list_ocr_provider_keys",
     "list_recent_pipeline_jobs",
     "list_recent_quiz_drafts_for_user",
     "list_recent_subject_progress",
     "load_document_ocr_record",
     "load_many_pipeline_jobs_for_user",
     "load_many_subject_progress_for_user",
+    "load_ocr_provider_key",
+    "load_ocr_provider_key_secret",
     "load_pipeline_job",
     "load_pipeline_job_cancel_requested",
     "load_pipeline_job_for_user",
+    "load_pipeline_job_status_for_user",
     "load_quiz_draft_for_user",
     "load_subject_progress_by_session_for_user",
     "load_subject_progress_for_user",
     "pipeline_job_to_document",
+    "record_ocr_key_failure",
+    "record_ocr_key_success",
     "replace_job_chunks",
     "save_document_ocr_record",
     "save_pipeline_job",
     "save_subject_progress_snapshot",
+    "update_ocr_provider_key",
     "update_quiz_draft_for_user",
 ]

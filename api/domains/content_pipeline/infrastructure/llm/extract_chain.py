@@ -27,7 +27,6 @@ from api.shared.document_text import (
     build_text_batches,
 )
 from api.shared.llm_usage import LlmAction
-from api.shared.retry import llm_async_retry
 
 from .schemas import (
     ConceptExtraction,
@@ -302,7 +301,7 @@ class ExtractionChain:
             len(previous_concepts),
         )
         try:
-            payload = await self._invoke_extraction_response_with_retries(
+            payload = await self._invoke_extraction_response(
                 job_id=job_id,
                 subject_id=subject_id,
                 document_text=str(batch["text"]),
@@ -333,7 +332,6 @@ class ExtractionChain:
         )
         return materialized
 
-    @llm_async_retry(label="extract batch")
     async def _invoke_extraction_response(
         self,
         *,
@@ -380,24 +378,6 @@ class ExtractionChain:
             action=LlmAction.PIPELINE_CONCEPT_EXTRACTION,
         )
 
-    async def _invoke_extraction_response_with_retries(
-        self,
-        *,
-        job_id: str | None,
-        subject_id: str,
-        document_text: str,
-        previous_concepts: list[tuple[str, str]],
-        max_retries: int | None = None,
-    ) -> ConceptExtractionPayload:
-        del max_retries
-        return await self._invoke_extraction_response(
-            job_id=job_id,
-            subject_id=subject_id,
-            document_text=document_text,
-            previous_concepts=previous_concepts,
-        )
-
-    @llm_async_retry(label="relation verification")
     async def _parse_verification_response(
         self,
         user_message: str,

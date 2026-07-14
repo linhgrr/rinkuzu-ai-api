@@ -23,6 +23,7 @@ from .exceptions import error_json_response, register_exception_handlers
 from .lifespan import lifespan
 from .middleware.request_context import RequestContextMiddleware
 from .rate_limit import limiter
+from .routers import admin_ocr_keys as admin_ocr_keys_router
 from .routers import admin_usage as admin_usage_router
 from .schemas.common import InfoResponse, ReadinessResponse, StandardResponse, ok
 from .shared import mongo_store
@@ -148,6 +149,7 @@ app.include_router(pipeline_router.router)
 app.include_router(history_router.router)
 app.include_router(quiz_drafts_router)
 app.include_router(quiz_tutor_router)
+app.include_router(admin_ocr_keys_router.router)
 app.include_router(admin_usage_router.router)
 
 

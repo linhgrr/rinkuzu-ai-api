@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -78,16 +79,17 @@ def test_runtime_root_no_longer_points_to_content_processor_folder():
 def test_generate_theory_helper_imports_exercise_gen_lazily(monkeypatch):
     module_name = "api.domains.learning.exercise_gen"
     original_module = sys.modules.get(module_name)
-    fake_module = SimpleNamespace(
-        generate_theory=lambda name, definition: {
-            "content": f"{name}: {definition}",
-            "examples": [],
-        },
-    )
+
+    async def _fake_generate_theory(name, definition):
+        return {"content": f"{name}: {definition}", "examples": []}
+
+    fake_module = SimpleNamespace(generate_theory=_fake_generate_theory)
     monkeypatch.setitem(sys.modules, module_name, fake_module)
 
     try:
-        result = runtime._generate_theory_via_exercise_gen("Algebra", "Sets and equations")
+        result = asyncio.run(
+            runtime._generate_theory_via_exercise_gen("Algebra", "Sets and equations")
+        )
     finally:
         if original_module is None:
             sys.modules.pop(module_name, None)

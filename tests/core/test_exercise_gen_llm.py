@@ -1,3 +1,5 @@
+import asyncio
+
 from api.domains.learning import exercise_gen
 from api.domains.learning.exercise_types import (
     ExerciseOptions,
@@ -9,22 +11,19 @@ from api.domains.learning.prompts.grading import TheoryOutput
 from api.shared import retry as retry_module
 
 
-def test_generate_exercise_retries_and_serializes(monkeypatch):
-    attempts = {"count": 0}
-
+def test_generate_exercise_serializes_structured_output(monkeypatch):
+    # Retry + reask live in the LLM client (see test_llm_structured_instructor
+    # for the attempt-count contract). Here we only verify exercise_gen
+    # serializes a structured result into the API payload shape.
     def _select_type(_bloom_level, _mastery):
         return ExerciseType.MCQ
 
     monkeypatch.setattr(exercise_gen, "select_exercise_type", _select_type)
-    monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
 
-    def _fake_invoke(*, schema, messages, action, temperature=0.3):
-        attempts["count"] += 1
+    async def _fake_invoke(*, schema, messages, action, temperature=0.3):
         assert schema is MCQOutput
         assert messages
         assert action == "adaptive_exercise"
-        if attempts["count"] == 1:
-            raise RuntimeError("temporary failure")
         return MCQOutput(
             question="Động năng của vật phụ thuộc vào yếu tố nào?",
             options=ExerciseOptions(
@@ -40,31 +39,34 @@ def test_generate_exercise_retries_and_serializes(monkeypatch):
 
     monkeypatch.setattr(exercise_gen, "_invoke_structured_llm", _fake_invoke)
 
-    result = exercise_gen.generate_exercise(
-        concept_name="Động năng",
-        concept_definition="Động năng là năng lượng mà vật có do chuyển động.",
-        bloom_level=3,
+    result = asyncio.run(
+        exercise_gen.generate_exercise(
+            concept_name="Động năng",
+            concept_definition="Động năng là năng lượng mà vật có do chuyển động.",
+            bloom_level=3,
+        )
     )
 
-    assert attempts["count"] == 2
     assert result is not None
     assert result["exercise_type"] == ExerciseType.MCQ
     assert result["payload"]["correct_option"] == "A"
 
 
 def test_evaluate_short_answer_returns_model_dump(monkeypatch):
-    def _graded_output(**_kwargs):
+    async def _graded_output(**_kwargs):
         return ShortAnswerEvaluationOutput(is_correct=True, explanation="Đủ ý.", score=9)
 
     monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (1, 0.0))
     monkeypatch.setattr(exercise_gen, "_invoke_structured_llm", _graded_output)
 
-    result = exercise_gen.evaluate_short_answer(
-        concept_name="Quán tính",
-        question="Quán tính là gì?",
-        rubric=["Nêu được khái niệm", "Có ví dụ ngắn"],
-        sample_answer="Quán tính là xu hướng giữ nguyên trạng thái chuyển động.",
-        student_answer="Là xu hướng giữ nguyên trạng thái.",
+    result = asyncio.run(
+        exercise_gen.evaluate_short_answer(
+            concept_name="Quán tính",
+            question="Quán tính là gì?",
+            rubric=["Nêu được khái niệm", "Có ví dụ ngắn"],
+            sample_answer="Quán tính là xu hướng giữ nguyên trạng thái chuyển động.",
+            student_answer="Là xu hướng giữ nguyên trạng thái.",
+        )
     )
 
     assert result == {"is_correct": True, "explanation": "Đủ ý.", "score": 9}
@@ -73,15 +75,17 @@ def test_evaluate_short_answer_returns_model_dump(monkeypatch):
 def test_generate_theory_returns_fallback_after_retries(monkeypatch):
     monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (2, 0.0))
 
-    def _always_fail(**kwargs):
+    async def _always_fail(**kwargs):
         raise RuntimeError("provider unavailable")
 
     monkeypatch.setattr(exercise_gen, "_invoke_structured_llm", _always_fail)
 
-    result = exercise_gen.generate_theory(
-        concept_name="Động lượng",
-        concept_definition="Động lượng là đại lượng đặc trưng cho chuyển động.",
-        bloom_level=2,
+    result = asyncio.run(
+        exercise_gen.generate_theory(
+            concept_name="Động lượng",
+            concept_definition="Động lượng là đại lượng đặc trưng cho chuyển động.",
+            bloom_level=2,
+        )
     )
 
     assert result == {
@@ -93,15 +97,17 @@ def test_generate_theory_returns_fallback_after_retries(monkeypatch):
 def test_generate_theory_returns_model_dump_on_success(monkeypatch):
     monkeypatch.setattr(retry_module, "resolve_llm_retry_policy", lambda: (1, 0.0))
 
-    def _fake_invoke(**_kwargs):
+    async def _fake_invoke(**_kwargs):
         return TheoryOutput(content="Nội dung", examples=["Ví dụ 1"])
 
     monkeypatch.setattr(exercise_gen, "_invoke_structured_llm", _fake_invoke)
 
-    result = exercise_gen.generate_theory(
-        concept_name="Động lượng",
-        concept_definition="Động lượng là đại lượng đặc trưng cho chuyển động.",
-        bloom_level=2,
+    result = asyncio.run(
+        exercise_gen.generate_theory(
+            concept_name="Động lượng",
+            concept_definition="Động lượng là đại lượng đặc trưng cho chuyển động.",
+            bloom_level=2,
+        )
     )
 
     assert result == {

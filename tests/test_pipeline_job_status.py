@@ -48,7 +48,12 @@ def _patch_load(monkeypatch, doc):
     async def _fake_load(job_id, user_id):
         return doc
 
+    async def _fake_status_load(job_id, user_id, *, include_debug=False):
+        del job_id, user_id, include_debug
+        return doc
+
     monkeypatch.setattr(pipeline, "load_pipeline_job_for_user", _fake_load)
+    monkeypatch.setattr(pipeline, "load_pipeline_job_status_for_user", _fake_status_load)
 
 
 def _completed_job_doc(job_id: str = "job-1"):
@@ -130,6 +135,54 @@ def test_get_job_status_retry_count_defaults_to_zero(monkeypatch):
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["retry_count"] == 0
+
+
+def test_get_job_status_uses_compact_projection_by_default(monkeypatch):
+    calls = []
+
+    async def _fake_status_load(job_id, user_id, *, include_debug=False):
+        calls.append((job_id, user_id, include_debug))
+        return {
+            "job_id": job_id,
+            "status": "completed",
+        }
+
+    monkeypatch.setattr(pipeline, "load_pipeline_job_status_for_user", _fake_status_load)
+    client = _build_client()
+
+    response = client.get("/api/v1/pipeline/jobs/job-compact")
+
+    assert response.status_code == 200
+    assert calls == [("job-compact", "user-1", False)]
+    assert response.json()["data"]["result"] is None
+    assert response.json()["data"]["debug_trace"] == []
+
+
+def test_get_job_status_includes_debug_payload_only_when_requested(monkeypatch):
+    calls = []
+
+    async def _fake_status_load(job_id, user_id, *, include_debug=False):
+        calls.append((job_id, user_id, include_debug))
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "debug_trace": [],
+            "result": {
+                "concept_map": {"c1": 0},
+                "concepts_data": {},
+                "prereq_edges": [],
+                "concept_embedding_count": 23,
+            },
+        }
+
+    monkeypatch.setattr(pipeline, "load_pipeline_job_status_for_user", _fake_status_load)
+    client = _build_client()
+
+    response = client.get("/api/v1/pipeline/jobs/job-debug?include_debug=true")
+
+    assert response.status_code == 200
+    assert calls == [("job-debug", "user-1", True)]
+    assert response.json()["data"]["result"]["concept_embedding_count"] == 23
 
 
 def test_create_session_reuses_existing_active_session(monkeypatch):
