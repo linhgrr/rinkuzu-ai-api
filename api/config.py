@@ -4,11 +4,80 @@ config.py — Centralized application settings using Pydantic BaseSettings.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Self
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Placeholder markers (case-insensitive). Never echo caller input in validation errors.
+_SERVICE_TOKEN_PLACEHOLDER_MARKERS = frozenset(
+    {
+        "replace-me",
+        "change-me",
+        "your-token",
+        "example",
+        "default",
+    }
+)
+_MIN_SERVICE_TOKEN_LENGTH = 32
+_MAX_REPEATED_CYCLE_LEN = 8
+_ENVIRONMENT_ALIASES = {
+    "dev": "dev",
+    "development": "dev",
+    "staging": "staging",
+    "prod": "prod",
+    "production": "prod",
+}
+
+
+def _is_placeholder_or_repeated_token(token: str) -> bool:
+    """True for obvious placeholder / default / repeated tokens (case-insensitive).
+
+    Detected before the minimum-length check so short markers still surface as
+    placeholders. Long (>=32) values built from the same markers, all-same
+    characters, or short pure cycles are also rejected. Does not echo ``token``.
+    """
+    folded = token.casefold()
+    if not folded:
+        return False
+
+    if folded in _SERVICE_TOKEN_PLACEHOLDER_MARKERS:
+        return True
+
+    # All characters identical (e.g. "aaaaaaaa...").
+    if len(set(folded)) == 1:
+        return True
+
+    # Pure short-cycle repetition (e.g. "ababab...", "xyzxyzxyz...").
+    n = len(folded)
+    max_period = min(_MAX_REPEATED_CYCLE_LEN, n // 2)
+    for period in range(1, max_period + 1):
+        if n % period == 0 and folded == folded[:period] * (n // period):
+            return True
+
+    # Marker repeated / packed to any length (including >=32).
+    for marker in _SERVICE_TOKEN_PLACEHOLDER_MARKERS:
+        if marker not in folded:
+            continue
+        # Exact k-fold concatenation of the marker.
+        if (
+            len(folded) >= len(marker)
+            and len(folded) % len(marker) == 0
+            and folded == marker * (len(folded) // len(marker))
+        ):
+            return True
+        # Truncated packing: marker * ceil(n/len(marker)) clipped to n.
+        reps = (len(folded) // len(marker)) + 1
+        if folded == (marker * reps)[:n]:
+            return True
+        # Marker-only content with optional separators after stripping markers.
+        remainder = folded.replace(marker, "")
+        if remainder == "" or set(remainder) <= {"-", "_", ".", " "}:
+            return True
+
+    return False
 
 
 def normalize_endpoint(value: str | None, *, default_scheme: str) -> str | None:
@@ -28,6 +97,8 @@ class Settings(BaseSettings):
         env_file=str(BASE_DIR / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        # Never echo secrets (service tokens, API keys) in ValidationError payloads.
+        hide_input_in_errors=True,
     )
 
     # ── Models ──────────────────────────────────────────────
@@ -43,6 +114,8 @@ class Settings(BaseSettings):
     # ── App Config ──────────────────────────────────────────
     environment: str = "dev"  # dev | staging | prod — controls docs visibility
     cors_origins: list[str] = ["*"]
+    # Required in prod; optional in dev/staging so local tests can construct Settings.
+    # Request-time auth still fails closed when the token is unset.
     internal_service_token: str | None = None
     log_level: str = "INFO"  # DEBUG | INFO | WARNING | ERROR
     log_format: str = "text"  # text | json
@@ -238,6 +311,52 @@ class Settings(BaseSettings):
         default="https://api.smith.langchain.com",
         validation_alias=AliasChoices("LANGCHAIN_ENDPOINT", "LANGSMITH_ENDPOINT"),
     )
+
+    @field_validator("internal_service_token", mode="before")
+    @classmethod
+    def normalize_internal_service_token(cls, value: object) -> str | None:
+        """Trim and validate service tokens without echoing the input value.
+
+        Order: trim → empty→None → placeholder/repeated → min-length. Non-prod
+        may omit the token (None); prod is enforced by the model validator.
+        """
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            # Pydantic v2 no longer wraps TypeError raised by validators.
+            raise ValueError("internal service token must be a string")  # noqa: TRY004
+        token = value.strip()
+        if not token:
+            return None
+        # Placeholder / repeated checks before min-length so short markers and
+        # long packed markers share one clear error path (never echo input).
+        if _is_placeholder_or_repeated_token(token):
+            raise ValueError("internal service token must not be a placeholder value")
+        if len(token) < _MIN_SERVICE_TOKEN_LENGTH:
+            raise ValueError(
+                f"internal service token must be at least {_MIN_SERVICE_TOKEN_LENGTH} characters"
+            )
+        return token
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def normalize_environment(cls, value: object) -> str:
+        """Normalize supported environment aliases to one canonical value."""
+        if not isinstance(value, str):
+            # Pydantic v2 no longer wraps TypeError raised by validators.
+            raise ValueError("environment must be a string")  # noqa: TRY004
+        normalized = value.strip().casefold()
+        try:
+            return _ENVIRONMENT_ALIASES[normalized]
+        except KeyError as exc:
+            raise ValueError("environment must be dev, staging, or prod") from exc
+
+    @model_validator(mode="after")
+    def require_internal_service_token_in_prod(self) -> Self:
+        """Prod must fail closed at startup when the service token is unusable."""
+        if self.environment == "prod" and not self.internal_service_token:
+            raise ValueError("internal service token is required in production")
+        return self
 
     @property
     def s3_available(self) -> bool:

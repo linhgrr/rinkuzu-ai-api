@@ -14,32 +14,46 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  UV_VERSION: "0.11.29"
+  # Assert uv.lock is up-to-date and install only from that lock (official uv CI pattern).
+  UV_LOCKED: "1"
+
 jobs:
   dependency-health:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
+          lfs: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
           python-version: "3.11"
-          cache: pip
-      - run: python -m pip install --upgrade pip "setuptools<82"
-      - run: pip install -e .[dev]
-      - run: python -m pip check
+      - name: Frozen sync (dev + otel, project install)
+        run: uv sync --locked --extra dev --extra otel
+      - name: pip check (fail-closed)
+        run: uv run python -m pip check
+      - name: Dependency/runtime smoke (CPU torch + checkpoints)
+        run: uv run python scripts/dependency_runtime_smoke.py
 
   precommit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
         with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
           python-version: "3.11"
-          cache: pip
-      - run: python -m pip install --upgrade pip "setuptools<82"
-      - run: pip install -e .[dev]
-      - run: python -m pre_commit run --all-files --show-diff-on-failure
+      - name: Frozen sync (dev)
+        run: uv sync --locked --extra dev
+      - run: uv run python -m pre_commit run --all-files --show-diff-on-failure
 
   lint:
     runs-on: ubuntu-latest
@@ -55,30 +69,38 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: python -m pip install --upgrade pip "setuptools<82"
-      - run: pip install -e .[dev]
-      - run: python -m mypy api/ --ignore-missing-imports
-
-  test:
-    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
         with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
           python-version: "3.11"
-          cache: pip
-      - run: python -m pip install --upgrade pip "setuptools<82"
-      - run: pip install -e .[dev]
+      - name: Frozen sync (dev)
+        run: uv sync --locked --extra dev
+      - run: uv run python -m mypy api/ --ignore-missing-imports
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          python-version: "3.11"
+      - name: Frozen sync (dev)
+        run: uv sync --locked --extra dev
+      - name: Dependency/runtime smoke
+        run: uv run python scripts/dependency_runtime_smoke.py
       - run: >
-          python -m pytest tests/ -q
+          uv run python -m pytest tests/ -q
           --ignore=tests/core/test_exercise_service.py
           --ignore=tests/core/test_exercise_types.py
           --cov=api
@@ -87,16 +109,18 @@ jobs:
 
   perf-advisory:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
         with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
           python-version: "3.11"
-          cache: pip
-      - run: python -m pip install --upgrade pip "setuptools<82"
-      - run: pip install -e .[dev]
+      - name: Frozen sync (dev + otel)
+        run: uv sync --locked --extra dev --extra otel
       - run: bash scripts/perf-be.sh
       - uses: actions/upload-artifact@v4
         with:
@@ -108,18 +132,20 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
         with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
           python-version: "3.11"
-          cache: pip
-      - run: python -m pip install --upgrade pip "setuptools<82"
-      - run: pip install -e .[dev]
-      - run: python -m bandit -q -r api -x tests -lll
+      - name: Frozen sync (dev)
+        run: uv sync --locked --extra dev
+      - run: uv run python -m bandit -q -r api -x tests -lll
       # CVE-2026-45829 affects the ChromaDB HTTP server path in 1.x and has no
       # patched release yet. This API embeds ChromaDB in-process and does not
       # expose the vulnerable Chroma server endpoint; remove this ignore once a
       # fixed ChromaDB release is available.
-      - run: python -m pip_audit --progress-spinner off --ignore-vuln CVE-2026-45829
+      - run: uv run python -m pip_audit --progress-spinner off --ignore-vuln CVE-2026-45829

@@ -18,32 +18,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -108,32 +94,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -188,32 +160,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -268,32 +226,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -305,6 +249,72 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StandardResponse_Annotated_Union_MCQExerciseResponse__TrueFalseExerciseResponse__FillBlankExerciseResponse__MultiCorrectExerciseResponse__OrderingExerciseResponse__MatchingExerciseResponse__ShortAnswerExerciseResponse___FieldInfo_annotation_NoneType__required_True__discriminator__exercise_type____"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/session/{session_id}/step": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Learning Step",
+        "description": "Return the current learning step, creating and persisting one when needed.",
+        "operationId": "learning_step_api_v1_session__session_id__step_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_\\-]+$",
+              "description": "Resource identifier (alphanumeric, hyphens, underscores)",
+              "title": "Session Id"
+            },
+            "description": "Resource identifier (alphanumeric, hyphens, underscores)"
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_LearningStepResponse_"
                 }
               }
             }
@@ -348,32 +358,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -438,32 +434,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -528,32 +510,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -608,32 +576,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -688,32 +642,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -782,32 +722,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -871,32 +797,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -959,32 +871,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1036,34 +934,30 @@
             "description": "Resource identifier (alphanumeric, hyphens, underscores)"
           },
           {
-            "name": "x-user-id",
-            "in": "header",
+            "name": "include_debug",
+            "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "boolean",
+              "default": false,
+              "title": "Include Debug"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1130,32 +1024,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1210,32 +1090,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1290,32 +1156,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1367,32 +1219,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1444,32 +1282,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1523,32 +1347,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1610,32 +1420,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1687,32 +1483,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1766,32 +1548,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1832,32 +1600,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1918,32 +1672,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -1998,32 +1738,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -2076,32 +1802,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -2164,32 +1876,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -2244,32 +1942,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -2320,32 +2004,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -2384,14 +2054,357 @@
         }
       }
     },
-    "/admin/llm-usage/summary": {
+    "/api/v1/admin/ocr-keys": {
+      "get": {
+        "tags": [
+          "admin-ocr-keys"
+        ],
+        "summary": "List Admin Ocr Keys",
+        "operationId": "list_admin_ocr_keys_api_v1_admin_ocr_keys_get",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-user-role",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_OcrProviderKeyListResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin-ocr-keys"
+        ],
+        "summary": "Create Admin Ocr Key",
+        "operationId": "create_admin_ocr_key_api_v1_admin_ocr_keys_post",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-user-role",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OcrProviderKeyCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_OcrProviderKeySingleResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ocr-keys/{key_id}": {
+      "patch": {
+        "tags": [
+          "admin-ocr-keys"
+        ],
+        "summary": "Update Admin Ocr Key",
+        "operationId": "update_admin_ocr_key_api_v1_admin_ocr_keys__key_id__patch",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-user-role",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OcrProviderKeyPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_OcrProviderKeySingleResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin-ocr-keys"
+        ],
+        "summary": "Delete Admin Ocr Key",
+        "operationId": "delete_admin_ocr_key_api_v1_admin_ocr_keys__key_id__delete",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-user-role",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_OcrProviderKeyDeleteResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ocr-keys/{key_id}/test": {
+      "post": {
+        "tags": [
+          "admin-ocr-keys"
+        ],
+        "summary": "Run Admin Ocr Key Test",
+        "operationId": "run_admin_ocr_key_test_api_v1_admin_ocr_keys__key_id__test_post",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "x-user-role",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Service-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse_OcrProviderKeyTestResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/llm-usage/summary": {
       "get": {
         "tags": [
           "admin-usage"
         ],
         "summary": "Get Llm Usage Summary",
         "description": "Aggregate LLM usage/cost over a time window, broken down by action + model.",
-        "operationId": "get_llm_usage_summary_admin_llm_usage_summary_get",
+        "operationId": "get_llm_usage_summary_api_v1_admin_llm_usage_summary_get",
         "parameters": [
           {
             "name": "window",
@@ -2406,32 +2419,18 @@
           {
             "name": "x-user-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-User-Id"
             }
           },
           {
             "name": "x-service-token",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
               "title": "X-Service-Token"
             }
           }
@@ -2442,7 +2441,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Get Llm Usage Summary Admin Llm Usage Summary Get"
+                  "$ref": "#/components/schemas/StandardResponse_LlmUsageSummaryResponse_"
                 }
               }
             }
@@ -3039,6 +3038,299 @@
         ],
         "title": "LearningSessionStatus"
       },
+      "LearningStepResponse": {
+        "properties": {
+          "concept": {
+            "$ref": "#/components/schemas/NextConceptResponse"
+          },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exercise": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MCQExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/TrueFalseExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/FillBlankExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/MultiCorrectExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/OrderingExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/MatchingExerciseResponse"
+              },
+              {
+                "$ref": "#/components/schemas/ShortAnswerExerciseResponse"
+              }
+            ],
+            "title": "Exercise",
+            "discriminator": {
+              "propertyName": "exercise_type",
+              "mapping": {
+                "fill_blank": "#/components/schemas/FillBlankExerciseResponse",
+                "matching": "#/components/schemas/MatchingExerciseResponse",
+                "mcq": "#/components/schemas/MCQExerciseResponse",
+                "multi_correct": "#/components/schemas/MultiCorrectExerciseResponse",
+                "ordering": "#/components/schemas/OrderingExerciseResponse",
+                "short_answer": "#/components/schemas/ShortAnswerExerciseResponse",
+                "true_false": "#/components/schemas/TrueFalseExerciseResponse"
+              }
+            }
+          },
+          "cache_status": {
+            "type": "string",
+            "enum": [
+              "served",
+              "created"
+            ],
+            "title": "Cache Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept",
+          "exercise",
+          "cache_status"
+        ],
+        "title": "LearningStepResponse"
+      },
+      "LlmUsageAnalysisResponse": {
+        "properties": {
+          "active_users": {
+            "type": "integer",
+            "title": "Active Users",
+            "default": 0
+          },
+          "average_tokens_per_call": {
+            "type": "number",
+            "title": "Average Tokens Per Call",
+            "default": 0.0
+          },
+          "average_cost_usd_per_call": {
+            "type": "number",
+            "title": "Average Cost Usd Per Call",
+            "default": 0.0
+          },
+          "top_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top User Id"
+          },
+          "top_user_cost_usd": {
+            "type": "number",
+            "title": "Top User Cost Usd",
+            "default": 0.0
+          },
+          "top_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Action"
+          },
+          "top_action_cost_share": {
+            "type": "number",
+            "title": "Top Action Cost Share",
+            "default": 0.0
+          },
+          "top_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Model"
+          },
+          "top_model_cost_share": {
+            "type": "number",
+            "title": "Top Model Cost Share",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "LlmUsageAnalysisResponse"
+      },
+      "LlmUsageBreakdownRow": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "total_tokens": {
+            "type": "integer",
+            "title": "Total Tokens",
+            "default": 0
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens",
+            "default": 0
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens",
+            "default": 0
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd",
+            "default": 0.0
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "LlmUsageBreakdownRow"
+      },
+      "LlmUsageDailyRow": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "total_tokens": {
+            "type": "integer",
+            "title": "Total Tokens",
+            "default": 0
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd",
+            "default": 0.0
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "title": "LlmUsageDailyRow"
+      },
+      "LlmUsageSummaryResponse": {
+        "properties": {
+          "window_days": {
+            "type": "integer",
+            "title": "Window Days"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/LlmUsageTotalsResponse"
+          },
+          "by_action": {
+            "items": {
+              "$ref": "#/components/schemas/LlmUsageBreakdownRow"
+            },
+            "type": "array",
+            "title": "By Action"
+          },
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/LlmUsageBreakdownRow"
+            },
+            "type": "array",
+            "title": "By Model"
+          },
+          "by_user": {
+            "items": {
+              "$ref": "#/components/schemas/LlmUsageBreakdownRow"
+            },
+            "type": "array",
+            "title": "By User"
+          },
+          "analysis": {
+            "$ref": "#/components/schemas/LlmUsageAnalysisResponse"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/LlmUsageDailyRow"
+            },
+            "type": "array",
+            "title": "Daily"
+          }
+        },
+        "type": "object",
+        "required": [
+          "window_days",
+          "totals",
+          "by_action",
+          "by_model",
+          "by_user",
+          "analysis",
+          "daily"
+        ],
+        "title": "LlmUsageSummaryResponse"
+      },
+      "LlmUsageTotalsResponse": {
+        "properties": {
+          "total_tokens": {
+            "type": "integer",
+            "title": "Total Tokens",
+            "default": 0
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens",
+            "default": 0
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens",
+            "default": 0
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd",
+            "default": 0.0
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "LlmUsageTotalsResponse"
+      },
       "MCQExerciseResponse": {
         "properties": {
           "exercise_id": {
@@ -3473,6 +3765,310 @@
           "max_steps"
         ],
         "title": "NextConceptResponse"
+      },
+      "OcrProviderKeyCreateRequest": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "api_key": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Api Key"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "api_key"
+        ],
+        "title": "OcrProviderKeyCreateRequest"
+      },
+      "OcrProviderKeyDeleteResponse": {
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          },
+          "key_id": {
+            "type": "string",
+            "title": "Key Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted",
+          "key_id"
+        ],
+        "title": "OcrProviderKeyDeleteResponse"
+      },
+      "OcrProviderKeyListResponse": {
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/OcrProviderKeyResponse"
+            },
+            "type": "array",
+            "title": "Keys"
+          },
+          "fallback_env_configured": {
+            "type": "boolean",
+            "title": "Fallback Env Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keys",
+          "fallback_env_configured"
+        ],
+        "title": "OcrProviderKeyListResponse"
+      },
+      "OcrProviderKeyPatchRequest": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "title": "OcrProviderKeyPatchRequest"
+      },
+      "OcrProviderKeyResponse": {
+        "properties": {
+          "key_id": {
+            "type": "string",
+            "title": "Key Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "masked_key": {
+            "type": "string",
+            "title": "Masked Key"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "health_status": {
+            "type": "string",
+            "enum": [
+              "untested",
+              "healthy",
+              "failed",
+              "disabled"
+            ],
+            "title": "Health Status"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "failure_count": {
+            "type": "integer",
+            "title": "Failure Count"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key_id",
+          "provider",
+          "label",
+          "masked_key",
+          "enabled",
+          "health_status",
+          "priority",
+          "success_count",
+          "failure_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OcrProviderKeyResponse"
+      },
+      "OcrProviderKeySingleResponse": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/OcrProviderKeyResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "OcrProviderKeySingleResponse"
+      },
+      "OcrProviderKeyTestResponse": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/OcrProviderKeyResponse"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "ok"
+        ],
+        "title": "OcrProviderKeyTestResponse"
       },
       "OrderingExerciseResponse": {
         "properties": {
@@ -5385,7 +5981,8 @@
                 "type": "null"
               }
             ],
-            "title": "Questionimage"
+            "title": "Questionimage",
+            "description": "Optional image URL/data URL. Accepted only when the configured tutor LLM model supports vision."
           },
           "optionImages": {
             "items": {
@@ -5399,7 +5996,8 @@
               ]
             },
             "type": "array",
-            "title": "Optionimages"
+            "title": "Optionimages",
+            "description": "Optional option image URLs/data URLs. Accepted only when the configured tutor LLM model supports vision."
           },
           "chatHistory": {
             "items": {
@@ -6068,6 +6666,64 @@
         ],
         "title": "StandardResponse[KnowledgeGraphResponse]"
       },
+      "StandardResponse_LearningStepResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/LearningStepResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[LearningStepResponse]"
+      },
+      "StandardResponse_LlmUsageSummaryResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/LlmUsageSummaryResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[LlmUsageSummaryResponse]"
+      },
       "StandardResponse_MasteryMatrixResponse_": {
         "properties": {
           "success": {
@@ -6125,6 +6781,122 @@
           "data"
         ],
         "title": "StandardResponse[NextConceptResponse]"
+      },
+      "StandardResponse_OcrProviderKeyDeleteResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/OcrProviderKeyDeleteResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[OcrProviderKeyDeleteResponse]"
+      },
+      "StandardResponse_OcrProviderKeyListResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/OcrProviderKeyListResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[OcrProviderKeyListResponse]"
+      },
+      "StandardResponse_OcrProviderKeySingleResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/OcrProviderKeySingleResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[OcrProviderKeySingleResponse]"
+      },
+      "StandardResponse_OcrProviderKeyTestResponse_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/OcrProviderKeyTestResponse"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "StandardResponse[OcrProviderKeyTestResponse]"
       },
       "StandardResponse_PipelineJobCancelResponse_": {
         "properties": {
@@ -7172,12 +7944,25 @@
       },
       "SubmitAnswerRequest": {
         "properties": {
+          "exercise_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Exercise Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
           "answer": {
             "$ref": "#/components/schemas/SubmitAnswerPayload"
           }
         },
         "type": "object",
         "required": [
+          "exercise_id",
+          "idempotency_key",
           "answer"
         ],
         "title": "SubmitAnswerRequest"
@@ -7422,7 +8207,8 @@
               "$ref": "#/components/schemas/TutorChatMessage"
             },
             "type": "array",
-            "title": "Chathistory"
+            "title": "Chathistory",
+            "description": "Deprecated for adaptive tutor chat. Adaptive chat history is owned by the server session and this field is ignored."
           },
           "stream": {
             "type": "boolean",

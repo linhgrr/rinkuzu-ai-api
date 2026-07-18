@@ -160,6 +160,17 @@ async def test_load_or_extract_document_text_persists_on_cache_miss(monkeypatch)
         assert file_size_bytes == len(b"%PDF-demo")
         return await extract_document_text()
 
+    async def fake_extract_document_text_from_bytes_with_key_pool(
+        pdf_bytes: bytes,
+        *,
+        filename: str | None = None,
+        settings=None,
+    ):
+        del settings
+        if pdf_bytes == b"%PDF-demo" and filename == "lesson.pdf":
+            return extracted
+        raise AssertionError("unexpected OCR input")
+
     monkeypatch.setattr(
         draft_service_module,
         "load_or_extract_document_text_cached",
@@ -167,12 +178,8 @@ async def test_load_or_extract_document_text_persists_on_cache_miss(monkeypatch)
     )
     monkeypatch.setattr(
         draft_service_module,
-        "extract_document_text_from_bytes",
-        lambda pdf_bytes, *, filename=None: (
-            extracted
-            if pdf_bytes == b"%PDF-demo" and filename == "lesson.pdf"
-            else (_ for _ in ()).throw(AssertionError("unexpected OCR input"))
-        ),
+        "extract_document_text_from_bytes_with_key_pool",
+        fake_extract_document_text_from_bytes_with_key_pool,
     )
 
     document_text = await service._load_or_extract_document_text(

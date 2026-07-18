@@ -141,3 +141,18 @@ def test_get_current_admin_user_rejects_non_admin_role(monkeypatch):
         )
 
     assert exc_info.value.status_code == 403
+
+
+def test_get_current_user_rejects_length_mismatched_token(monkeypatch):
+    monkeypatch.setattr(
+        dependencies,
+        "get_settings",
+        lambda: SimpleNamespace(environment="prod", internal_service_token="secret"),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        dependencies.get_current_user(x_user_id="user-1", x_service_token="secret-extra")
+
+    assert exc_info.value.status_code == 401
+    assert "secret" not in str(exc_info.value)
+    assert "secret-extra" not in str(exc_info.value)

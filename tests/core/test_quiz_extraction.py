@@ -49,17 +49,26 @@ def test_extract_questions_from_pdf_bytes_uses_extracted_document_text(monkeypat
             ]
         )
 
-    monkeypatch.setattr(
-        extraction,
-        "extract_document_text_from_bytes",
-        lambda _pdf_bytes, *, filename=None: ExtractedDocumentText(
+    async def fake_extract_document_text_from_bytes_with_key_pool(
+        pdf_bytes: bytes,
+        *,
+        filename: str | None = None,
+        settings=None,
+    ):
+        del pdf_bytes, settings
+        return ExtractedDocumentText(
             text="## Trang 1\nCâu 1\n\n## Trang 2\nCâu 2",
             pages=[
                 DocumentPageText(page_number=1, text="Câu 1"),
                 DocumentPageText(page_number=2, text="Câu 2"),
             ],
             metadata={"file_name": filename or "sample.pdf", "page_count": 2},
-        ),
+        )
+
+    monkeypatch.setattr(
+        extraction,
+        "extract_document_text_from_bytes_with_key_pool",
+        fake_extract_document_text_from_bytes_with_key_pool,
     )
     monkeypatch.setattr(
         extraction, "ainvoke_structured_completion", fake_ainvoke_structured_completion

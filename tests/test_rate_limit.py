@@ -90,3 +90,47 @@ def test_is_admin_request_returns_false_without_token(monkeypatch):
         assert rate_limit.is_admin_request() is False
     finally:
         rate_limit.reset_current_rate_limit_request(token)
+
+
+def test_is_admin_request_returns_false_on_mismatch(monkeypatch):
+    monkeypatch.setattr(
+        rate_limit,
+        "get_settings",
+        lambda: SimpleNamespace(internal_service_token="secret"),
+    )
+
+    request = _make_request({"x-service-token": "wrong"})
+    token = rate_limit.set_current_rate_limit_request(request)
+    try:
+        assert rate_limit.is_admin_request() is False
+    finally:
+        rate_limit.reset_current_rate_limit_request(token)
+
+
+def test_is_admin_request_returns_false_when_token_unconfigured(monkeypatch):
+    monkeypatch.setattr(
+        rate_limit,
+        "get_settings",
+        lambda: SimpleNamespace(internal_service_token=None),
+    )
+
+    request = _make_request({"x-service-token": "anything"})
+    token = rate_limit.set_current_rate_limit_request(request)
+    try:
+        assert rate_limit.is_admin_request() is False
+    finally:
+        rate_limit.reset_current_rate_limit_request(token)
+
+
+def test_rate_limit_key_rejects_length_mismatched_token(monkeypatch):
+    monkeypatch.setattr(
+        rate_limit,
+        "get_settings",
+        lambda: SimpleNamespace(internal_service_token="secret"),
+    )
+
+    request = _make_request(
+        {"x-user-id": "u-1", "x-service-token": "secret-extra"},
+    )
+
+    assert rate_limit.rate_limit_key(request) == "1.2.3.4"

@@ -3,9 +3,10 @@ set -euo pipefail
 mkdir -p perf
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_BIN="${ROOT_DIR}/.venv/bin/python"
-PYINSTRUMENT_BIN="${ROOT_DIR}/.venv/bin/pyinstrument"
-LOCUST_BIN="${ROOT_DIR}/.venv/bin/locust"
+VENV_DIR="${VIRTUAL_ENV:-${ROOT_DIR}/.venv}"
+PYTHON_BIN="${VENV_DIR}/bin/python"
+PYINSTRUMENT_BIN="${VENV_DIR}/bin/pyinstrument"
+LOCUST_BIN="${VENV_DIR}/bin/locust"
 HOST="${PERF_BE_HOST:-http://127.0.0.1:7860}"
 SERVER_PID=""
 

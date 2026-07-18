@@ -8,6 +8,7 @@ from fastapi import Header, Request
 
 from .config import Settings, get_settings
 from .exceptions import AppError, ServiceUnavailableError, SessionNotFoundError
+from .security import service_tokens_match
 from .shared.llm_usage import current_user_id
 
 if TYPE_CHECKING:
@@ -35,7 +36,7 @@ def get_current_user(
             status_code=500,
         )
 
-    if not x_service_token or x_service_token != required_service_token:
+    if not service_tokens_match(x_service_token, required_service_token):
         raise AppError(
             code="unauthorized",
             message="Unauthorized",

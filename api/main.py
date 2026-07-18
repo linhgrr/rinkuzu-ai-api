@@ -53,7 +53,22 @@ app = FastAPI(
 )
 
 
+# Explicit Header(...) params that FastAPI emits as optional (default=None).
+# Generated FE clients must treat these as required on protected operations.
+_PROXY_HEADER_NAMES = frozenset({"x-service-token", "x-user-id", "x-user-role"})
+
+_PUBLIC_OPENAPI_OPERATIONS: dict[str, set[str]] = {
+    "/api/ready": {"get"},
+    "/api/health": {"get"},
+    "/api/info": {"get"},
+    "/api/v1/pipeline/status": {"get"},
+}
+
+
 def _build_openapi_security() -> tuple[dict[str, dict[str, str]], list[dict[str, list[str]]]]:
+    # Always advertise the service-token scheme. Runtime still fails closed when
+    # the token is unconfigured (500) or invalid (401); docs must not hide the
+    # requirement just because a local process has no token set.
     schemes: dict[str, dict[str, str]] = {
         "XUserIdHeader": {
             "type": "apiKey",
@@ -61,19 +76,62 @@ def _build_openapi_security() -> tuple[dict[str, dict[str, str]], list[dict[str,
             "name": "x-user-id",
             "description": "Authenticated user id forwarded by the frontend proxy.",
         },
-    }
-    requirement: dict[str, list[str]] = {"XUserIdHeader": []}
-
-    if settings.internal_service_token:
-        schemes["XServiceTokenHeader"] = {
+        "XServiceTokenHeader": {
             "type": "apiKey",
             "in": "header",
             "name": "x-service-token",
             "description": "Shared internal token used by the frontend proxy when calling the backend API.",
-        }
-        requirement["XServiceTokenHeader"] = []
-
+        },
+    }
+    requirement: dict[str, list[str]] = {
+        "XUserIdHeader": [],
+        "XServiceTokenHeader": [],
+    }
     return schemes, [requirement]
+
+
+def _without_null_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Collapse a nullable one-type schema while preserving its metadata."""
+    any_of = schema.get("anyOf")
+    if not isinstance(any_of, list):
+        return schema
+    non_null = [item for item in any_of if isinstance(item, dict) and item.get("type") != "null"]
+    if len(non_null) != 1 or len(non_null) == len(any_of):
+        return schema
+    return {
+        **non_null[0],
+        **{key: value for key, value in schema.items() if key not in {"anyOf", "default"}},
+    }
+
+
+def _require_proxy_headers_in_openapi(openapi_schema: dict[str, Any]) -> None:
+    """Mark explicit proxy header parameters required on protected operations.
+
+    Runtime Header defaults and 401/403 behavior stay unchanged; this only
+    tightens the OpenAPI contract so generated FE types enforce the headers.
+    Public operations (``security=[]``) are left alone and are not marked
+    required for these headers.
+    """
+    for path, path_item in (openapi_schema.get("paths") or {}).items():
+        if not isinstance(path_item, dict):
+            continue
+        for method, operation in path_item.items():
+            if method.startswith("x-") or not isinstance(operation, dict):
+                continue
+            if method in _PUBLIC_OPENAPI_OPERATIONS.get(path, set()):
+                continue
+            if operation.get("security") == []:
+                continue
+            for param in operation.get("parameters") or []:
+                if not isinstance(param, dict):
+                    continue
+                name = (param.get("name") or "").lower()
+                if param.get("in") == "header" and name in _PROXY_HEADER_NAMES:
+                    param["required"] = True
+                    schema = param.get("schema")
+                    if not isinstance(schema, dict):
+                        continue
+                    param["schema"] = _without_null_schema(schema)
 
 
 def custom_openapi() -> dict[str, Any]:
@@ -98,18 +156,14 @@ def custom_openapi() -> dict[str, Any]:
     ]
     openapi_schema["security"] = security
 
-    public_operations = {
-        "/api/ready": {"get"},
-        "/api/health": {"get"},
-        "/api/info": {"get"},
-        "/api/v1/pipeline/status": {"get"},
-    }
-    for path, methods in public_operations.items():
+    for path, methods in _PUBLIC_OPENAPI_OPERATIONS.items():
         path_item = openapi_schema.get("paths", {}).get(path, {})
         for method in methods:
             operation = path_item.get(method)
             if operation is not None:
                 operation["security"] = []
+
+    _require_proxy_headers_in_openapi(openapi_schema)
 
     app.openapi_schema = openapi_schema
     return openapi_schema

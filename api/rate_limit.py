@@ -11,6 +11,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from api.config import get_settings
+from api.security import service_tokens_match
 
 _current_request: ContextVar[Request | None] = ContextVar("rate_limit_request", default=None)
 
@@ -28,7 +29,7 @@ def rate_limit_key(request: Request) -> str:
     if (
         required_token
         and forwarded_user
-        and request.headers.get("x-service-token") == required_token
+        and service_tokens_match(request.headers.get("x-service-token"), required_token)
     ):
         return f"user:{forwarded_user}"
     return get_remote_address(request)
@@ -56,7 +57,7 @@ def is_admin_request() -> bool:
     request = _current_request.get()
     if request is None:
         return False
-    return request.headers.get("x-service-token") == required_token
+    return service_tokens_match(request.headers.get("x-service-token"), required_token)
 
 
 limiter = Limiter(key_func=rate_limit_key)

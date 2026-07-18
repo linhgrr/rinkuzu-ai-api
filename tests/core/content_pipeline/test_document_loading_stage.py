@@ -47,16 +47,20 @@ def test_load_document_chunks_updates_progress_and_total_chunks():
         assert resolved_size == 1234
         return extracted
 
+    async def fake_extract_document_text_from_file_with_key_pool(file_path: str):
+        del file_path
+        return ExtractedDocumentText(
+            text="OCR text",
+            pages=[DocumentPageText(page_number=1, text="OCR text")],
+            metadata={"page_count": 1, "provider": "landingai", "model": "dpt-2-mini"},
+        )
+
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(document_loading_stage, "run_blocking_stage", fake_run_blocking_stage)
     monkeypatch.setattr(
         document_loading_stage,
-        "extract_document_text_from_file",
-        lambda _file_path: ExtractedDocumentText(
-            text="OCR text",
-            pages=[DocumentPageText(page_number=1, text="OCR text")],
-            metadata={"page_count": 1, "provider": "landingai", "model": "dpt-2-mini"},
-        ),
+        "extract_document_text_from_file_with_key_pool",
+        fake_extract_document_text_from_file_with_key_pool,
     )
     monkeypatch.setattr(
         document_loading_stage,

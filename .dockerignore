@@ -16,7 +16,9 @@ uploads/*
 !uploads/.gitkeep
 api/core/chroma_db
 docs
-tests
+tests/**
+!tests/test_benchmark_smoke.py
+!tests/locustfile.py
 *.md
 !README.md
 .vscode
