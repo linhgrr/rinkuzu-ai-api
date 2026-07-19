@@ -77,16 +77,14 @@ async def test_create_tutor_chat_stream_emits_streaming_sse_events(monkeypatch):
 
         return iterator()
 
-    monkeypatch.setattr(tutor_core, "astream_text_completion", fake_astream)
-    monkeypatch.setattr(
-        tutor_chat,
-        "get_settings",
-        lambda: SimpleNamespace(
-            llm_timeout_sec=5,
-            exercise_llm_model="exercise-model",
-            llm_model="shared-model",
-        ),
+    settings = SimpleNamespace(
+        llm_timeout_sec=5,
+        exercise_llm_model="exercise-model",
+        llm_model="shared-model",
     )
+    monkeypatch.setattr(tutor_core, "astream_text_completion", fake_astream)
+    monkeypatch.setattr(tutor_chat, "get_settings", lambda: settings)
+    monkeypatch.setattr(tutor_chat, "_resolve_shared_llm_model", lambda _model: "exercise-model")
 
     completed: list[str] = []
 

@@ -7,7 +7,11 @@ VENV_DIR="${VIRTUAL_ENV:-${ROOT_DIR}/.venv}"
 PYTHON_BIN="${VENV_DIR}/bin/python"
 PYINSTRUMENT_BIN="${VENV_DIR}/bin/pyinstrument"
 LOCUST_BIN="${VENV_DIR}/bin/locust"
+UVICORN_BIN="${VENV_DIR}/bin/uvicorn"
 HOST="${PERF_BE_HOST:-http://127.0.0.1:7860}"
+SERVER_START_TIMEOUT_SEC="${PERF_BE_START_TIMEOUT_SEC:-120}"
+LOAD_RUN_TIME="${PERF_BE_LOAD_RUN_TIME:-60s}"
+SERVER_LOG="perf/be-server.log"
 SERVER_PID=""
 
 cleanup() {
@@ -33,17 +37,32 @@ fi
 
 if [[ -x "$LOCUST_BIN" ]]; then
   if ! curl -fsS "$HOST/api/live" >/dev/null 2>&1; then
-    LOAD_MODELS=false "$PYTHON_BIN" -m uvicorn api.main:app \
-      --host 127.0.0.1 --port 7860 > perf/be-server.log 2>&1 &
+    LOAD_MODELS=false "$UVICORN_BIN" api.main:app \
+      --host 127.0.0.1 --port 7860 > "$SERVER_LOG" 2>&1 &
     SERVER_PID=$!
-    for _ in {1..60}; do
-      curl -fsS "$HOST/api/live" >/dev/null 2>&1 && break
+    server_ready=false
+    for ((attempt = 0; attempt < SERVER_START_TIMEOUT_SEC; attempt += 1)); do
+      if curl -fsS "$HOST/api/live" >/dev/null 2>&1; then
+        server_ready=true
+        break
+      fi
+      if ! kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+        printf 'Performance server exited before becoming live.\n' >&2
+        sed -n '1,240p' "$SERVER_LOG" >&2
+        exit 1
+      fi
       sleep 1
     done
+    if [[ "$server_ready" != true ]]; then
+      printf 'Performance server was not live after %s seconds.\n' \
+        "$SERVER_START_TIMEOUT_SEC" >&2
+      sed -n '1,240p' "$SERVER_LOG" >&2
+      exit 1
+    fi
   fi
 
   curl -fsS "$HOST/api/live" >/dev/null
-  "$LOCUST_BIN" -f tests/locustfile.py --headless -u 10 -r 2 --run-time 60s \
+  "$LOCUST_BIN" -f tests/locustfile.py --headless -u 10 -r 2 --run-time "$LOAD_RUN_TIME" \
     --host "$HOST" --csv=perf/be-load --html=perf/be-load.html
 else
   printf 'status,detail\nskipped,locust unavailable\n' > perf/be-load_stats.csv

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = BACKEND_ROOT.parent
 BACKEND_CONTRACT_PATH = BACKEND_ROOT / "contracts" / "api-error-codes.json"
-FRONTEND_CONTRACT_PATH = WORKSPACE_ROOT / "rinkuzu" / "contracts" / "api-error-codes.json"
+_configured_frontend_contract = os.environ.get("FRONTEND_CONTRACT_PATH")
+FRONTEND_CONTRACT_PATH = (
+    (BACKEND_ROOT / _configured_frontend_contract).resolve()
+    if _configured_frontend_contract
+    else WORKSPACE_ROOT / "rinkuzu" / "contracts" / "api-error-codes.json"
+)
 BACKEND_CODE_REGEX = re.compile(
     r"(?:^|[^\w])(?:code|error_code)\s*=\s*[\"']([a-z0-9_]+)[\"']",
     re.MULTILINE,
