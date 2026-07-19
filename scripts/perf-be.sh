@@ -11,6 +11,7 @@ UVICORN_BIN="${VENV_DIR}/bin/uvicorn"
 HOST="${PERF_BE_HOST:-http://127.0.0.1:7860}"
 SERVER_START_TIMEOUT_SEC="${PERF_BE_START_TIMEOUT_SEC:-120}"
 LOAD_RUN_TIME="${PERF_BE_LOAD_RUN_TIME:-60s}"
+EXPECT_DEGRADED_READY="${PERF_EXPECT_DEGRADED_READY:-false}"
 SERVER_LOG="perf/be-server.log"
 SERVER_PID=""
 
@@ -42,6 +43,7 @@ if [[ -x "$LOCUST_BIN" ]]; then
       LOAD_MODELS=false "$UVICORN_BIN" api.main:app \
       --host 127.0.0.1 --port 7860 > "$SERVER_LOG" 2>&1 &
     SERVER_PID=$!
+    EXPECT_DEGRADED_READY=true
     server_ready=false
     for ((attempt = 0; attempt < SERVER_START_TIMEOUT_SEC; attempt += 1)); do
       if curl -fsS "$HOST/api/live" >/dev/null 2>&1; then
@@ -64,8 +66,10 @@ if [[ -x "$LOCUST_BIN" ]]; then
   fi
 
   curl -fsS "$HOST/api/live" >/dev/null
-  "$LOCUST_BIN" -f tests/locustfile.py --headless -u 10 -r 2 --run-time "$LOAD_RUN_TIME" \
-    --host "$HOST" --csv=perf/be-load --html=perf/be-load.html
+  PERF_EXPECT_DEGRADED_READY="$EXPECT_DEGRADED_READY" \
+    "$LOCUST_BIN" -f tests/locustfile.py --headless -u 10 -r 2 \
+    --run-time "$LOAD_RUN_TIME" --host "$HOST" \
+    --csv=perf/be-load --html=perf/be-load.html
 else
   printf 'status,detail\nskipped,locust unavailable\n' > perf/be-load_stats.csv
 fi

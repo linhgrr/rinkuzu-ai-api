@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from locust import HttpUser, between, task
+from tests.perf_readiness import is_expected_degraded_readiness
 
 
 class ApiUser(HttpUser):
@@ -22,7 +23,22 @@ class ApiUser(HttpUser):
 
     @task(2)
     def ready(self):
-        self.client.get("/api/ready", name="GET /api/ready")
+        allow_degraded = os.getenv("PERF_EXPECT_DEGRADED_READY") == "true"
+        with self.client.get(
+            "/api/ready",
+            name="GET /api/ready",
+            catch_response=True,
+        ) as response:
+            if response.status_code == 200:
+                return
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = None
+            if allow_degraded and is_expected_degraded_readiness(response.status_code, payload):
+                response.success()
+                return
+            response.failure(f"unexpected readiness response: HTTP {response.status_code}")
 
     @task(2)
     def pipeline_jobs(self):
