@@ -122,7 +122,7 @@ jobs:
       - name: Frozen sync (dev + otel)
         run: uv sync --locked --extra dev --extra otel
       - run: bash scripts/perf-be.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: perf-be
           path: |
