@@ -37,7 +37,9 @@ fi
 
 if [[ -x "$LOCUST_BIN" ]]; then
   if ! curl -fsS "$HOST/api/live" >/dev/null 2>&1; then
-    LOAD_MODELS=false "$UVICORN_BIN" api.main:app \
+    LLM_BASE_URL="${LLM_BASE_URL:-https://llm.invalid/v1}" \
+      LLM_MODEL="${LLM_MODEL:-perf-smoke-model}" \
+      LOAD_MODELS=false "$UVICORN_BIN" api.main:app \
       --host 127.0.0.1 --port 7860 > "$SERVER_LOG" 2>&1 &
     SERVER_PID=$!
     server_ready=false
