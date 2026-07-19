@@ -381,7 +381,7 @@ class DeleteSubjectResponse(BaseModel):
 
 
 class ExerciseHistoryResponse(BaseModel):
-    exercise_id: str
+    exercise_id: str = Field(min_length=1)
     concept_idx: int
     concept_name: str
     bloom_level: int = Field(ge=1, le=6)

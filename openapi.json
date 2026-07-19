@@ -2665,6 +2665,7 @@
         "properties": {
           "exercise_id": {
             "type": "string",
+            "minLength": 1,
             "title": "Exercise Id"
           },
           "concept_idx": {
