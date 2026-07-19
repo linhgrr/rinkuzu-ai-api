@@ -37,6 +37,7 @@ from .domains.quiz.draft_tasks import quiz_draft_task_manager
 from .observability import setup_otel, shutdown_otel
 from .shared import mongo_store
 from .shared.persistence import (
+    create_pipeline_job,
     load_pipeline_job,
     load_pipeline_job_cancel_requested,
     save_pipeline_job,
@@ -129,6 +130,7 @@ def _init_pipeline(app: FastAPI) -> None:
 
     settings = get_settings()
     pipeline_service = PipelineService(
+        create_job=create_pipeline_job,
         save_job=save_pipeline_job,
         run_pipeline=run_content_pipeline,
         max_concurrent_jobs=settings.content_pipeline_max_concurrent_jobs,

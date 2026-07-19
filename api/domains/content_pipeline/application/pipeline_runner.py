@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Any, cast
 from loguru import logger
 
 from api.config import get_settings
-from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.errors import (
+    PipelineCacheRebuildError,
+    PipelineStaleWorkerError,
+)
 from api.domains.content_pipeline.infrastructure.runtime import (
     calculate_file_hash,
     get_content_processor_bindings,
@@ -20,6 +23,7 @@ from api.domains.content_pipeline.infrastructure.runtime import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from api.domains.content_pipeline.domain.jobs import PipelineJob
     from api.domains.content_pipeline.domain.relations import (
         JsonObject,
         PipelineDebugArtifact,
@@ -27,7 +31,13 @@ if TYPE_CHECKING:
     )
 
 from .cancellation import JobCancelledError, raise_if_cancelled
-from .ports import LoadCancelFlagFn, LoadJobFn, PersistJobStateFn, SaveJobFn  # noqa: TC001
+from .ports import (
+    LoadCancelFlagFn,
+    LoadJobFn,
+    PersistJobStateFn,
+    SaveJobFn,
+    raise_for_save_outcome,
+)
 from .stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
@@ -233,6 +243,10 @@ class PipelineRunner:
         self._persist_job_state = persist_job_state
         self._chunk_chroma_store = chunk_chroma_store
 
+    async def _save_required(self, job: PipelineJob, *, operation: str) -> None:
+        outcome = await self._save_job(job)
+        raise_for_save_outcome(job, outcome, operation=operation)
+
     async def _check_cancelled(self, job: PipelineJob) -> None:
         """Re-read the job document from Mongo and raise if cancel was requested.
 
@@ -276,7 +290,7 @@ class PipelineRunner:
         )
         job.debug_trace = [item for item in job.debug_trace if item.get("step_id") != step_id]
         job.debug_trace.append(entry)
-        await self._save_job(job)
+        await self._save_required(job, operation=f"starting trace step {step_id}")
 
         try:
             result = await run()
@@ -286,7 +300,7 @@ class PipelineRunner:
             entry["completed_at"] = completed_at
             entry["duration_ms"] = round((completed_at - started_at) * 1000, 2)
             entry["error"] = str(exc)
-            await self._save_job(job)
+            await self._save_required(job, operation=f"failing trace step {step_id}")
             raise
 
         completed_at = time.time()
@@ -302,7 +316,7 @@ class PipelineRunner:
                 )
                 for artifact in artifacts_payload(result)
             ]
-        await self._save_job(job)
+        await self._save_required(job, operation=f"completing trace step {step_id}")
         return result
 
     async def _record_debug_artifact(
@@ -326,7 +340,7 @@ class PipelineRunner:
                     item for item in artifacts if item.get("artifact_id") != artifact_id
                 ]
                 entry["artifacts"].append(normalized)
-                await self._save_job(job)
+                await self._save_required(job, operation=f"recording artifact for {step_id}")
                 return
 
     async def _persist_cancelled(self, job: PipelineJob, exc: JobCancelledError) -> None:
@@ -341,7 +355,7 @@ class PipelineRunner:
         job.completed_at = now
         job.updated_at = now
         job.heartbeat_at = now
-        await self._save_job(job)
+        await self._save_required(job, operation="persisting cancellation")
 
     @staticmethod
     def _cleanup_upload(file_path: str) -> None:
@@ -398,7 +412,7 @@ class PipelineRunner:
 
                 s3_client = get_s3_client()
                 bucket_name = settings.object_storage_bucket
-                cache_key = await try_restore_completed_job_from_s3(
+                cache_restore = await try_restore_completed_job_from_s3(
                     job,
                     file_path=file_path,
                     s3_client=s3_client,
@@ -407,14 +421,18 @@ class PipelineRunner:
                     save_job=self._save_job,
                     populate_metrics=populate_job_metrics_from_result,
                 )
-                if job.status == PipelineStatus.COMPLETED:
+                cache_key = cache_restore.cache_key
+                # S3 hit leaves result populated while status stays non-terminal
+                # until chunk rebuild + complete succeeds.
+                if cache_restore.restored:
                     try:
                         await self._rebuild_reusable_chunks(job, file_path=file_path)
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "[Pipeline] Failed to rebuild reusable chunks for cached job {}",
                             job.job_id,
                         )
+                        raise PipelineCacheRebuildError(str(exc)) from exc
                     return
 
                 document_text_holder: dict[str, Any] = {}
@@ -808,18 +826,34 @@ class PipelineRunner:
         except JobCancelledError as exc:
             await self._persist_cancelled(job, exc)
             return
-        except asyncio.CancelledError as exc:
-            await persist_terminal_failure(
-                job,
-                error=exc,
-                save_job=self._save_job,
+        except PipelineStaleWorkerError as exc:
+            # Stale generation / already terminal: stop cleanly, never force FAILED.
+            logger.info(
+                "[PipelineRunner] Stale worker stop job_id={} outcome={}",
+                job.job_id,
+                exc.outcome,
             )
             return
+        except asyncio.CancelledError as exc:
+            await self._persist_terminal_or_cancel(job, exc)
+            return
         except BaseException as exc:
-            await persist_terminal_failure(
-                job,
-                error=exc,
-                save_job=self._save_job,
-            )
+            await self._persist_terminal_or_cancel(job, exc)
         finally:
             self._cleanup_upload(file_path)
+
+    async def _persist_terminal_or_cancel(self, job: PipelineJob, error: BaseException) -> None:
+        """Persist terminal failure, converting cancel/stale outcomes without FAILED overwrite."""
+        try:
+            await persist_terminal_failure(
+                job,
+                error=error,
+                save_job=self._save_job,
+            )
+        except JobCancelledError as cancel_exc:
+            await self._persist_cancelled(job, cancel_exc)
+        except PipelineStaleWorkerError:
+            logger.info(
+                "[PipelineRunner] Terminal failure skipped (stale/terminal) job_id={}",
+                job.job_id,
+            )

@@ -1,3 +1,14 @@
+from api.domains.content_pipeline.domain.transitions import (
+    CancelJobOutcome,
+    CancelJobResult,
+    CreateJobOutcome,
+    RetryCompensationOutcome,
+    RetryCompensationResult,
+    RetryJobOutcome,
+    RetryJobResult,
+    SaveJobOutcome,
+)
+
 from .document_chunks import delete_chunks_for_job, replace_job_chunks
 from .document_ocr_records import load_document_ocr_record, save_document_ocr_record
 from .ocr_provider_keys import (
@@ -13,6 +24,8 @@ from .ocr_provider_keys import (
     update_ocr_provider_key,
 )
 from .pipeline_jobs import (
+    compensate_failed_retry_reschedule,
+    create_pipeline_job,
     delete_pipeline_job_for_user,
     find_recent_active_job_by_source,
     list_recent_pipeline_jobs,
@@ -22,13 +35,16 @@ from .pipeline_jobs import (
     load_pipeline_job_for_user,
     load_pipeline_job_status_for_user,
     pipeline_job_to_document,
+    request_cancel_pipeline_job_for_user,
     save_pipeline_job,
+    transition_pipeline_job_for_retry,
 )
 from .quiz_drafts import (
     create_quiz_draft,
     delete_quiz_draft_for_user,
     list_recent_quiz_drafts_for_user,
     load_quiz_draft_for_user,
+    request_cancel_quiz_draft_for_user,
     update_quiz_draft_for_user,
 )
 from .subject_progress import (
@@ -41,8 +57,18 @@ from .subject_progress import (
 )
 
 __all__ = [
+    "CancelJobOutcome",
+    "CancelJobResult",
+    "CreateJobOutcome",
     "OcrProviderKeyDuplicateError",
+    "RetryCompensationOutcome",
+    "RetryCompensationResult",
+    "RetryJobOutcome",
+    "RetryJobResult",
+    "SaveJobOutcome",
+    "compensate_failed_retry_reschedule",
     "create_ocr_provider_key",
+    "create_pipeline_job",
     "create_quiz_draft",
     "delete_chunks_for_job",
     "delete_ocr_provider_key",
@@ -71,9 +97,12 @@ __all__ = [
     "record_ocr_key_failure",
     "record_ocr_key_success",
     "replace_job_chunks",
+    "request_cancel_pipeline_job_for_user",
+    "request_cancel_quiz_draft_for_user",
     "save_document_ocr_record",
     "save_pipeline_job",
     "save_subject_progress_snapshot",
+    "transition_pipeline_job_for_retry",
     "update_ocr_provider_key",
     "update_quiz_draft_for_user",
 ]

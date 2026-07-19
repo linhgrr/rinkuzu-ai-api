@@ -2,6 +2,10 @@ from anyio import Path
 import pytest
 
 from api.domains.content_pipeline.application import source_fetch
+from api.domains.content_pipeline.domain.errors import (
+    PipelineInvalidSourceError,
+    PipelineSourceDownloadError,
+)
 
 
 @pytest.mark.asyncio
@@ -34,7 +38,7 @@ async def test_download_source_rejects_non_pdf(monkeypatch, tmp_path):
 
     monkeypatch.setattr(source_fetch, "get_s3_client", FakeS3)
     monkeypatch.setattr(source_fetch, "_bucket_name", lambda: "bucket")
-    with pytest.raises(ValueError, match="not a valid PDF"):
+    with pytest.raises(PipelineInvalidSourceError, match="not a valid PDF"):
         await source_fetch.download_source_to_dir("uploads/x/a.pdf", str(tmp_path))
 
 
@@ -42,5 +46,5 @@ async def test_download_source_rejects_non_pdf(monkeypatch, tmp_path):
 async def test_download_source_raises_when_unconfigured(monkeypatch, tmp_path):
     monkeypatch.setattr(source_fetch, "get_s3_client", lambda: None)
     monkeypatch.setattr(source_fetch, "_bucket_name", lambda: None)
-    with pytest.raises(ValueError, match="not configured"):
+    with pytest.raises(PipelineSourceDownloadError, match="not configured"):
         await source_fetch.download_source_to_dir("uploads/x/a.pdf", str(tmp_path))

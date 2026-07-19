@@ -381,6 +381,7 @@ class OcrProviderKeyDocument(Document):
 class DocumentChunkDocument(Document):
     job_id: str
     subject_id: str
+    generation: int = Field(ge=0)
     chunk_index: int
     text: str
     start_page: int = 0
@@ -390,8 +391,13 @@ class DocumentChunkDocument(Document):
     class Settings:
         name = "al_document_chunks"
         indexes: ClassVar[list[IndexModel]] = [
-            IndexModel([("job_id", ASCENDING), ("chunk_index", ASCENDING)], unique=True),
-            IndexModel([("subject_id", ASCENDING), ("job_id", ASCENDING)]),
+            IndexModel(
+                [("job_id", ASCENDING), ("generation", ASCENDING), ("chunk_index", ASCENDING)],
+                unique=True,
+            ),
+            IndexModel(
+                [("subject_id", ASCENDING), ("job_id", ASCENDING), ("generation", ASCENDING)]
+            ),
         ]
 
 

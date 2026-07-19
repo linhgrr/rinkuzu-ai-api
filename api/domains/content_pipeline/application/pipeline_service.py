@@ -15,9 +15,14 @@ import uuid
 
 from api.config import get_settings
 from api.domains.content_pipeline.application.eta import estimate_eta_seconds
+from api.domains.content_pipeline.domain.errors import (
+    PipelineJobIdCollisionError,
+    PipelineSchedulingUnavailableError,
+)
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.domains.content_pipeline.domain.transitions import CreateJobOutcome
 
-from .ports import SaveJobFn  # noqa: TC001
+from .ports import CreateJobFn, SaveJobFn, raise_for_save_outcome
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
@@ -25,6 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _STALLED_USER_MESSAGE = "Processing stalled and was stopped. You can retry."
+_MAX_JOB_ID_CREATE_ATTEMPTS = 3
 
 
 class RunPipelineFn(Protocol):
@@ -56,12 +62,14 @@ class PipelineService:
 
     def __init__(
         self,
+        create_job: CreateJobFn,
         save_job: SaveJobFn,
         run_pipeline: RunPipelineFn,
         *,
         max_concurrent_jobs: int = 2,
         upload_dir: Path | None = None,
     ):
+        self._create_job = create_job
         self._save_job = save_job
         self._run_pipeline = run_pipeline
         self._scheduled_tasks: dict[str, asyncio.Task[None]] = {}
@@ -89,11 +97,12 @@ class PipelineService:
         job.heartbeat_at = now
         if status.is_terminal:
             job.completed_at = job.completed_at or now
-        saved = await self._save_job(job)
-        if not saved:
-            raise RuntimeError(
-                f"Failed to persist pipeline job {job.job_id} at status={status.value}"
-            )
+        outcome = await self._save_job(job)
+        raise_for_save_outcome(
+            job,
+            outcome,
+            operation=f"persisting status={status.value}",
+        )
 
     async def start_job(
         self,
@@ -125,29 +134,40 @@ class PipelineService:
                 )
                 return self.build_job_from_payload(existing)
 
-        job = self._build_job(
-            file_path=file_path,
-            subject_id=subject_id,
-            user_id=user_id,
-            page_batch_size=page_batch_size,
-        )
-        job.source_s3_key = source_s3_key
-        job.prs_threshold = prs_threshold
-        job.min_confidence = min_confidence
-        job.apply_reduction = apply_reduction
-
-        if not content_processor_available:
-            job.error_code = "pipeline_unavailable"
-            job.user_message = "Processing is temporarily unavailable. Please try again later."
-            job.mark_failed(
-                "Content pipeline modules not available. "
-                f"Expected runtime root: {content_processor_src}"
+        job: PipelineJob | None = None
+        for _attempt in range(_MAX_JOB_ID_CREATE_ATTEMPTS):
+            candidate = self._build_job(
+                file_path=file_path,
+                subject_id=subject_id,
+                user_id=user_id,
+                page_batch_size=page_batch_size,
             )
-            return job
+            candidate.source_s3_key = source_s3_key
+            candidate.prs_threshold = prs_threshold
+            candidate.min_confidence = min_confidence
+            candidate.apply_reduction = apply_reduction
 
-        saved = await self._save_job(job)
-        if not saved:
-            raise RuntimeError(f"Failed to persist pipeline job {job.job_id}")
+            if not content_processor_available:
+                candidate.error_code = "pipeline_unavailable"
+                candidate.user_message = (
+                    "Processing is temporarily unavailable. Please try again later."
+                )
+                candidate.mark_failed(
+                    "Content pipeline modules not available. "
+                    f"Expected runtime root: {content_processor_src}"
+                )
+                return candidate
+
+            outcome = await self._create_job(candidate)
+            if outcome is CreateJobOutcome.CREATED:
+                job = candidate
+                break
+
+        if job is None:
+            raise PipelineJobIdCollisionError(
+                f"Could not allocate a unique pipeline job id after "
+                f"{_MAX_JOB_ID_CREATE_ATTEMPTS} attempts"
+            )
 
         await self.persist_job_state(
             job,
@@ -178,7 +198,7 @@ class PipelineService:
         file_name = Path(file_path).name
         normalized_subject_id = subject_id or Path(file_path).stem
         return PipelineJob(
-            job_id=str(uuid.uuid4())[:8],
+            job_id=str(uuid.uuid4()),
             filename=file_name,
             subject_id=normalized_subject_id,
             user_id=user_id,
@@ -266,11 +286,6 @@ class PipelineService:
             job.completed_at = doc["completed_at"]
         return job
 
-    async def request_cancel(self, job: PipelineJob) -> None:
-        """Flag a job for cooperative cancellation and persist the flag."""
-        job.request_cancel()
-        await self._save_job(job)
-
     async def _fail_as_stalled(self, job: PipelineJob, step: str) -> None:
         job.error_code = "pipeline_stalled"
         job.user_message = _STALLED_USER_MESSAGE
@@ -330,24 +345,15 @@ class PipelineService:
                 continue
             await self._reschedule_from_source(job, download_source)
 
-    async def retry_job(
+    async def reschedule_retried_job(
         self,
         job: PipelineJob,
         *,
         download_source: DownloadSourceFn,
-        max_retry_count: int,
     ) -> None:
-        """Reset a terminal, retryable job and reschedule it from its S3 source."""
-        if not job.status.is_terminal:
-            raise RuntimeError("Job is not in a terminal state")
-        if not job.retryable:
-            raise RuntimeError("Job is not retryable")
-        if job.retry_count >= max_retry_count:
-            raise RuntimeError("Retry limit reached")
+        """Schedule work after an authorized repository retry transition."""
         if not job.source_s3_key:
             raise RuntimeError("Job has no source to retry from")
-        job.reset_for_retry()
-        await self._save_job(job)
         await self._reschedule_from_source(job, download_source)
 
     async def _reschedule_from_source(
@@ -356,26 +362,37 @@ class PipelineService:
         download_source: DownloadSourceFn,
     ) -> None:
         if self._is_shutting_down:
-            raise RuntimeError("Content pipeline is shutting down and cannot reschedule jobs.")
+            raise PipelineSchedulingUnavailableError(
+                "Content pipeline is shutting down and cannot reschedule jobs."
+            )
         if not job.source_s3_key:
-            raise RuntimeError("Job has no source to reschedule from")
-        file_path = await download_source(job.source_s3_key, str(self._upload_dir))
-        await self.persist_job_state(
-            job,
-            PipelineStatus.QUEUED,
-            "Queued for processing",
-            PipelineProgress.INIT,
-        )
-        self._schedule_background_run(
-            job,
-            file_path=file_path,
-            prs_threshold=job.prs_threshold,
-            min_confidence=job.min_confidence,
-            apply_reduction=job.apply_reduction,
-            page_batch_size=job.page_batch_size,
-        )
-        # Yield control so the freshly-scheduled background task can begin.
-        await asyncio.sleep(0)
+            raise ValueError("Job has no source to reschedule from")
+
+        file_path: str | None = None
+        ownership_transferred = False
+        try:
+            file_path = await download_source(job.source_s3_key, str(self._upload_dir))
+            await self.persist_job_state(
+                job,
+                PipelineStatus.QUEUED,
+                "Queued for processing",
+                PipelineProgress.INIT,
+            )
+            self._schedule_background_run(
+                job,
+                file_path=file_path,
+                prs_threshold=job.prs_threshold,
+                min_confidence=job.min_confidence,
+                apply_reduction=job.apply_reduction,
+                page_batch_size=job.page_batch_size,
+            )
+            ownership_transferred = True
+            # Yield control so the freshly-scheduled background task can begin.
+            await asyncio.sleep(0)
+        finally:
+            if file_path is not None and not ownership_transferred:
+                with contextlib.suppress(OSError):
+                    await asyncio.to_thread(Path(file_path).unlink, missing_ok=True)
 
     async def shutdown(
         self,

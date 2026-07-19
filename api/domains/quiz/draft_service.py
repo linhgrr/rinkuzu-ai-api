@@ -11,6 +11,7 @@ import fitz
 from loguru import logger
 
 from api.config import get_settings, normalize_endpoint
+from api.exceptions import AppError
 from api.shared import mongo_store
 from api.shared.document_text import (
     ExtractedDocumentText,
@@ -23,8 +24,10 @@ from api.shared.persistence import (
     delete_quiz_draft_for_user,
     list_recent_quiz_drafts_for_user,
     load_quiz_draft_for_user,
+    request_cancel_quiz_draft_for_user,
     update_quiz_draft_for_user,
 )
+from api.shared.persistence.common import is_storage_infra_error
 from api.shared.s3 import get_quiz_draft_s3_client, get_s3_client
 
 from .extraction import (
@@ -43,6 +46,7 @@ OCR_STEP = 2
 SOURCE_DOWNLOAD_TIMEOUT_SEC = 180
 SOURCE_ENDPOINT_TIMEOUT_SEC = 75
 QUIZ_DRAFT_JOB_TIMEOUT_SEC = 600
+_MAX_S3_KEY_LEN = 1024
 
 
 class QuizDraftServiceError(Exception):
@@ -140,10 +144,8 @@ class QuizDraftService:
             "expires_at": now + timedelta(hours=EXPIRY_HOURS),
         }
 
-        created = await create_quiz_draft(doc)
-        if not created:
-            raise QuizDraftDependencyError("Failed to create draft.")
-        return created
+        # Persistence propagates storage/programming errors; no false None on outage.
+        return await create_quiz_draft(doc)
 
     async def get_draft(self, draft_id: str, user_id: str) -> dict[str, Any]:
         draft = await load_quiz_draft_for_user(draft_id, user_id)
@@ -183,12 +185,80 @@ class QuizDraftService:
         return updated
 
     async def delete_draft(self, draft_id: str, user_id: str) -> dict[str, Any]:
-        deleted = await delete_quiz_draft_for_user(draft_id, user_id)
-        if not deleted:
-            raise QuizDraftNotFoundError("Draft not found.")
+        """Delete a draft: strict load → atomic cancel → local cancel → metadata.
 
-        await asyncio.to_thread(self._delete_pdf_best_effort, deleted.get("pdf", {}).get("s3_key"))
+        Observed delete (including concurrent convergence after observation) is
+        200. Genuine absence is 404. Infrastructure/DB/task errors are 503.
+        Blob cleanup is best-effort after metadata delete and never upgrades a
+        successful delete into a false 500.
+        """
+        # Local import avoids circular import with draft_tasks → draft_service.
+        from .draft_tasks import quiz_draft_task_manager
+
+        try:
+            draft = await load_quiz_draft_for_user(draft_id, user_id)
+            if draft is None:
+                raise QuizDraftNotFoundError("Draft not found.")
+
+            cancelled = await request_cancel_quiz_draft_for_user(draft_id, user_id)
+            if cancelled is not None:
+                draft = cancelled
+            # cancel None after observation: concurrent cleanup; keep observed draft.
+
+            await quiz_draft_task_manager.cancel(draft_id)
+            deleted = await delete_quiz_draft_for_user(draft_id, user_id)
+        except QuizDraftNotFoundError:
+            raise
+        except AppError:
+            raise
+        except Exception as exc:
+            if is_storage_infra_error(exc):
+                logger.exception(
+                    "[quiz_draft] delete_infra_failed draft_id={} user_id={}", draft_id, user_id
+                )
+                raise AppError(
+                    code="service_unavailable",
+                    message="Draft cleanup failed",
+                    detail="Unable to complete draft delete; retry may succeed",
+                    status_code=503,
+                    meta={"retryable": True, "draft_id": draft_id},
+                ) from exc
+            # Programming / invariant errors propagate as generic 500.
+            raise
+
+        if deleted is None:
+            # Metadata already gone after observation: concurrent convergence → 200.
+            return draft
+
+        pdf = deleted.get("pdf") or {}
+        raw_s3_key = pdf.get("s3_key") if isinstance(pdf, dict) else None
+        owned_key = self._owned_pdf_key_or_none(raw_s3_key, user_id)
+        try:
+            await asyncio.to_thread(self._delete_pdf_best_effort, owned_key)
+        except Exception:
+            logger.exception(
+                "[quiz_draft] pdf_cleanup_schedule_failed draft_id={} user_id={}",
+                draft_id,
+                user_id,
+            )
         return deleted
+
+    @staticmethod
+    def _owned_pdf_key_or_none(s3_key: str | None, user_id: str) -> str | None:
+        """Return key only when it has the exact canonical owner prefix."""
+        if not s3_key or not isinstance(s3_key, str):
+            return None
+        normalized = s3_key.strip()
+        if not normalized or len(normalized) > _MAX_S3_KEY_LEN:
+            return None
+        prefix = f"uploads/quiz_extract/{user_id}/"
+        if not normalized.startswith(prefix) or not normalized[len(prefix) :]:
+            logger.warning(
+                "[quiz_draft] skip_pdf_cleanup_non_owned_key user_id={}",
+                user_id,
+            )
+            return None
+        return normalized
 
     async def mark_submitted(self, draft_id: str, user_id: str, quiz_id: str) -> dict[str, Any]:
         existing = await self.get_draft(draft_id, user_id)
@@ -448,8 +518,6 @@ class QuizDraftService:
                         bucket_name,
                         s3_key,
                     )
-                    page_count = await asyncio.to_thread(self._count_pdf_pages, pdf_bytes)
-                    return pdf_bytes, page_count
             except TimeoutError as exc:
                 last_dependency_error = exc
                 logger.warning(
@@ -470,6 +538,9 @@ class QuizDraftService:
                     endpoint_url,
                     str(exc),
                 )
+            else:
+                page_count = await asyncio.to_thread(self._count_pdf_pages, pdf_bytes)
+                return pdf_bytes, page_count
 
         raise QuizDraftDependencyError(
             "Unable to read PDF from object storage after trying all configured endpoints."
@@ -494,8 +565,13 @@ class QuizDraftService:
     @staticmethod
     def _normalize_and_validate_s3_key(s3_key: str, user_id: str) -> str:
         normalized_key = s3_key.strip().lstrip("/")
+        if not normalized_key or len(normalized_key) > _MAX_S3_KEY_LEN:
+            raise QuizDraftValidationError("Forbidden s3_key for current user.")
         required_prefix = f"uploads/quiz_extract/{user_id}/"
-        if not normalized_key.startswith(required_prefix):
+        if (
+            not normalized_key.startswith(required_prefix)
+            or not normalized_key[len(required_prefix) :]
+        ):
             raise QuizDraftValidationError("Forbidden s3_key for current user.")
         return normalized_key
 

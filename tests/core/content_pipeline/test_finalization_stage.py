@@ -1,6 +1,7 @@
 import asyncio
 
 from pydantic import BaseModel
+import pytest
 
 from api.domains.content_pipeline.application.stages.execution import resolve_timeout_policy
 from api.domains.content_pipeline.application.stages.finalization import (
@@ -11,6 +12,7 @@ from api.domains.content_pipeline.application.stages.finalization import (
 )
 from api.domains.content_pipeline.domain.errors import PipelineStageTimeoutError
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.shared.persistence.pipeline_jobs import SaveJobOutcome
 
 
 def test_complete_pipeline_job_persists_completed_status():
@@ -95,7 +97,7 @@ def test_persist_terminal_failure_updates_job_and_saves_once():
 
     async def save_job(job_arg):
         saved_states.append((job_arg.status, job_arg.current_step, job_arg.error_message))
-        return True
+        return SaveJobOutcome.APPLIED
 
     asyncio.run(
         persist_terminal_failure(
@@ -114,6 +116,43 @@ def test_persist_terminal_failure_updates_job_and_saves_once():
     assert saved_states == [
         (PipelineStatus.FAILED, "Error: boom", "boom"),
     ]
+
+
+def test_persist_terminal_failure_skips_stale_generation_without_raise():
+    """STALE_GENERATION must not force FAILED overwrite or raise as hard storage fail."""
+    job = PipelineJob(job_id="job-write-fail", filename="lesson.pdf", subject_id="algebra")
+
+    async def save_job(_job):
+        return SaveJobOutcome.STALE_GENERATION
+
+    asyncio.run(
+        persist_terminal_failure(
+            job,
+            error=RuntimeError("boom"),
+            save_job=save_job,
+        )
+    )
+    # In-memory classification still applied; durable write was intentionally skipped.
+    assert job.status is PipelineStatus.FAILED
+
+
+def test_persist_terminal_failure_cancel_requested_raises_cooperative_cancel():
+    from api.domains.content_pipeline.application.cancellation import JobCancelledError
+
+    job = PipelineJob(job_id="job-cancel-race", filename="lesson.pdf", subject_id="algebra")
+
+    async def save_job(_job):
+        return SaveJobOutcome.CANCEL_REQUESTED
+
+    with pytest.raises(JobCancelledError):
+        asyncio.run(
+            persist_terminal_failure(
+                job,
+                error=RuntimeError("boom"),
+                save_job=save_job,
+            )
+        )
+    assert job.cancel_requested is True
 
 
 def test_classify_terminal_failure_marks_timeouts_as_retryable():

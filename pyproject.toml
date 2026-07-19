@@ -204,7 +204,6 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = [
     "apscheduler.*",
-    "apscheduler",
     "beanie.*",
     "beanie",
     "chromadb.*",
@@ -217,9 +216,8 @@ module = [
     "aiofiles",
     "loguru",
     "boto3",
-    "botocore.client",
+    "botocore.*",
     "networkx",
-    "sklearn.metrics.pairwise",
     "torch",
     "transformers",
     "langchain_chroma",

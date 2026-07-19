@@ -2,6 +2,7 @@
 routers/pipeline.py — Content pipeline endpoints.
 """
 
+import asyncio
 from contextlib import suppress
 from pathlib import Path
 import re
@@ -23,6 +24,17 @@ from api.dependencies import (
     get_session_manager,
     get_session_service,
 )
+from api.domains.content_pipeline.application.cancellation import JobCancelledError
+from api.domains.content_pipeline.domain.errors import (
+    PipelineSchedulingUnavailableError,
+    PipelineSourceDownloadError,
+    PipelineStaleWorkerError,
+)
+from api.domains.content_pipeline.domain.transitions import (
+    CancelJobOutcome,
+    RetryCompensationOutcome,
+    RetryJobOutcome,
+)
 from api.exceptions import (
     AppError,
     PipelineNotCompletedError,
@@ -34,11 +46,15 @@ from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 from api.shared import mongo_store
 from api.shared.persistence import (
+    compensate_failed_retry_reschedule,
     find_recent_active_job_by_source,
     load_pipeline_job_for_user,
     load_pipeline_job_status_for_user,
     load_subject_progress_for_user,
+    request_cancel_pipeline_job_for_user,
+    transition_pipeline_job_for_retry,
 )
+from api.shared.persistence.common import is_storage_infra_error
 from api.shared.persistence.pipeline_jobs import list_recent_pipeline_jobs_all_status
 from api.shared.url_fetch import UnsafeURLError, stream_download
 
@@ -97,6 +113,39 @@ def _pipeline_internal_error(detail: str) -> AppError:
         detail=detail,
         status_code=500,
     )
+
+
+def _pipeline_storage_unavailable(
+    detail: str, *, meta: dict[str, object] | None = None
+) -> AppError:
+    return AppError(
+        code="service_unavailable",
+        message="Storage unavailable",
+        detail=detail,
+        status_code=503,
+        meta={"retryable": True, **(meta or {})},
+    )
+
+
+async def _load_owned_job_or_raise(job_id: str, user_id: str) -> dict[str, Any]:
+    """Owner load: genuine miss → 404; classified storage failure → 503."""
+    try:
+        job_doc = await load_pipeline_job_for_user(job_id, user_id)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[PipelineRouter] load_for_user infra failed job_id={} user_id={}",
+                job_id,
+                user_id,
+            )
+            raise _pipeline_storage_unavailable(
+                "Unable to load pipeline job; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
+    if not job_doc:
+        raise PipelineNotFoundError(job_id)
+    return job_doc
 
 
 def _resolve_pipeline_retry_after_seconds(
@@ -299,7 +348,19 @@ async def list_jobs(
     del request
     settings = get_settings()
     now = time.time()
-    rows = await list_recent_pipeline_jobs_all_status(user_id=user_id, limit=limit)
+    try:
+        rows = await list_recent_pipeline_jobs_all_status(user_id=user_id, limit=limit)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[PipelineRouter] list_jobs infra failed user_id={}",
+                user_id,
+            )
+            raise _pipeline_storage_unavailable(
+                "Unable to list pipeline jobs; retry may succeed",
+                meta={"user_id": user_id},
+            ) from exc
+        raise
     items = []
     for r in rows:
         status_value = r["status"]
@@ -330,11 +391,24 @@ async def get_job_status(
 ) -> Any:
     del request
     """Get pipeline job status and progress."""
-    job_doc = await load_pipeline_job_status_for_user(
-        job_id,
-        user_id,
-        include_debug=include_debug,
-    )
+    try:
+        job_doc = await load_pipeline_job_status_for_user(
+            job_id,
+            user_id,
+            include_debug=include_debug,
+        )
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[PipelineRouter] status load infra failed job_id={} user_id={}",
+                job_id,
+                user_id,
+            )
+            raise _pipeline_storage_unavailable(
+                "Unable to load pipeline job status; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
     if not job_doc:
         raise PipelineNotFoundError(job_id)
 
@@ -440,9 +514,7 @@ async def create_session_from_pipeline(
             }
         )
 
-    job_doc = await load_pipeline_job_for_user(job_id, user_id)
-    if not job_doc:
-        raise PipelineNotFoundError(job_id)
+    job_doc = await _load_owned_job_or_raise(job_id, user_id)
 
     if job_doc.get("status") != "completed":
         raise PipelineNotCompletedError(job_id, job_doc.get("status", "unknown"))
@@ -479,7 +551,20 @@ async def create_session_from_pipeline(
             status_code=409,
         )
 
-    subject_progress = await load_subject_progress_for_user(job_id, user_id)
+    try:
+        subject_progress = await load_subject_progress_for_user(job_id, user_id)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[PipelineRouter] create-session progress load infra failed job_id={} user_id={}",
+                job_id,
+                user_id,
+            )
+            raise _pipeline_storage_unavailable(
+                "Unable to load subject progress for session; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
     session, created = await manager.get_or_create_pipeline_session(
         job_doc=job_doc,
         subject_progress=subject_progress,
@@ -514,33 +599,163 @@ async def cancel_job(
     request: Request,
     job_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
-    pipeline_service: Any = Depends(get_content_pipeline_service),
 ) -> Any:
     """Request cancellation of a pipeline job.
 
     Works regardless of pipeline runtime availability so a stuck job can always
-    be cancelled. No-ops when the job has already reached a terminal state.
+    be cancelled. Uses an owner-scoped atomic Mongo transition (not load-full-save).
+    Terminal jobs are idempotent no-ops.
     """
     del request
-    job_doc = await load_pipeline_job_for_user(job_id, user_id)
-    if not job_doc:
+    try:
+        result = await request_cancel_pipeline_job_for_user(job_id, user_id)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[PipelineRouter] cancel infra failed job_id={} user_id={}", job_id, user_id
+            )
+            raise _pipeline_storage_unavailable(
+                "Unable to cancel pipeline job; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
+
+    if result.outcome is CancelJobOutcome.NOT_FOUND:
         raise PipelineNotFoundError(job_id)
-    status_value = job_doc.get("status")
-    if status_value in {
-        PipelineStatus.COMPLETED.value,
-        PipelineStatus.FAILED.value,
-        PipelineStatus.CANCELLED.value,
-    }:
+    if result.outcome is CancelJobOutcome.CONFLICT:
+        raise AppError(
+            code="conflict",
+            message="Conflict",
+            detail="Pipeline state changed while cancellation was requested. Please retry.",
+            status_code=409,
+            meta={"retryable": True, "job_id": job_id},
+        )
+    if result.outcome is CancelJobOutcome.ALREADY_TERMINAL:
         return ok(
-            {"job_id": job_id, "status": status_value},
+            {"job_id": job_id, "status": result.status},
             meta={"message": "Job already terminal"},
         )
-    job = pipeline_service.build_job_from_payload(job_doc)
-    await pipeline_service.request_cancel(job)
     return ok(
         {"job_id": job_id, "status": "cancelling"},
         meta={"message": "Cancellation requested"},
     )
+
+
+def _raise_for_retry_transition_outcome(job_id: str, transition: Any) -> None:
+    """Map pre-reschedule retry transition outcomes to HTTP errors."""
+    if transition.outcome is RetryJobOutcome.NOT_FOUND:
+        raise PipelineNotFoundError(job_id)
+    if transition.outcome is RetryJobOutcome.INVALID_STATE:
+        raise AppError(
+            code="conflict",
+            message="Conflict",
+            detail="Job is not in a retryable state.",
+            status_code=409,
+        )
+    if transition.outcome is RetryJobOutcome.NOT_RETRYABLE:
+        raise _validation_error("This job cannot be retried.")
+    if transition.outcome is RetryJobOutcome.MAX_RETRIES:
+        raise _validation_error("Retry limit reached")
+    if transition.outcome is RetryJobOutcome.NO_SOURCE:
+        raise _validation_error("Job has no source to retry from")
+    if transition.job is None:
+        raise _pipeline_internal_error("Retry transition returned empty job payload")
+
+
+async def _compensate_and_raise_retry_reschedule_failure(
+    *,
+    job_id: str,
+    user_id: str,
+    retry_count: int,
+    exc: BaseException,
+) -> None:
+    """Safely compensate a retry generation, then classify the original error."""
+    retryable = isinstance(
+        exc,
+        (
+            PipelineSchedulingUnavailableError,
+            PipelineSourceDownloadError,
+            ConnectionError,
+            OSError,
+            TimeoutError,
+        ),
+    ) or is_storage_infra_error(exc)
+    try:
+        compensation = await compensate_failed_retry_reschedule(
+            job_id,
+            user_id,
+            retry_count=retry_count,
+            retryable=retryable,
+        )
+    except Exception as compensate_exc:
+        logger.exception(
+            "[PipelineRouter] retry compensation failed job_id={} user_id={} retry_count={}",
+            job_id,
+            user_id,
+            retry_count,
+        )
+        if isinstance(exc, asyncio.CancelledError):
+            raise exc from None
+        if is_storage_infra_error(compensate_exc):
+            raise _pipeline_storage_unavailable(
+                "Unable to verify failed retry compensation; retry may succeed",
+                meta={"job_id": job_id, "retry_count": retry_count},
+            ) from compensate_exc
+        raise
+
+    logger.info(
+        "[PipelineRouter] retry compensation job_id={} generation={} outcome={} "
+        "persisted_status={} persisted_generation={} cancel_requested={}",
+        job_id,
+        retry_count,
+        compensation.outcome.value,
+        compensation.status,
+        compensation.retry_count,
+        compensation.cancel_requested,
+    )
+
+    if isinstance(exc, asyncio.CancelledError):
+        raise exc
+    if isinstance(exc, JobCancelledError) or (
+        isinstance(exc, PipelineStaleWorkerError)
+        and compensation.outcome
+        in {
+            RetryCompensationOutcome.CANCEL_REQUESTED,
+            RetryCompensationOutcome.STALE_GENERATION,
+            RetryCompensationOutcome.WORKER_STARTED,
+            RetryCompensationOutcome.ALREADY_TERMINAL,
+        }
+    ):
+        raise AppError(
+            code="conflict",
+            message="Conflict",
+            detail="Pipeline state changed while the retry was being scheduled.",
+            status_code=409,
+            meta={
+                "retryable": True,
+                "job_id": job_id,
+                "state": compensation.outcome.value,
+            },
+        ) from exc
+
+    if not retryable:
+        # Programming/invariant failures remain 500s after compensation. Do not
+        # relabel them as transient simply because they occurred during retry.
+        raise exc
+
+    logger.exception(
+        "[PipelineRouter] retry reschedule failed job_id={} user_id={}",
+        job_id,
+        user_id,
+    )
+    raise _pipeline_storage_unavailable(
+        "Unable to schedule retried pipeline job; retry may succeed",
+        meta={
+            "job_id": job_id,
+            "retry_count": retry_count,
+            "error_code": "pipeline_retry_reschedule_failed",
+        },
+    ) from exc
 
 
 @router.post(
@@ -560,31 +775,45 @@ async def retry_job_endpoint(
     del request
     if not availability["available"]:
         raise ServiceUnavailableError("Content pipeline")
-    job_doc = await load_pipeline_job_for_user(job_id, user_id)
-    if not job_doc:
-        raise PipelineNotFoundError(job_id)
-    if job_doc.get("status") not in {
-        PipelineStatus.FAILED.value,
-        PipelineStatus.CANCELLED.value,
-    }:
-        raise AppError(
-            code="conflict",
-            message="Conflict",
-            detail="Job is not in a retryable state.",
-            status_code=409,
-        )
-    if not job_doc.get("retryable"):
-        raise _validation_error("This job cannot be retried.")
     settings = get_settings()
-    job = pipeline_service.build_job_from_payload(job_doc)
     try:
-        await pipeline_service.retry_job(
-            job,
-            download_source=download_source_to_dir,
+        transition = await transition_pipeline_job_for_retry(
+            job_id,
+            user_id,
             max_retry_count=settings.content_pipeline_max_retry_count,
         )
-    except RuntimeError as exc:
-        raise _validation_error(str(exc)) from None
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[PipelineRouter] retry infra failed job_id={} user_id={}", job_id, user_id
+            )
+            raise _pipeline_storage_unavailable(
+                "Unable to retry pipeline job; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
+
+    _raise_for_retry_transition_outcome(job_id, transition)
+    job = pipeline_service.build_job_from_payload(transition.job)
+    try:
+        await pipeline_service.reschedule_retried_job(
+            job,
+            download_source=download_source_to_dir,
+        )
+    except asyncio.CancelledError as exc:
+        await _compensate_and_raise_retry_reschedule_failure(
+            job_id=job_id,
+            user_id=user_id,
+            retry_count=int(job.retry_count),
+            exc=exc,
+        )
+    except Exception as exc:
+        await _compensate_and_raise_retry_reschedule_failure(
+            job_id=job_id,
+            user_id=user_id,
+            retry_count=int(job.retry_count),
+            exc=exc,
+        )
     return ok(
         {
             "job_id": job_id,

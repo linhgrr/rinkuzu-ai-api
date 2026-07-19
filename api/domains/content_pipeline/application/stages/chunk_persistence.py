@@ -17,7 +17,7 @@ from loguru import logger
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 from api.shared.persistence import replace_job_chunks
 
-from .execution import run_blocking_stage, safe_run
+from .execution import run_blocking_stage
 
 if TYPE_CHECKING:
     from langchain_core.documents import Document as LangChainDocument
@@ -36,6 +36,7 @@ async def persist_document_chunks(
     chunk_chroma_store: ChunkChromaStore | None,
     persist_job_state: PersistJobStateFn,
 ) -> int:
+    """Persist chunks to Mongo then Chroma. Storage failures propagate."""
     if not chunks:
         logger.info("[persist_chunks] No chunks to persist")
         return 0
@@ -47,42 +48,31 @@ async def persist_document_chunks(
         PipelineProgress.CHUNKS_PERSISTING,
     )
 
-    async def _persist_mongo() -> None:
-        persisted = await replace_job_chunks(
-            job_id=job.job_id,
-            subject_id=job.subject_id,
-            chunks=chunks,
-        )
-        logger.info(
-            "[persist_chunks] MongoDB: persisted {} chunks",
-            persisted,
-            job_id=job.job_id,
-        )
-
-    await safe_run(
-        _persist_mongo,
-        fail_message="persist_chunks MongoDB write failed, continuing pipeline",
+    persisted = await replace_job_chunks(
+        job_id=job.job_id,
+        subject_id=job.subject_id,
+        generation=job.retry_count,
+        chunks=chunks,
+    )
+    logger.info(
+        "[persist_chunks] MongoDB: persisted {} chunks",
+        persisted,
+        job_id=job.job_id,
     )
 
     if chunk_chroma_store is not None:
-
-        async def _persist_chroma() -> None:
-            ids = await run_blocking_stage(
-                chunk_chroma_store.replace_chunks,
-                chunks=chunks,
-                job_id=job.job_id,
-                subject_id=job.subject_id,
-                stage_name="chroma_replace_chunks",
-            )
-            logger.info(
-                "[persist_chunks] ChromaDB: added {} chunks",
-                len(ids),
-                job_id=job.job_id,
-            )
-
-        await safe_run(
-            _persist_chroma,
-            fail_message="persist_chunks ChromaDB write failed, continuing pipeline",
+        ids = await run_blocking_stage(
+            chunk_chroma_store.replace_chunks,
+            chunks=chunks,
+            job_id=job.job_id,
+            subject_id=job.subject_id,
+            generation=job.retry_count,
+            stage_name="chroma_replace_chunks",
+        )
+        logger.info(
+            "[persist_chunks] ChromaDB: added {} chunks",
+            len(ids),
+            job_id=job.job_id,
         )
 
     await persist_job_state(

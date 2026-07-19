@@ -22,12 +22,14 @@ from sentence_transformers import SentenceTransformer
 import torch
 
 from api.config import get_settings
+from api.exceptions import AppError
 from api.shared.persistence import (
     load_pipeline_job_for_user,
     load_subject_progress_by_session_for_user,
     load_subject_progress_for_user,
     save_subject_progress_snapshot,
 )
+from api.shared.persistence.common import is_storage_infra_error
 
 from .environment import AdaptiveLearningEnv
 from .exercise_types.payloads import ExercisePayload
@@ -419,9 +421,21 @@ class SessionManager:
 
         try:
             subject_progress = await load_subject_progress_for_user(job_id, user_id=user_id)
-        except Exception:
-            logger.exception("[Session] Error loading saved subject progress, starting fresh")
-            return [], 0, 0
+        except Exception as exc:
+            if is_storage_infra_error(exc):
+                logger.exception(
+                    "[Session] Error loading saved subject progress job_id={} user_id={}",
+                    job_id,
+                    user_id,
+                )
+                raise AppError(
+                    code="service_unavailable",
+                    message="Session service unavailable",
+                    detail="Unable to load saved subject progress",
+                    status_code=503,
+                    meta={"retryable": True, "job_id": job_id, "user_id": user_id},
+                ) from exc
+            raise
 
         if subject_progress and subject_progress.get("exercise_history"):
             prev_history = subject_progress["exercise_history"]
@@ -534,6 +548,61 @@ class SessionManager:
             raise RuntimeError(f"Failed to persist subject progress for {session.session_id}")
         return session
 
+    async def _load_progress_for_recovery(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> dict[str, Any] | None:
+        try:
+            return await load_subject_progress_by_session_for_user(session_id, user_id)
+        except Exception as exc:
+            if is_storage_infra_error(exc):
+                logger.exception(
+                    "[Session] progress load failed during recovery session={}",
+                    session_id,
+                )
+                raise AppError(
+                    code="service_unavailable",
+                    message="Session service unavailable",
+                    detail="Unable to load saved session progress",
+                    status_code=503,
+                    meta={
+                        "retryable": True,
+                        "session_id": session_id,
+                        "user_id": user_id,
+                    },
+                ) from exc
+            raise
+
+    async def _load_job_for_recovery(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        job_id: str,
+    ) -> dict[str, Any] | None:
+        try:
+            return await load_pipeline_job_for_user(job_id, user_id)
+        except Exception as exc:
+            if is_storage_infra_error(exc):
+                logger.exception(
+                    "[Session] pipeline job load failed during recovery session={}",
+                    session_id,
+                )
+                raise AppError(
+                    code="service_unavailable",
+                    message="Session service unavailable",
+                    detail="Unable to load pipeline job for session recovery",
+                    status_code=503,
+                    meta={
+                        "retryable": True,
+                        "session_id": session_id,
+                        "user_id": user_id,
+                        "job_id": job_id,
+                    },
+                ) from exc
+            raise
+
     async def get_or_recover_session(
         self,
         session_id: str,
@@ -564,7 +633,7 @@ class SessionManager:
                 return active
 
             if session_doc is None:
-                session_doc = await load_subject_progress_by_session_for_user(session_id, user_id)
+                session_doc = await self._load_progress_for_recovery(session_id, user_id)
             if not session_doc:
                 return None
 
@@ -576,7 +645,11 @@ class SessionManager:
                         session_id,
                     )
                     return None
-                job_doc = await load_pipeline_job_for_user(job_id, user_id)
+                job_doc = await self._load_job_for_recovery(
+                    session_id=session_id,
+                    user_id=user_id,
+                    job_id=job_id,
+                )
             if not job_doc:
                 logger.warning(
                     "[Session] Cannot recover session={}: pipeline job {} not found",
@@ -634,9 +707,11 @@ class SessionManager:
             logger.info(
                 "[Session] Recovered session={} for user={} from Mongo", session_id, user_id
             )
+        except AppError:
+            raise
         except Exception:
             logger.exception("[Session] Failed recovering session={}", session_id)
-            return None
+            raise
         else:
             return recovered
 

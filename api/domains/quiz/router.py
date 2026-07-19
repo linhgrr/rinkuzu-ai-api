@@ -1,8 +1,9 @@
 """Quiz domain HTTP endpoints: draft processing + ask-AI tutor."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from loguru import logger
 from sse_starlette import EventSourceResponse
 
 from api.config import get_settings
@@ -12,6 +13,7 @@ from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 from api.shared.llm import SSE_STREAM_HEADERS
+from api.shared.persistence.common import is_storage_infra_error
 
 from .draft_service import (
     QuizDraftDependencyError,
@@ -36,14 +38,31 @@ drafts_router = APIRouter(prefix="/api/v1/quiz/drafts", tags=["quiz-drafts"])
 tutor_router = APIRouter(prefix="/api/v1/quiz", tags=["quiz"])
 
 
-def _service_error_to_http(exc: Exception) -> HTTPException:
+def _service_error_to_http(exc: Exception) -> NoReturn:
+    """Map known draft errors; re-raise unexpected so the global handler returns 500.
+
+    Storage infrastructure → AppError 503 retryable. Known NotFound/Validation stay
+    404/400. Dependency (config) stays 503. Programmer/Pydantic errors are not
+    converted to DependencyError or synthetic HTTPException 500.
+    """
     if isinstance(exc, QuizDraftNotFoundError):
-        return HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if isinstance(exc, QuizDraftValidationError):
-        return HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if isinstance(exc, QuizDraftDependencyError):
-        return HTTPException(status_code=503, detail=str(exc))
-    return HTTPException(status_code=500, detail="Quiz draft operation failed.")
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if isinstance(exc, AppError):
+        raise exc
+    if is_storage_infra_error(exc):
+        logger.exception("[quiz_draft] storage infra error")
+        raise AppError(
+            code="service_unavailable",
+            message="Quiz draft storage unavailable",
+            detail="Unable to complete quiz draft operation; retry may succeed",
+            status_code=503,
+            meta={"retryable": True},
+        ) from exc
+    raise exc
 
 
 @drafts_router.post("", response_model=StandardResponse[QuizDraftSingleResponse])
@@ -59,7 +78,7 @@ async def create_quiz_draft(
     try:
         draft = await service.create_draft(req, user_id)
     except Exception as exc:
-        raise _service_error_to_http(exc) from exc
+        _service_error_to_http(exc)
 
     quiz_draft_task_manager.schedule(draft["draft_id"], user_id)
     return ok({"draft": public_draft(draft)})
@@ -75,7 +94,10 @@ async def list_quiz_drafts(
     """List recent quiz drafts for the authenticated user."""
     del request
     service = QuizDraftService()
-    drafts = await service.list_drafts(user_id, limit)
+    try:
+        drafts = await service.list_drafts(user_id, limit)
+    except Exception as exc:
+        _service_error_to_http(exc)
     return ok({"drafts": [public_draft(draft) for draft in drafts]})
 
 
@@ -92,7 +114,7 @@ async def get_quiz_draft(
     try:
         draft = await service.get_draft(draft_id, user_id)
     except Exception as exc:
-        raise _service_error_to_http(exc) from exc
+        _service_error_to_http(exc)
     return ok({"draft": public_draft(draft)})
 
 
@@ -110,7 +132,7 @@ async def patch_quiz_draft(
     try:
         draft = await service.patch_draft(draft_id, user_id, req)
     except Exception as exc:
-        raise _service_error_to_http(exc) from exc
+        _service_error_to_http(exc)
     return ok({"draft": public_draft(draft)})
 
 
@@ -121,14 +143,17 @@ async def delete_quiz_draft(
     draft_id: PathID,
     user_id: Annotated[str, Depends(get_current_user)],
 ) -> Any:
-    """Delete a quiz draft owned by the authenticated user."""
+    """Delete a quiz draft owned by the authenticated user.
+
+    Observed delete is 200; genuine absence is 404; infrastructure errors are
+    503. Not universally idempotent after metadata removal.
+    """
     del request
     service = QuizDraftService()
     try:
         draft = await service.delete_draft(draft_id, user_id)
     except Exception as exc:
-        raise _service_error_to_http(exc) from exc
-    await quiz_draft_task_manager.cancel(draft_id)
+        _service_error_to_http(exc)
     return ok({"draft": public_draft(draft)})
 
 
@@ -146,7 +171,7 @@ async def submit_quiz_draft(
     try:
         draft = await service.mark_submitted(draft_id, user_id, req.quiz_id)
     except Exception as exc:
-        raise _service_error_to_http(exc) from exc
+        _service_error_to_http(exc)
     return ok({"draft": public_draft(draft)})
 
 

@@ -2,7 +2,7 @@ minimum_pre_commit_version: "3.7.0"
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.7
+    rev: v0.15.16
     hooks:
       - id: ruff
         args: [--fix]
@@ -43,7 +43,7 @@ repos:
         name: mypy api
         entry: >-
           bash -lc 'PYTHON=.venv/bin/python; [ -x "$PYTHON" ] || PYTHON=python;
-          exec "$PYTHON" -m mypy api/ --ignore-missing-imports'
+          exec "$PYTHON" -m mypy api/'
         language: system
         pass_filenames: false
         types: [python]

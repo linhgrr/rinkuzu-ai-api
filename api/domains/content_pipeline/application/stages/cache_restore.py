@@ -3,21 +3,82 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 import json
 import time
 from typing import Any
 
+from botocore.exceptions import BotoCoreError, ClientError
 from loguru import logger
 
 from api.config import get_settings
+from api.domains.content_pipeline.domain.errors import PipelineStageTimeoutError
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
 
-from ..ports import SaveJobFn  # noqa: TC001
+from ..ports import SaveJobFn, raise_for_save_outcome
 from .execution import run_blocking_stage
 
 LoadMongoJobFn = Callable[[str], Awaitable[dict[str, Any] | None]]
 PopulateMetricsFn = Callable[[PipelineJob], None]
 HashFileFn = Callable[[str], str]
+
+
+@dataclass(frozen=True, slots=True)
+class S3CacheRestoreResult:
+    cache_key: str | None
+    restored: bool
+
+
+def _is_degradable_cache_error(exc: BaseException) -> bool:
+    """Return true only for a genuine miss or provider/transport outage."""
+    if isinstance(exc, ClientError):
+        response = exc.response or {}
+        code = str(response.get("Error", {}).get("Code", ""))
+        status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        return code in {
+            "NoSuchKey",
+            "NotFound",
+            "404",
+            "AccessDenied",
+            "RequestTimeout",
+            "SlowDown",
+            "ServiceUnavailable",
+            "InternalError",
+        } or status in {403, 404, 408, 429, 500, 502, 503, 504}
+    return isinstance(
+        exc,
+        (
+            BotoCoreError,
+            ConnectionError,
+            OSError,
+            PipelineStageTimeoutError,
+            TimeoutError,
+        ),
+    )
+
+
+def _validate_cached_result(payload: Any) -> dict[str, Any]:
+    """Validate the minimum durable pipeline result contract without coercion."""
+    if not isinstance(payload, dict):
+        raise TypeError("S3 pipeline cache must contain a JSON object")
+    expected_types: dict[str, type] = {
+        "concepts_data": dict,
+        "concept_map": dict,
+        "prereq_edges": list,
+        "graph": dict,
+        "stats": dict,
+    }
+    for field, expected_type in expected_types.items():
+        if field not in payload or not isinstance(payload[field], expected_type):
+            raise ValueError(f"S3 pipeline cache field {field!r} has an invalid shape")
+    if any(
+        not isinstance(concept_id, str) or isinstance(index, bool) or not isinstance(index, int)
+        for concept_id, index in payload["concept_map"].items()
+    ):
+        raise ValueError("S3 pipeline cache concept_map must map string ids to integers")
+    if any(not isinstance(item, dict) for item in payload["prereq_edges"]):
+        raise ValueError("S3 pipeline cache prereq_edges must contain objects")
+    return payload
 
 
 async def try_restore_completed_job_from_mongo(
@@ -62,10 +123,10 @@ async def try_restore_completed_job_from_s3(
     hash_file: HashFileFn,
     save_job: SaveJobFn,
     populate_metrics: PopulateMetricsFn,
-) -> str | None:
+) -> S3CacheRestoreResult:
     """Restore a completed job from S3 JSON cache when available."""
     if not s3_client or not bucket_name:
-        return None
+        return S3CacheRestoreResult(cache_key=None, restored=False)
 
     file_hash = await run_blocking_stage(
         hash_file,
@@ -80,7 +141,11 @@ async def try_restore_completed_job_from_s3(
     job.progress = PipelineProgress.CACHE_RESTORE
     job.updated_at = now
     job.heartbeat_at = now
-    await save_job(job)
+    raise_for_save_outcome(
+        job,
+        await save_job(job),
+        operation="persisting S3 cache lookup state",
+    )
 
     settings = get_settings()
     cache_timeout_sec = max(1.0, float(settings.content_pipeline_cache_restore_timeout_sec))
@@ -90,7 +155,6 @@ async def try_restore_completed_job_from_s3(
         cache_key,
         cache_timeout_sec,
     )
-    saved = False
     try:
         response: dict[str, Any] = await run_blocking_stage(
             s3_client.get_object,
@@ -105,15 +169,10 @@ async def try_restore_completed_job_from_s3(
             timeout_sec=cache_timeout_sec,
         )
         cache_content = cache_bytes.decode("utf-8")
-        job.result = json.loads(cache_content)
-        populate_metrics(job)
-        job.status = PipelineStatus.COMPLETED
-        job.current_step = "Loaded from S3 cache"
-        job.progress = PipelineProgress.COMPLETE
-        job.completed_at = time.time()
-        logger.info("[Pipeline] Job {} loaded from S3 cache {}", job.job_id, cache_key)
-        saved = await save_job(job)
+        cached_result = _validate_cached_result(json.loads(cache_content))
     except Exception as exc:
+        if not _is_degradable_cache_error(exc):
+            raise
         logger.warning(
             "[Pipeline] S3 cache unavailable/miss job_id={} key={} error_type={} error={}",
             job.job_id,
@@ -121,7 +180,20 @@ async def try_restore_completed_job_from_s3(
             type(exc).__name__,
             str(exc)[:200],
         )
-        return cache_key
-    if not saved:
-        raise RuntimeError("Failed to persist S3-cached pipeline result to MongoDB")
-    return cache_key
+        return S3CacheRestoreResult(cache_key=cache_key, restored=False)
+
+    job.result = cached_result
+    populate_metrics(job)
+    # Stay non-terminal until chunk rebuild succeeds — never expose a false
+    # COMPLETED usable state when rebuild cannot finish.
+    job.status = PipelineStatus.LOADING
+    job.current_step = "Loaded from S3 cache"
+    job.progress = PipelineProgress.CHUNKS_PERSISTING
+    job.completed_at = None
+    logger.info("[Pipeline] Job {} loaded from S3 cache {}", job.job_id, cache_key)
+    raise_for_save_outcome(
+        job,
+        await save_job(job),
+        operation="persisting S3-cached pipeline result",
+    )
+    return S3CacheRestoreResult(cache_key=cache_key, restored=True)

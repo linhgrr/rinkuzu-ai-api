@@ -7,6 +7,7 @@ from api.domains.content_pipeline.application.pipeline_runner import (
     populate_job_metrics_from_result,
 )
 from api.domains.content_pipeline.domain.jobs import PipelineJob
+from api.shared.persistence.pipeline_jobs import SaveJobOutcome
 
 
 def test_populate_job_metrics_from_result_derives_summary_fields():
@@ -38,7 +39,7 @@ def test_pipeline_runner_keeps_constructor_dependencies():
         return False
 
     async def save_job(job):
-        return True
+        return SaveJobOutcome.APPLIED
 
     async def persist_job_state(job, status, step, progress):
         return None

@@ -32,6 +32,7 @@ from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
 from api.shared.llm import SSE_STREAM_HEADERS
+from api.shared.persistence import load_pipeline_job_for_user
 
 from .schemas import (
     ExerciseResponse,
@@ -146,13 +147,18 @@ async def _build_rag_context(
 
     Returns an empty string if retrieval fails or no chunks are found.
     """
-    if chunk_store is None or not session.job_id:
+    if chunk_store is None or not session.job_id or not session.user_id:
         return ""
 
     try:
+        job = await load_pipeline_job_for_user(session.job_id, session.user_id)
+        if not job or job.get("status") != "completed":
+            return ""
+        generation = int(job.get("retry_count") or 0)
         docs = await chunk_store.aretrieve(
             query=user_question,
             job_id=session.job_id,
+            generation=generation,
             k=k,
         )
         if not docs:
@@ -163,7 +169,7 @@ async def _build_rag_context(
             page = doc.metadata.get("start_page", "?")
             blocks.append(f"[Đoạn {i}] (trang {page})\n{doc.page_content}")
         return "\n\n".join(blocks)
-    except BaseException as exc:
+    except Exception as exc:
         logger.warning("[RAG] Retrieval failed, continuing without context: {}", exc)
         return ""
 

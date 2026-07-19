@@ -225,3 +225,26 @@ def test_list_jobs_custom_limit_is_forwarded(monkeypatch):
     client.get("/api/v1/pipeline/jobs?limit=10")
 
     assert received == [10]
+
+
+def test_list_jobs_storage_outage_returns_503(monkeypatch):
+    from pymongo.errors import ServerSelectionTimeoutError
+
+    async def _boom(**_kwargs):
+        raise ServerSelectionTimeoutError("mongo down")
+
+    monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _boom)
+    client = _build_client()
+    response = client.get("/api/v1/pipeline/jobs")
+    assert response.status_code == 503
+    assert response.json()["error"]["meta"]["retryable"] is True
+
+
+def test_list_jobs_programmer_error_returns_500(monkeypatch):
+    async def _boom(**_kwargs):
+        raise ValueError("bug")
+
+    monkeypatch.setattr(pipeline, "list_recent_pipeline_jobs_all_status", _boom)
+    client = _build_client()
+    response = client.get("/api/v1/pipeline/jobs")
+    assert response.status_code == 500

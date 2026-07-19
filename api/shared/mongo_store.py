@@ -45,7 +45,6 @@ async def init_mongo(mongodb_uri: str | None = None) -> bool:
         _state["available"] = False
         return False
 
-    allow_index_dropping = get_settings().environment in {"dev", "staging"}
     skip_indexes = bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
     try:
@@ -67,7 +66,10 @@ async def init_mongo(mongodb_uri: str | None = None) -> bool:
                 OcrProviderKeyDocument,
                 LlmUsageDocument,
             ],
-            allow_index_dropping=allow_index_dropping,
+            # Index drops/replacements are migration-owned in every environment.
+            # Startup may create missing safe indexes, but it must never bypass an
+            # approved dry-run/apply/verify DDL plan.
+            allow_index_dropping=False,
             skip_indexes=skip_indexes,
         )
         _state["client"] = client

@@ -5,32 +5,30 @@ import time
 import pytest
 
 from api.domains.content_pipeline.application.pipeline_service import PipelineService
-from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.jobs import PipelineStatus
+from api.domains.content_pipeline.domain.transitions import CreateJobOutcome, SaveJobOutcome
 
 
 def _make_service(saved, run_calls):
+    async def create_job(job):
+        saved[job.job_id] = job
+        return CreateJobOutcome.CREATED
+
     async def save_job(job):
         saved[job.job_id] = job
-        return True
+        return SaveJobOutcome.APPLIED
 
     async def run_pipeline(
         job, file_path, prs_threshold, min_confidence, *, apply_reduction, page_batch_size
     ):
         run_calls.append(job.job_id)
 
-    return PipelineService(save_job=save_job, run_pipeline=run_pipeline, max_concurrent_jobs=2)
-
-
-@pytest.mark.asyncio
-async def test_request_cancel_persists_flag():
-    saved = {}
-    svc = _make_service(saved, [])
-    job = PipelineJob(
-        job_id="j1", filename="a.pdf", subject_id="a", status=PipelineStatus.EXTRACTING
+    return PipelineService(
+        create_job=create_job,
+        save_job=save_job,
+        run_pipeline=run_pipeline,
+        max_concurrent_jobs=2,
     )
-    await svc.request_cancel(job)
-    assert job.cancel_requested is True
-    assert saved["j1"].cancel_requested is True
 
 
 @pytest.mark.asyncio
@@ -158,55 +156,6 @@ async def test_recovery_fails_job_without_source():
     )
     assert saved["nosrc"].status is PipelineStatus.FAILED
     assert "nosrc" not in run_calls
-
-
-@pytest.mark.asyncio
-async def test_retry_job_reschedules_from_source():
-    saved = {}
-    run_calls = []
-    svc = _make_service(saved, run_calls)
-    job = PipelineJob(job_id="r1", filename="a.pdf", subject_id="a", status=PipelineStatus.FAILED)
-    job.retryable = True
-    job.source_s3_key = "k1"
-
-    async def download_source(s3_key, dest_dir):
-        return f"/tmp/{s3_key}.pdf"
-
-    await svc.retry_job(job, download_source=download_source, max_retry_count=3)
-    assert job.retry_count == 1
-    assert job.status is PipelineStatus.QUEUED
-    assert "r1" in run_calls
-
-
-@pytest.mark.asyncio
-async def test_retry_job_rejects_non_retryable():
-    saved = {}
-    svc = _make_service(saved, [])
-    job = PipelineJob(job_id="r2", filename="a.pdf", subject_id="a", status=PipelineStatus.FAILED)
-    job.retryable = False
-    job.source_s3_key = "k"
-
-    async def download_source(s3_key, dest_dir):
-        return "/tmp/x.pdf"
-
-    with pytest.raises(RuntimeError):
-        await svc.retry_job(job, download_source=download_source, max_retry_count=3)
-
-
-@pytest.mark.asyncio
-async def test_retry_job_rejects_over_limit():
-    saved = {}
-    svc = _make_service(saved, [])
-    job = PipelineJob(job_id="r3", filename="a.pdf", subject_id="a", status=PipelineStatus.FAILED)
-    job.retryable = True
-    job.source_s3_key = "k"
-    job.retry_count = 3
-
-    async def download_source(s3_key, dest_dir):
-        return "/tmp/x.pdf"
-
-    with pytest.raises(RuntimeError):
-        await svc.retry_job(job, download_source=download_source, max_retry_count=3)
 
 
 @pytest.mark.asyncio

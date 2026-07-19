@@ -11,13 +11,15 @@ from typing import Any
 from loguru import logger
 
 from api.domains.content_pipeline.domain.errors import (
+    PipelineCacheRebuildError,
     PipelineQualityGateError,
     PipelineStageTimeoutError,
 )
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineProgress, PipelineStatus
+from api.domains.content_pipeline.domain.transitions import SaveJobOutcome
 from api.shared.persistence.common import normalize_for_bson
 
-from ..ports import PersistJobStateFn, SaveJobFn  # noqa: TC001
+from ..ports import PersistJobStateFn, SaveJobFn, raise_for_save_outcome
 from .execution import run_blocking_stage, safe_run
 
 
@@ -81,7 +83,7 @@ async def persist_terminal_failure(
     error: BaseException,
     save_job: SaveJobFn,
 ) -> None:
-    """Persist a terminal job state without raising secondary errors."""
+    """Persist a terminal job state, failing closed when storage rejects it."""
     details = classify_terminal_failure(job, error)
     now = time.time()
     job.completed_at = now
@@ -99,12 +101,19 @@ async def persist_terminal_failure(
         details.status.value,
         details.error_message,
     )
-    if not await safe_run(
-        lambda: save_job(job),
-        fail_message=f"Failed to persist terminal failure state for job {job.job_id}",
-        fallback=False,
-    ):
-        logger.error("[Pipeline] Failed to persist terminal failure state for job {}", job.job_id)
+    outcome = await save_job(job)
+    if outcome is SaveJobOutcome.APPLIED:
+        return
+    if outcome in (SaveJobOutcome.STALE_GENERATION, SaveJobOutcome.ALREADY_TERMINAL):
+        # Do not overwrite a newer generation or existing terminal; stop cleanly.
+        logger.info(
+            "[Pipeline] Terminal failure save skipped job_id={} outcome={}",
+            job.job_id,
+            outcome.value,
+        )
+        return
+    # CANCEL_REQUESTED (and any unexpected outcome) → explicit cooperative cancel path.
+    raise_for_save_outcome(job, outcome, operation="persisting terminal failure")
 
 
 def classify_terminal_failure(job: PipelineJob, error: BaseException) -> TerminalFailureDetails:
@@ -134,6 +143,16 @@ def classify_terminal_failure(job: PipelineJob, error: BaseException) -> Termina
             user_message="Processing is taking longer than expected. Please try again.",
             retryable=True,
             current_step=f"Timed out while {stage_hint}.",
+        )
+
+    if isinstance(error, PipelineCacheRebuildError):
+        return TerminalFailureDetails(
+            status=PipelineStatus.FAILED,
+            error_code="pipeline_cache_rebuild_failed",
+            error_message=str(error),
+            user_message="Cached processing finished, but retrieval data could not be rebuilt. Please retry.",
+            retryable=True,
+            current_step="Failed to rebuild cached retrieval data.",
         )
 
     if isinstance(error, PipelineQualityGateError):

@@ -193,16 +193,15 @@ async def save_subject_progress_snapshot(
 
 
 async def load_subject_progress_for_user(job_id: str, user_id: str) -> dict[str, Any] | None:
-    try:
-        doc = await SubjectProgressDocument.find_one(
-            SubjectProgressDocument.job_id == job_id,
-            SubjectProgressDocument.user_id == user_id,
-        )
-    except Exception:
-        logger.exception(
-            "[SubjectProgressStore] load_for_user failed job_id={} user_id={}", job_id, user_id
-        )
-        return None
+    """Load progress for one owned subject.
+
+    Returns ``None`` only for genuine absence. Database/infrastructure failures
+    propagate so callers never treat unavailable storage as empty progress.
+    """
+    doc = await SubjectProgressDocument.find_one(
+        SubjectProgressDocument.job_id == job_id,
+        SubjectProgressDocument.user_id == user_id,
+    )
     return None if doc is None else _document_to_legacy_payload(doc)
 
 
@@ -210,18 +209,15 @@ async def load_subject_progress_by_session_for_user(
     session_id: str,
     user_id: str,
 ) -> dict[str, Any] | None:
-    try:
-        doc = await SubjectProgressDocument.find_one(
-            SubjectProgressDocument.last_session_id == session_id,
-            SubjectProgressDocument.user_id == user_id,
-        )
-    except Exception:
-        logger.exception(
-            "[SubjectProgressStore] load_by_session_for_user failed session_id={} user_id={}",
-            session_id,
-            user_id,
-        )
-        return None
+    """Load progress by session id for one owner.
+
+    Returns ``None`` only for genuine absence. Infrastructure failures
+    propagate (never masked as missing).
+    """
+    doc = await SubjectProgressDocument.find_one(
+        SubjectProgressDocument.last_session_id == session_id,
+        SubjectProgressDocument.user_id == user_id,
+    )
     return None if doc is None else _document_to_legacy_payload(doc)
 
 
@@ -231,13 +227,9 @@ async def load_many_subject_progress_for_user(
 ) -> dict[str, dict[str, Any]]:
     if not job_ids:
         return {}
-    try:
-        docs = await SubjectProgressDocument.find(
-            {"job_id": {"$in": job_ids}, "user_id": user_id}
-        ).to_list()
-    except Exception:
-        logger.exception("[SubjectProgressStore] load_many_for_user failed user_id={}", user_id)
-        return {}
+    docs = await SubjectProgressDocument.find(
+        {"job_id": {"$in": job_ids}, "user_id": user_id}
+    ).to_list()
     return {doc.job_id: _document_to_legacy_payload(doc) for doc in docs}
 
 
@@ -246,22 +238,23 @@ async def list_recent_subject_progress(
     limit: int = 50,
     user_id: str | None = None,
 ) -> list[dict[str, Any]]:
+    """List recent subject progress rows.
+
+    Genuine empty result is ``[]``. Database/infrastructure failures propagate so
+    history endpoints never map an outage to a successful empty list.
+    """
     filters: list[Any] = []
     if user_id is not None:
         filters.append(SubjectProgressDocument.user_id == user_id)
-    try:
-        rows = await (
-            SubjectProgressDocument.find(
-                *filters,
-                projection_model=SubjectProgressSummaryProjection,
-            )
-            .sort(("updated_at", SortDirection.DESCENDING))
-            .limit(limit)
-            .to_list()
+    rows = await (
+        SubjectProgressDocument.find(
+            *filters,
+            projection_model=SubjectProgressSummaryProjection,
         )
-    except Exception:
-        logger.exception("[SubjectProgressStore] list_recent failed")
-        return []
+        .sort(("updated_at", SortDirection.DESCENDING))
+        .limit(limit)
+        .to_list()
+    )
     return [
         {
             "job_id": row.job_id,

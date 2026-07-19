@@ -5,10 +5,11 @@ history.py — Endpoints for querying persisted subject progress and pipeline jo
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from loguru import logger
 
 from api.config import get_settings
 from api.dependencies import get_current_user
-from api.exceptions import PipelineNotFoundError
+from api.exceptions import AppError, PipelineNotFoundError
 from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
@@ -21,6 +22,7 @@ from api.shared.persistence import (
     load_pipeline_job_for_user,
     load_subject_progress_for_user,
 )
+from api.shared.persistence.common import is_storage_infra_error
 
 from .progress_metrics import (
     build_prereq_graph_from_edges,
@@ -37,6 +39,20 @@ from .schemas import (
 
 router = APIRouter(prefix="/api/v1/history", tags=["history"])
 _MASTERED_THRESHOLD = float(get_settings().adaptive_mastery_threshold)
+
+
+def _history_storage_unavailable(
+    detail: str,
+    *,
+    meta: dict[str, object] | None = None,
+) -> AppError:
+    return AppError(
+        code="service_unavailable",
+        message="History service unavailable",
+        detail=detail,
+        status_code=503,
+        meta={"retryable": True, **(meta or {})},
+    )
 
 
 def _to_progress_percent(mastered_concept: int, all_concept: int) -> int:
@@ -194,19 +210,32 @@ async def list_subjects(
     user_id: str = Depends(get_current_user),
 ) -> Any:
     del request
-    """List all completed pipeline jobs (= subjects) enriched with mastery stats."""
-    subjects = await list_recent_pipeline_jobs(
-        limit=limit,
-        user_id=user_id,
-        status="completed",
-    )
+    """List all completed pipeline jobs (= subjects) enriched with mastery stats.
 
-    if not subjects:
-        return ok({"subjects": [], "count": 0})
+    Genuine empty data is 200 with []. Classified storage failures are retryable
+    503 (never empty-200 on outage). Non-infra errors re-raise as 500.
+    """
+    try:
+        subjects = await list_recent_pipeline_jobs(
+            limit=limit,
+            user_id=user_id,
+            status="completed",
+        )
 
-    job_ids = [s["job_id"] for s in subjects]
-    progress_map = await load_many_subject_progress_for_user(job_ids, user_id)
-    full_job_map = await load_many_pipeline_jobs_for_user(job_ids, user_id)
+        if not subjects:
+            return ok({"subjects": [], "count": 0})
+
+        job_ids = [s["job_id"] for s in subjects]
+        progress_map = await load_many_subject_progress_for_user(job_ids, user_id)
+        full_job_map = await load_many_pipeline_jobs_for_user(job_ids, user_id)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception("[history] list_subjects infra failed user_id={}", user_id)
+            raise _history_storage_unavailable(
+                "Unable to list subjects; retry may succeed",
+                meta={"user_id": user_id},
+            ) from exc
+        raise
 
     for subj in subjects:
         jid = subj["job_id"]
@@ -232,10 +261,25 @@ async def list_subject_progress(
     user_id: str = Depends(get_current_user),
 ) -> Any:
     del request
-    """List recent subject-level progress records."""
-    progress_docs = await list_recent_subject_progress(limit=limit, user_id=user_id)
-    job_ids = [job_id for doc in progress_docs if isinstance((job_id := doc.get("job_id")), str)]
-    job_map = await load_many_pipeline_jobs_for_user(job_ids, user_id)
+    """List recent subject-level progress records.
+
+    Genuine empty data is 200 with an empty list. Classified storage failures
+    are retryable 503 (never empty-200 on outage).
+    """
+    try:
+        progress_docs = await list_recent_subject_progress(limit=limit, user_id=user_id)
+        job_ids = [
+            job_id for doc in progress_docs if isinstance((job_id := doc.get("job_id")), str)
+        ]
+        job_map = await load_many_pipeline_jobs_for_user(job_ids, user_id)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception("[history] list_subject_progress infra failed user_id={}", user_id)
+            raise _history_storage_unavailable(
+                "Unable to list subject progress; retry may succeed",
+                meta={"user_id": user_id},
+            ) from exc
+        raise
     items = []
     for progress_doc in progress_docs:
         job_id = progress_doc.get("job_id")
@@ -254,11 +298,25 @@ async def get_subject_history(
 ) -> Any:
     del request
     """Get subject-level learning history for one pipeline job."""
-    job_doc = await load_pipeline_job_for_user(job_id, user_id)
-    if not job_doc:
-        raise PipelineNotFoundError(job_id)
-
-    progress_doc = await load_subject_progress_for_user(job_id, user_id)
+    try:
+        job_doc = await load_pipeline_job_for_user(job_id, user_id)
+        if not job_doc:
+            raise PipelineNotFoundError(job_id)
+        progress_doc = await load_subject_progress_for_user(job_id, user_id)
+    except PipelineNotFoundError:
+        raise
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[history] get_subject_history infra failed job_id={} user_id={}",
+                job_id,
+                user_id,
+            )
+            raise _history_storage_unavailable(
+                "Unable to load subject history; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
     return ok(_build_subject_progress_detail(job_doc, progress_doc))
 
 
@@ -270,8 +328,21 @@ async def list_pipeline_jobs(
     user_id: str = Depends(get_current_user),
 ) -> Any:
     del request
-    """List recent pipeline jobs."""
-    jobs = await list_recent_pipeline_jobs(limit=limit, user_id=user_id)
+    """List recent pipeline jobs.
+
+    Genuine empty data is 200 with []. Classified storage failures are retryable
+    503 (never empty-200 on outage). Non-infra errors re-raise as 500.
+    """
+    try:
+        jobs = await list_recent_pipeline_jobs(limit=limit, user_id=user_id)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception("[history] list_pipeline_jobs infra failed user_id={}", user_id)
+            raise _history_storage_unavailable(
+                "Unable to list pipeline jobs; retry may succeed",
+                meta={"user_id": user_id},
+            ) from exc
+        raise
     return ok({"jobs": jobs, "count": len(jobs)})
 
 
@@ -284,7 +355,20 @@ async def get_pipeline_job(
 ) -> Any:
     del request
     """Get full pipeline job result."""
-    doc = await load_pipeline_job_for_user(job_id, user_id)
+    try:
+        doc = await load_pipeline_job_for_user(job_id, user_id)
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[history] get_pipeline_job infra failed job_id={} user_id={}",
+                job_id,
+                user_id,
+            )
+            raise _history_storage_unavailable(
+                "Unable to load pipeline job; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
     if not doc:
         raise PipelineNotFoundError(job_id)
     return ok(doc)
@@ -300,12 +384,32 @@ async def delete_subject(
     delete_sessions: bool = True,
 ) -> Any:
     del request
-    """Delete a subject (pipeline job) and optionally its sessions."""
-    result = await delete_pipeline_job_for_user(
-        job_id=job_id,
-        user_id=user_id,
-        delete_sessions=delete_sessions,
-    )
+    """Delete a subject (pipeline job) and optionally its sessions.
+
+    Outcomes:
+    - genuine absence / ownership miss → 404
+    - classified database / infrastructure failure → 503 (retryable)
+    - unexpected programming failure → 500 via global handler
+    """
+    try:
+        result = await delete_pipeline_job_for_user(
+            job_id=job_id,
+            user_id=user_id,
+            delete_sessions=delete_sessions,
+        )
+    except Exception as exc:
+        if is_storage_infra_error(exc):
+            logger.exception(
+                "[history] delete_subject_infra_failed job_id={} user_id={}",
+                job_id,
+                user_id,
+            )
+            raise _history_storage_unavailable(
+                "Unable to delete subject; retry may succeed",
+                meta={"job_id": job_id},
+            ) from exc
+        raise
+
     if result.get("deleted_job", 0) == 0:
         raise PipelineNotFoundError(job_id)
 

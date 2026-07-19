@@ -7,10 +7,20 @@ from enum import Enum
 from typing import Any, cast
 
 from pydantic import BaseModel
+from pymongo.errors import PyMongoError
 
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def is_storage_infra_error(exc: BaseException) -> bool:
+    """True for classified DB / transport failures (retryable 503 at HTTP edges)."""
+    if isinstance(exc, PyMongoError):
+        return True
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    return bool(isinstance(exc, RuntimeError) and str(exc) == "MongoDB client not initialized")
 
 
 def ensure_utc(value: datetime) -> datetime:

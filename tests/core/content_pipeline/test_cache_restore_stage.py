@@ -1,11 +1,20 @@
 import asyncio
 
+import pytest
+
 from api.domains.content_pipeline.application.stages import cache_restore as cache_restore_stage
 from api.domains.content_pipeline.application.stages.cache_restore import (
     try_restore_completed_job_from_mongo,
     try_restore_completed_job_from_s3,
 )
 from api.domains.content_pipeline.domain.jobs import PipelineJob, PipelineStatus
+from api.domains.content_pipeline.domain.transitions import SaveJobOutcome
+
+_VALID_CACHE_BYTES = (
+    b'{"concepts_data":{"c1":{"name":"One"}},"concept_map":{"c1":0},'
+    b'"prereq_edges":[],"graph":{"nodes":[],"edges":[]},'
+    b'"stats":{"num_nodes":1,"num_edges":0}}'
+)
 
 
 async def _load_completed_job(job_id: str):
@@ -73,9 +82,7 @@ def test_try_restore_completed_job_from_s3_hashes_and_reads_via_blocking_stage(m
 
     class _Body:
         def read(self) -> bytes:
-            return (
-                b'{"concept_map":{"c1":0},"prereq_edges":[],"stats":{"num_nodes":1,"num_edges":0}}'
-            )
+            return _VALID_CACHE_BYTES
 
     class _S3Client:
         def get_object(self, **kwargs):
@@ -92,11 +99,11 @@ def test_try_restore_completed_job_from_s3_hashes_and_reads_via_blocking_stage(m
 
     async def save_job(_job):
         saved_steps.append(_job.current_step)
-        return True
+        return SaveJobOutcome.APPLIED
 
     monkeypatch.setattr(cache_restore_stage, "run_blocking_stage", fake_run_blocking_stage)
 
-    cache_key = asyncio.run(
+    restore = asyncio.run(
         try_restore_completed_job_from_s3(
             job,
             file_path="/tmp/upload.pdf",
@@ -108,8 +115,52 @@ def test_try_restore_completed_job_from_s3_hashes_and_reads_via_blocking_stage(m
         )
     )
 
-    assert cache_key == "cache/hash-123.json"
+    assert restore.cache_key == "cache/hash-123.json"
+    assert restore.restored is True
     assert stage_names == ["s3_cache_hash", "s3_cache_restore", "s3_cache_body_read"]
     assert saved_steps == ["Kiểm tra cache trên S3...", "Loaded from S3 cache"]
-    assert job.status == PipelineStatus.COMPLETED
+    # Cache hit stays non-terminal until chunk rebuild completes.
+    assert job.status == PipelineStatus.LOADING
     assert job.current_step == "Loaded from S3 cache"
+    assert job.result is not None
+
+
+def test_s3_cache_hit_storage_failure_propagates(monkeypatch):
+    job = PipelineJob(job_id="job-4", filename="upload.pdf", subject_id="math")
+
+    class _Body:
+        def read(self) -> bytes:
+            return _VALID_CACHE_BYTES
+
+    class _S3Client:
+        def get_object(self, **_kwargs):
+            return {"Body": _Body()}
+
+    async def fake_run_blocking_stage(func, *args, **kwargs):
+        kwargs.pop("stage_name")
+        kwargs.pop("timeout_sec", None)
+        return func(*args, **kwargs)
+
+    save_calls = 0
+
+    async def save_job(_job):
+        nonlocal save_calls
+        save_calls += 1
+        if save_calls == 2:
+            raise RuntimeError("storage write failed")
+        return SaveJobOutcome.APPLIED
+
+    monkeypatch.setattr(cache_restore_stage, "run_blocking_stage", fake_run_blocking_stage)
+
+    with pytest.raises(RuntimeError, match="storage write failed"):
+        asyncio.run(
+            try_restore_completed_job_from_s3(
+                job,
+                file_path="/tmp/upload.pdf",
+                s3_client=_S3Client(),
+                bucket_name="bucket-1",
+                hash_file=lambda _path: "hash-456",
+                save_job=save_job,
+                populate_metrics=lambda _job: None,
+            )
+        )
