@@ -6,22 +6,16 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from loguru import logger
-from sse_starlette import EventSourceResponse
 
 from api.config import get_settings
 from api.dependencies import (
-    get_chunk_chroma_store,
     get_current_user,
     get_session_manager,
     get_session_service,
     resolve_user_session,
 )
+from api.domains.assistant.context_tokens import ExerciseContext, issue_context_token
 from api.domains.learning.bloom import BLOOM_LABELS
-from api.domains.quiz.tutor_chat import (
-    create_tutor_chat_stream,
-    generate_tutor_chat_response,
-    sanitize_chat_input,
-)
 from api.exceptions import (
     AppError,
     ExerciseGenerationError,
@@ -31,7 +25,6 @@ from api.exceptions import (
 from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
-from api.shared.llm import SSE_STREAM_HEADERS
 from api.shared.persistence import load_pipeline_job_for_user
 
 from .schemas import (
@@ -44,8 +37,6 @@ from .schemas import (
     SubmitAnswerRequest,
     SubmitAnswerResponse,
     TheoryResponse,
-    TutorChatRequest,
-    TutorChatResponse,
 )
 
 router = APIRouter(prefix="/api/v1/session", tags=["session"])
@@ -96,45 +87,29 @@ def _build_public_exercise_payload(session: Any, exercise: Any) -> dict[str, Any
 
     content = get_handler(exercise.payload.exercise_type).to_response_dict(exercise)
     payload = _build_exercise_response_payload(exercise, env_stats, content)
+    if not session.user_id:
+        raise AppError(
+            code="service_unavailable",
+            message="Exercise context unavailable",
+            detail="The learning session has no authenticated owner",
+            status_code=503,
+        )
+    context_id = f"adaptive:{session.session_id}:{exercise.exercise_id}"
+    payload["exercise_context_id"] = context_id
+    payload["exercise_context_token"] = issue_context_token(
+        ExerciseContext(
+            context_id=context_id,
+            user_id=session.user_id,
+            question=_resolve_exercise_question(exercise),
+            options=_resolve_exercise_options(exercise),
+            concept_name=exercise.concept_name,
+            bloom_level=exercise.bloom_level,
+            session_id=session.session_id,
+            exercise_id=exercise.exercise_id,
+        )
+    )
     payload["recommendation_reason"] = session._current_recommendation_reason
     return payload
-
-
-async def _get_tutor_chat_history(session: Any, exercise_id: str) -> list[dict[str, str]]:
-    async with session._lock:
-        if session.tutor_chat_exercise_id != exercise_id:
-            session.tutor_chat_exercise_id = exercise_id
-            session.tutor_chat_history = []
-        return [dict(item) for item in session.tutor_chat_history]
-
-
-async def _append_tutor_chat_turn(
-    session: Any,
-    *,
-    exercise_id: str,
-    user_question: str,
-    assistant_response: str,
-) -> None:
-    sanitized_user_question = sanitize_chat_input(user_question)
-    sanitized_assistant_response = (
-        str(assistant_response).replace("<", "").replace(">", "").strip()[:4000]
-    )
-
-    if not sanitized_user_question or not sanitized_assistant_response:
-        return
-
-    async with session._lock:
-        if session.tutor_chat_exercise_id != exercise_id:
-            session.tutor_chat_exercise_id = exercise_id
-            session.tutor_chat_history = []
-
-        session.tutor_chat_history.extend(
-            [
-                {"role": "user", "content": sanitized_user_question},
-                {"role": "assistant", "content": sanitized_assistant_response},
-            ]
-        )
-        session.tutor_chat_history = session.tutor_chat_history[-12:]
 
 
 async def _build_rag_context(
@@ -351,104 +326,6 @@ def _resolve_exercise_options(exercise: Any) -> list[str]:
     from api.domains.learning.exercise_types.registry import get_handler
 
     return get_handler(exercise.payload.exercise_type).tutor_options(exercise)
-
-
-@router.post("/{session_id}/chat", response_model=StandardResponse[TutorChatResponse])
-@limiter.limit(get_settings().rate_limit_tutor_chat, exempt_when=is_admin_request)
-async def chat_about_exercise(
-    request: Request,
-    session_id: PathID,
-    req: TutorChatRequest,
-    manager: Any = Depends(get_session_manager),
-    user_id: str = Depends(get_current_user),
-    chunk_store: Any = Depends(get_chunk_chroma_store),
-) -> Any:
-    """Chat with an AI tutor about the current exercise, with optional RAG context."""
-    del request
-    session = await resolve_user_session(manager, session_id, user_id)
-    exercise = session.current_exercise or (
-        session.exercise_history[-1] if session.exercise_history else None
-    )
-    if not exercise:
-        raise ExerciseGenerationError("No exercise context available for chat")
-
-    question = _resolve_exercise_question(exercise)
-    options = _resolve_exercise_options(exercise)
-
-    # Adaptive chat history is server-owned so browser refreshes or forged
-    # chatHistory payloads cannot alter the session's tutor context.
-    chat_history = await _get_tutor_chat_history(session, exercise.exercise_id)
-
-    # RAG: retrieve relevant document chunks for this question
-    rag_context = await _build_rag_context(
-        session,
-        chunk_store,
-        req.user_question,
-        k=3,
-    )
-
-    try:
-        if req.stream:
-
-            async def persist_chat_history(full_response: str) -> None:
-                await _append_tutor_chat_turn(
-                    session,
-                    exercise_id=exercise.exercise_id,
-                    user_question=req.user_question,
-                    assistant_response=full_response,
-                )
-
-            stream = await create_tutor_chat_stream(
-                question=question,
-                options=options,
-                user_question=req.user_question,
-                chat_history=chat_history,
-                concept_name=exercise.concept_name,
-                bloom_level=exercise.bloom_level,
-                rag_context=rag_context,
-                on_complete=persist_chat_history,
-            )
-            return EventSourceResponse(
-                stream,
-                headers=SSE_STREAM_HEADERS,
-                ping=15,
-                send_timeout=30,
-            )
-
-        explanation = await generate_tutor_chat_response(
-            question=question,
-            options=options,
-            user_question=req.user_question,
-            chat_history=chat_history,
-            concept_name=exercise.concept_name,
-            bloom_level=exercise.bloom_level,
-            rag_context=rag_context,
-        )
-        await _append_tutor_chat_turn(
-            session,
-            exercise_id=exercise.exercise_id,
-            user_question=req.user_question,
-            assistant_response=explanation,
-        )
-    except ValueError as exc:
-        logger.warning("[SessionRouter] Tutor chat ValueError: {}", exc)
-        raise AppError(
-            code="validation_error",
-            message="Invalid tutor chat request",
-            detail=str(exc),
-            status_code=400,
-        ) from exc
-    except RuntimeError as exc:
-        logger.warning("[SessionRouter] Tutor chat RuntimeError: {}", exc)
-        raise AppError(
-            code="service_unavailable",
-            message="Tutor service temporarily unavailable",
-            detail=str(exc),
-            status_code=502,
-        ) from exc
-    else:
-        return ok({"explanation": explanation})
-    # Unexpected errors fall through to the global unexpected_exception_handler.
 
 
 @router.get("/{session_id}/status", response_model=StandardResponse[SessionStatusResponse])

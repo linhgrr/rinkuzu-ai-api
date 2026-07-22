@@ -11,7 +11,8 @@ from typing import Annotated, Any
 import uuid
 
 import aiofiles
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request
+import fitz
 import httpx
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
@@ -127,6 +128,23 @@ def _pipeline_storage_unavailable(
     )
 
 
+def _enforce_pdf_page_limit(file_path: Path, max_pages: int) -> int:
+    """Validate the real PDF structure and page count, cleaning rejected uploads."""
+    try:
+        with fitz.open(file_path) as pdf_document:
+            page_count = int(pdf_document.page_count)
+    except Exception:
+        with suppress(OSError):
+            file_path.unlink()
+        raise _validation_error("Uploaded file is not a readable PDF.") from None
+
+    if page_count <= 0 or page_count > max_pages:
+        with suppress(OSError):
+            file_path.unlink()
+        raise _validation_error(f"PDF must contain between 1 and {max_pages} pages.")
+    return page_count
+
+
 async def _load_owned_job_or_raise(job_id: str, user_id: str) -> dict[str, Any]:
     """Owner load: genuine miss → 404; classified storage failure → 503."""
     try:
@@ -221,6 +239,7 @@ async def process_document(  # noqa: C901
     user_id: Annotated[str, Depends(get_current_user)],
     availability: Annotated[dict, Depends(get_content_pipeline_availability)],
     pipeline_service: Any = Depends(get_content_pipeline_service),
+    x_rinkuzu_pdf_page_limit: Annotated[int, Header(ge=1, le=100)] = 30,
 ) -> Any:
     """Run the full content processing pipeline from an S3 uploaded file."""
     _ = request  # SlowAPI requires the Request parameter for rate-limit context.
@@ -284,6 +303,15 @@ async def process_document(  # noqa: C901
             raise _validation_error("Uploaded file is not a valid PDF.")
     except OSError:
         raise _pipeline_internal_error("Failed to verify uploaded file.") from None
+
+    # The BFF derives this tier limit from the entitlement registry and sends it
+    # over the service-token-authenticated channel. Count pages from the actual
+    # downloaded file so a client cannot bypass the cap with forged metadata.
+    effective_page_limit = min(
+        x_rinkuzu_pdf_page_limit,
+        settings.content_pipeline_max_pdf_pages,
+    )
+    _enforce_pdf_page_limit(save_path, effective_page_limit)
 
     async def _find_recent_duplicate(
         uid: str, source_s3_key: str, window_sec: int

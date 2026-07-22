@@ -1,11 +1,4 @@
-"""
-tutor_core.py — Shared LLM plumbing for both tutor surfaces (adaptive + quiz).
-
-Both tutors build their own messages (adaptive: text + RAG/concept context;
-quiz: multimodal question/option images) then hand off here. Retry (including
-the open→first-token stream phase) now lives in the LLM client, so this module
-only shapes messages into a reply or an SSE stream.
-"""
+"""Shared LLM response and SSE plumbing for Ask Rin-chan."""
 
 from __future__ import annotations
 

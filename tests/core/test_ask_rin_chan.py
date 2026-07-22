@@ -4,12 +4,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.domains.quiz import tutor_chat, tutor_core
+from api.domains.assistant import service as ask_rin
+from api.domains.assistant import streaming
 
 
 def test_build_tutor_prompt_ignores_suspicious_history_messages():
     prompt = asyncio.run(
-        tutor_chat.build_tutor_prompt(
+        ask_rin.build_tutor_prompt(
             question="2 + 2 bằng bao nhiêu?",
             options=["3", "4", "5", "6"],
             user_question="Giải thích giúp mình",
@@ -33,12 +34,12 @@ def test_build_chat_context_falls_back_when_summary_generation_fails(monkeypatch
     async def _raise_summary_failure(**_kwargs):
         raise RuntimeError("upstream unavailable")
 
-    monkeypatch.setattr(tutor_chat, "_request_text_response", _raise_summary_failure)
-    monkeypatch.setattr(tutor_chat, "_CHAT_HISTORY_TOKEN_BUDGET", 1)
+    monkeypatch.setattr(ask_rin, "_request_text_response", _raise_summary_failure)
+    monkeypatch.setattr(ask_rin, "_CHAT_HISTORY_TOKEN_BUDGET", 1)
 
     history = [{"role": "user", "content": f"Câu hỏi {index}"} for index in range(8)]
 
-    context = asyncio.run(tutor_chat.build_chat_context(history))
+    context = asyncio.run(ask_rin.build_chat_context(history))
     assert "HỘI THOẠI GẦN ĐÂY" in context
     assert "Câu hỏi 2" in context
     assert "Câu hỏi 7" in context
@@ -46,7 +47,7 @@ def test_build_chat_context_falls_back_when_summary_generation_fails(monkeypatch
 
 def test_build_tutor_prompt_excludes_current_user_question_from_history():
     prompt = asyncio.run(
-        tutor_chat.build_tutor_prompt(
+        ask_rin.build_tutor_prompt(
             question="2 + 2 bằng bao nhiêu?",
             options=["3", "4", "5", "6"],
             user_question="Giải thích giúp mình",
@@ -82,19 +83,22 @@ async def test_create_tutor_chat_stream_emits_streaming_sse_events(monkeypatch):
         exercise_llm_model="exercise-model",
         llm_model="shared-model",
     )
-    monkeypatch.setattr(tutor_core, "astream_text_completion", fake_astream)
-    monkeypatch.setattr(tutor_chat, "get_settings", lambda: settings)
-    monkeypatch.setattr(tutor_chat, "_resolve_shared_llm_model", lambda _model: "exercise-model")
+    monkeypatch.setattr(streaming, "astream_text_completion", fake_astream)
+    monkeypatch.setattr(ask_rin, "get_settings", lambda: settings)
+    monkeypatch.setattr(ask_rin, "_resolve_shared_llm_model", lambda _model: "exercise-model")
 
     completed: list[str] = []
 
     async def on_complete(text: str) -> None:
         completed.append(text)
 
-    stream = await tutor_chat.create_tutor_chat_stream(
-        question="2 + 2 bằng bao nhiêu?",
-        options=["3", "4", "5", "6"],
-        user_question="Giải thích giúp mình",
+    stream = await ask_rin.get_ask_rin_chan_service().create_stream(
+        ask_rin.AskRinRequestContext(
+            action="ask_rin_chan",
+            question="2 + 2 bằng bao nhiêu?",
+            options=["3", "4", "5", "6"],
+            user_question="Giải thích giúp mình",
+        ),
         on_complete=on_complete,
     )
     body = b"".join([chunk async for chunk in stream]).decode("utf-8")

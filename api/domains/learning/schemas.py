@@ -5,7 +5,7 @@ Covers exercises, session lifecycle, knowledge graph, and subject history.
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from api.domains.content_pipeline.domain.jobs import PipelineStatus
 from api.domains.content_pipeline.schemas import PipelineJobListItemResponse
@@ -63,6 +63,8 @@ class ExerciseResponseBase(BaseModel):
     question: str
     step: int
     max_steps: int
+    exercise_context_id: str
+    exercise_context_token: str
     theory: TheoryResponse | None = None
     recommendation_reason: RecommendationReason | None = None
 
@@ -156,30 +158,6 @@ class LearningStepResponse(BaseModel):
     theory: TheoryResponse | None = None
     exercise: ExerciseResponse
     cache_status: Literal["served", "created"]
-
-
-class TutorChatMessage(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str = Field(..., min_length=1, max_length=4000)
-
-
-class TutorChatRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    user_question: str = Field(..., alias="userQuestion", min_length=1, max_length=1000)
-    chat_history: list[TutorChatMessage] = Field(
-        default_factory=list,
-        alias="chatHistory",
-        description=(
-            "Deprecated for adaptive tutor chat. Adaptive chat history is owned by "
-            "the server session and this field is ignored."
-        ),
-    )
-    stream: bool = False
-
-
-class TutorChatResponse(BaseModel):
-    explanation: str
 
 
 # ── Session lifecycle ───────────────────────────────────────

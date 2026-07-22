@@ -1,10 +1,9 @@
-"""Quiz domain HTTP endpoints: draft processing + ask-AI tutor."""
+"""Quiz draft processing endpoints."""
 
 from typing import Annotated, Any, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from loguru import logger
-from sse_starlette import EventSourceResponse
 
 from api.config import get_settings
 from api.dependencies import get_current_user
@@ -12,7 +11,6 @@ from api.exceptions import AppError
 from api.rate_limit import is_admin_request, limiter
 from api.schemas.common import StandardResponse, ok
 from api.schemas.validators import PathID
-from api.shared.llm import SSE_STREAM_HEADERS
 from api.shared.persistence.common import is_storage_infra_error
 
 from .draft_service import (
@@ -23,19 +21,15 @@ from .draft_service import (
     public_draft,
 )
 from .draft_tasks import quiz_draft_task_manager
-from .quiz_tutor import create_quiz_tutor_stream, generate_quiz_tutor_response
 from .schemas import (
     QuizDraftCreateRequest,
     QuizDraftListResponse,
     QuizDraftPatchRequest,
     QuizDraftSingleResponse,
     QuizDraftSubmitRequest,
-    QuizTutorRequest,
-    QuizTutorResponseData,
 )
 
 drafts_router = APIRouter(prefix="/api/v1/quiz/drafts", tags=["quiz-drafts"])
-tutor_router = APIRouter(prefix="/api/v1/quiz", tags=["quiz"])
 
 
 def _service_error_to_http(exc: Exception) -> NoReturn:
@@ -173,57 +167,3 @@ async def submit_quiz_draft(
     except Exception as exc:
         _service_error_to_http(exc)
     return ok({"draft": public_draft(draft)})
-
-
-@tutor_router.post("/ask-ai", response_model=StandardResponse[QuizTutorResponseData])
-@limiter.limit(get_settings().rate_limit_ask_ai, exempt_when=is_admin_request)
-async def ask_ai_about_quiz(
-    request: Request,
-    req: QuizTutorRequest,
-    user_id: Annotated[str, Depends(get_current_user)],
-) -> Any:
-    """Ask an AI tutor for help understanding a quiz question (stream or single response)."""
-    del request
-    del user_id
-
-    try:
-        if req.stream:
-            stream = await create_quiz_tutor_stream(
-                question=req.question,
-                options=req.options,
-                user_question=req.user_question,
-                chat_history=[item.model_dump() for item in req.chat_history],
-                question_image=req.question_image,
-                option_images=req.option_images,
-            )
-            return EventSourceResponse(
-                stream,
-                headers=SSE_STREAM_HEADERS,
-                ping=15,
-                send_timeout=30,
-            )
-
-        payload = await generate_quiz_tutor_response(
-            question=req.question,
-            options=req.options,
-            user_question=req.user_question,
-            chat_history=[item.model_dump() for item in req.chat_history],
-            question_image=req.question_image,
-            option_images=req.option_images,
-        )
-        data = QuizTutorResponseData.model_validate(payload)
-        return ok(data.model_dump())
-    except ValueError as exc:
-        raise AppError(
-            code="validation_error",
-            message="Invalid tutor request",
-            detail=str(exc),
-            status_code=400,
-        ) from exc
-    except RuntimeError as exc:
-        raise AppError(
-            code="service_unavailable",
-            message="Tutor service unavailable",
-            detail=str(exc),
-            status_code=502,
-        ) from exc

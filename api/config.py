@@ -121,9 +121,7 @@ class Settings(BaseSettings):
     log_format: str = "text"  # text | json
     otel_enabled: bool = False
     otel_service_name: str = "rinkuzu-ai-api"
-    rate_limit_tutor_chat: str = "30/minute"
     rate_limit_pipeline: str = "5/minute"
-    rate_limit_ask_ai: str = "20/minute"
     rate_limit_session: str = "30/minute"
     rate_limit_quiz_drafts: str = "20/minute"
     rate_limit_history: str = "30/minute"
@@ -208,6 +206,10 @@ class Settings(BaseSettings):
     content_pipeline_stage_timeout_sec: float = 300
     content_pipeline_graph_cycle_timeout_sec: float = 900
     content_pipeline_pdf_page_batch_size: int = 10
+    content_pipeline_max_pdf_pages: int = Field(
+        default=100,
+        validation_alias="CONTENT_PIPELINE_MAX_PDF_PAGES",
+    )
     content_pipeline_pdf_batch_max_bytes: int = 4 * 1024 * 1024
     content_pipeline_batch_failure_ratio_threshold: float = 0.5
     content_pipeline_llm_request_timeout_sec: float = Field(

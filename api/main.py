@@ -14,11 +14,11 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from .config import get_settings
+from .domains.assistant import router as ask_rin_router
 from .domains.content_pipeline import router as pipeline_router
 from .domains.learning import history_router, knowledge_router
 from .domains.learning import router as session_router
 from .domains.quiz.router import drafts_router as quiz_drafts_router
-from .domains.quiz.router import tutor_router as quiz_tutor_router
 from .exceptions import error_json_response, register_exception_handlers
 from .lifespan import lifespan
 from .middleware.request_context import RequestContextMiddleware
@@ -202,9 +202,9 @@ app.include_router(knowledge_router.router)
 app.include_router(pipeline_router.router)
 app.include_router(history_router.router)
 app.include_router(quiz_drafts_router)
-app.include_router(quiz_tutor_router)
 app.include_router(admin_ocr_keys_router.router)
 app.include_router(admin_usage_router.router)
+app.include_router(ask_rin_router.router)
 
 
 @app.get("/api/live", include_in_schema=False)

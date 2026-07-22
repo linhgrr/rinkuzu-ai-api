@@ -1,6 +1,4 @@
-"""
-tutor_chat.py — Adaptive tutor-chat prompt and validation logic.
-"""
+"""Ask Rin-chan prompt construction, safety checks, and LLM orchestration."""
 
 from __future__ import annotations
 
@@ -19,7 +17,7 @@ from api.shared.llm import (
 )
 from api.shared.llm_usage import LlmAction
 
-from .tutor_core import generate_tutor_text, stream_tutor_sse
+from .streaming import generate_tutor_text, stream_tutor_sse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -178,7 +176,7 @@ async def _request_text_response(
     temperature: float,
     timeout_sec: float,
     max_tokens: int | None = None,
-    action: str = LlmAction.ADAPTIVE_TUTOR_CHAT,
+    action: str = LlmAction.ASK_RIN_CHAN,
 ) -> str:
     return await ainvoke_text_completion(
         messages=[
@@ -215,7 +213,7 @@ async def summarize_chat_history(chat_history: list[dict[str, str]]) -> str:
             temperature=0.2,
             timeout_sec=get_settings().llm_timeout_sec,
             max_tokens=_SUMMARY_MAX_OUTPUT_TOKENS,
-            action=LlmAction.TUTOR_CHAT_SUMMARY,
+            action=LlmAction.ASK_RIN_CHAN,
         )
         return _sanitize_summary_output(summary)
     except Exception:
@@ -323,7 +321,7 @@ def _resolve_tutor_model() -> str:
         ) from exc
 
 
-def _has_image_inputs(context: TutorChatRequestContext) -> bool:
+def _has_image_inputs(context: AskRinRequestContext) -> bool:
     return bool(context.question_image or any(context.option_images))
 
 
@@ -337,7 +335,7 @@ def _tutor_model_supports_vision(model: str) -> bool:
 
 
 @dataclass(frozen=True)
-class TutorChatRequestContext:
+class AskRinRequestContext:
     question: str
     options: list[str]
     user_question: str | None
@@ -374,8 +372,8 @@ def _tutor_chat_messages(
     ]
 
 
-class TutorChatService:
-    async def build_messages(self, context: TutorChatRequestContext) -> list[dict[str, Any]]:
+class AskRinChanService:
+    async def build_messages(self, context: AskRinRequestContext) -> list[dict[str, Any]]:
         prompt = await build_tutor_prompt(
             question=context.question,
             options=context.options,
@@ -392,7 +390,7 @@ class TutorChatService:
             option_images=context.option_images,
         )
 
-    async def generate_response(self, context: TutorChatRequestContext) -> str:
+    async def generate_response(self, context: AskRinRequestContext) -> str:
         self._validate_current_question(context.user_question)
         model = _resolve_tutor_model()
         self._validate_model_capabilities(context, model)
@@ -406,7 +404,7 @@ class TutorChatService:
 
     async def create_stream(
         self,
-        context: TutorChatRequestContext,
+        context: AskRinRequestContext,
         *,
         on_complete: Callable[[str], Awaitable[None]] | None = None,
     ) -> AsyncIterator[bytes]:
@@ -431,64 +429,15 @@ class TutorChatService:
             raise ValueError(validation_error)
 
     @staticmethod
-    def _validate_model_capabilities(context: TutorChatRequestContext, model: str) -> None:
+    def _validate_model_capabilities(context: AskRinRequestContext, model: str) -> None:
         if _has_image_inputs(context) and not _tutor_model_supports_vision(model):
             raise ValueError(
                 f"Quiz tutor image inputs require a vision-capable LLM model. Current model '{model}' does not support vision."
             )
 
 
-_TUTOR_CHAT_SERVICE = TutorChatService()
+_ASK_RIN_CHAN_SERVICE = AskRinChanService()
 
 
-def get_tutor_chat_service() -> TutorChatService:
-    return _TUTOR_CHAT_SERVICE
-
-
-async def create_tutor_chat_stream(
-    *,
-    question: str,
-    options: list[str],
-    user_question: str,
-    chat_history: list[dict[str, str]] | None = None,
-    concept_name: str | None = None,
-    bloom_level: int | None = None,
-    rag_context: str = "",
-    on_complete: Callable[[str], Awaitable[None]] | None = None,
-) -> AsyncIterator[bytes]:
-    return await get_tutor_chat_service().create_stream(
-        TutorChatRequestContext(
-            action=LlmAction.ADAPTIVE_TUTOR_CHAT,
-            question=question,
-            options=options,
-            user_question=user_question,
-            chat_history=chat_history or [],
-            concept_name=concept_name,
-            bloom_level=bloom_level,
-            rag_context=rag_context,
-        ),
-        on_complete=on_complete,
-    )
-
-
-async def generate_tutor_chat_response(
-    question: str,
-    options: list[str],
-    user_question: str,
-    chat_history: list[dict[str, str]] | None = None,
-    concept_name: str | None = None,
-    bloom_level: int | None = None,
-    rag_context: str = "",
-) -> str:
-    return await get_tutor_chat_service().generate_response(
-        TutorChatRequestContext(
-            action=LlmAction.ADAPTIVE_TUTOR_CHAT,
-            question=question,
-            options=options,
-            user_question=user_question,
-            chat_history=chat_history or [],
-            concept_name=concept_name,
-            bloom_level=bloom_level,
-            rag_context=rag_context,
-        )
-    )
+def get_ask_rin_chan_service() -> AskRinChanService:
+    return _ASK_RIN_CHAN_SERVICE

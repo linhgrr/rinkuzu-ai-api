@@ -89,8 +89,6 @@ class SessionState:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     concept_theories: dict[str, dict[str, str | list[str]]] = field(default_factory=dict)
     _prefetch_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
-    tutor_chat_history: list[dict[str, str]] = field(default_factory=list)
-    tutor_chat_exercise_id: str | None = None
     # Recommendation-in-flight state, set by ExerciseService.get_next_concept
     # once a concept is picked and consumed by get_theory/generate_exercise.
     _pending_concept_idx: int | None = None

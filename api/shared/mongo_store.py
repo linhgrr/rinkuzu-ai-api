@@ -11,6 +11,11 @@ from loguru import logger
 from pymongo import AsyncMongoClient
 
 from api.config import get_settings
+from api.domains.assistant.documents import (
+    AskRinConversationDocument,
+    AskRinMessageDocument,
+    AskRinRequestDocument,
+)
 from api.shared.persistence.documents import (
     DocumentChunkDocument,
     DocumentOCRRecordDocument,
@@ -65,6 +70,9 @@ async def init_mongo(mongodb_uri: str | None = None) -> bool:
                 DocumentOCRRecordDocument,
                 OcrProviderKeyDocument,
                 LlmUsageDocument,
+                AskRinConversationDocument,
+                AskRinMessageDocument,
+                AskRinRequestDocument,
             ],
             # Index drops/replacements are migration-owned in every environment.
             # Startup may create missing safe indexes, but it must never bypass an
