@@ -56,7 +56,7 @@ def test_quiz_tutor_rejects_image_inputs_when_model_is_text_only(monkeypatch):
     monkeypatch.setattr(ask_rin, "_resolve_tutor_model", lambda: "deepseek-v4-pro")
     monkeypatch.setattr(ask_rin, "_tutor_model_supports_vision", lambda _model: False)
 
-    with pytest.raises(ValueError, match="require a vision-capable LLM model"):
+    with pytest.raises(ask_rin.AskRinImageUnsupportedError) as captured:
         asyncio.run(
             ask_rin.get_ask_rin_chan_service().generate_response(
                 ask_rin.AskRinRequestContext(
@@ -68,6 +68,9 @@ def test_quiz_tutor_rejects_image_inputs_when_model_is_text_only(monkeypatch):
                 )
             )
         )
+
+    assert "deepseek" not in str(captured.value).lower()
+    assert "model" not in str(captured.value).lower()
 
 
 def test_quiz_tutor_keeps_image_blocks_when_model_supports_vision(monkeypatch):

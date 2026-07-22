@@ -50,6 +50,15 @@ TUTOR_RESPONSE_REQUIREMENTS = (
 )
 
 
+class AskRinImageUnsupportedError(ValueError):
+    """Raised when the active tutor cannot safely process quiz image context."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Rin-chan cannot read images for this question right now. Try another question."
+        )
+
+
 def sanitize_chat_input(input_text: str, *, max_chars: int = 1000) -> str:
     return input_text.replace("<", "").replace(">", "").strip()[:max_chars]
 
@@ -444,9 +453,8 @@ class AskRinChanService:
     @staticmethod
     def _validate_model_capabilities(context: AskRinRequestContext, model: str) -> None:
         if _has_image_inputs(context) and not _tutor_model_supports_vision(model):
-            raise ValueError(
-                f"Quiz tutor image inputs require a vision-capable LLM model. Current model '{model}' does not support vision."
-            )
+            logger.warning("Ask Rin-chan image context rejected: tutor model lacks vision support")
+            raise AskRinImageUnsupportedError
 
 
 _ASK_RIN_CHAN_SERVICE = AskRinChanService()

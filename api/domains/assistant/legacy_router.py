@@ -33,7 +33,11 @@ from api.schemas.validators import PathID  # noqa: TC001 - FastAPI resolves at r
 from api.shared.llm import SSE_STREAM_HEADERS
 from api.shared.llm_usage import LlmAction
 
-from .service import AskRinRequestContext, get_ask_rin_chan_service
+from .service import (
+    AskRinImageUnsupportedError,
+    AskRinRequestContext,
+    get_ask_rin_chan_service,
+)
 
 legacy_quiz_router = APIRouter(prefix="/api/v1/quiz", tags=["legacy-ask-rin-chan"])
 legacy_session_router = APIRouter(prefix="/api/v1/session", tags=["legacy-ask-rin-chan"])
@@ -76,6 +80,13 @@ class LegacyTutorChatResponse(BaseModel):
 
 
 def _raise_legacy_tutor_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, AskRinImageUnsupportedError):
+        raise AppError(
+            code="ask_rin_image_unsupported",
+            message="Image question is unavailable",
+            detail=str(exc),
+            status_code=422,
+        ) from exc
     if isinstance(exc, ValueError):
         raise AppError(
             code="validation_error",

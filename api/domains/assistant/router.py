@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn
 
 from ag_ui.core import RunAgentInput  # noqa: TC002 - FastAPI resolves at runtime.
 from fastapi import APIRouter, Depends, Request
@@ -54,9 +54,43 @@ from .schemas import (
     ExerciseContextResponse,
     RegisterExerciseContextRequest,
 )
-from .service import AskRinRequestContext, get_ask_rin_chan_service
+from .service import (
+    AskRinImageUnsupportedError,
+    AskRinRequestContext,
+    get_ask_rin_chan_service,
+)
 
 router = APIRouter(prefix="/api/v1/ask-rin-chan", tags=["ask-rin-chan"])
+
+
+def _raise_ask_rin_input_error(exc: ValueError) -> NoReturn:
+    if isinstance(exc, AskRinImageUnsupportedError):
+        raise AppError(
+            code="ask_rin_image_unsupported",
+            message="Image question is unavailable",
+            detail=str(exc),
+            status_code=422,
+        ) from exc
+    raise AppError(
+        code="validation_error",
+        message="Invalid Ask Rin-chan message",
+        detail=str(exc),
+        status_code=422,
+    ) from exc
+
+
+async def _create_stream_or_refund(
+    *,
+    service: Any,
+    context: AskRinRequestContext,
+    user_id: str,
+    client_request_id: str,
+) -> Any:
+    try:
+        return await service.create_stream(context)
+    except ValueError as exc:
+        await refund_turn(user_id=user_id, client_request_id=client_request_id)
+        _raise_ask_rin_input_error(exc)
 
 
 @router.post(
@@ -199,8 +233,9 @@ async def ask_rin_chan(
 
     history = await load_model_history(conversation_id, user_id)
     service = get_ask_rin_chan_service()
-    upstream = await service.create_stream(
-        AskRinRequestContext(
+    upstream = await _create_stream_or_refund(
+        service=service,
+        context=AskRinRequestContext(
             action=LlmAction.ASK_RIN_CHAN,
             question=context.question,
             options=context.options,
@@ -211,7 +246,9 @@ async def ask_rin_chan(
             rag_context=getattr(context, "rag_context", ""),
             question_image=context.question_image,
             option_images=context.option_images,
-        )
+        ),
+        user_id=user_id,
+        client_request_id=req.client_request_id,
     )
 
     async def persisted_stream():
@@ -288,12 +325,7 @@ async def run_ask_rin_chan_agent(
             service=get_ask_rin_chan_service(),
         )
     except ValueError as exc:
-        raise AppError(
-            code="validation_error",
-            message="Invalid Ask Rin-chan message",
-            detail=str(exc),
-            status_code=422,
-        ) from exc
+        _raise_ask_rin_input_error(exc)
 
 
 @router.get(
