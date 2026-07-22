@@ -49,7 +49,7 @@ def test_generate_response_uses_project_standard_message_shape(monkeypatch):
     assert messages[1]["role"] == "user"
     assert isinstance(messages[1]["content"], str)
     assert "Không chào lại" in messages[1]["content"]
-    assert captured["max_tokens"] == 1024
+    assert captured["max_tokens"] == 2048
 
 
 def test_quiz_tutor_rejects_image_inputs_when_model_is_text_only(monkeypatch):

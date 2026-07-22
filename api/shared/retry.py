@@ -39,7 +39,14 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 _TRANSIENT_STATUS = {408, 425, 429, 500, 502, 503, 504}
+
+
+class NonRetryableLLMError(RuntimeError):
+    """Base for deterministic LLM outcomes that another attempt cannot repair."""
+
+
 _NON_RETRYABLE_LLM_ERRORS = (
+    NonRetryableLLMError,
     AuthenticationError,
     BadRequestError,
     NotFoundError,

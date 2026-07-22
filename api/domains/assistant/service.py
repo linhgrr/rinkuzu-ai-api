@@ -26,7 +26,7 @@ _CHAT_HISTORY_TOKEN_BUDGET = 1800
 _RECENT_HISTORY_MESSAGES = 6
 _SUMMARY_MAX_OUTPUT_TOKENS = 256
 _SUMMARY_MAX_CHARS = 1200
-_TUTOR_MAX_OUTPUT_TOKENS = 1024
+_TUTOR_MAX_OUTPUT_TOKENS = 2048
 _SUMMARY_SYSTEM_PROMPT = (
     "Bạn tóm tắt hội thoại học tập cho gia sư. Chỉ giữ lại khái niệm đã bàn, "
     "điểm học sinh còn vướng, và kết luận hữu ích cho lượt tiếp theo. "

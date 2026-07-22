@@ -7,6 +7,7 @@ import pytest
 
 from api.domains.assistant import agui
 from api.domains.assistant.context_tokens import ExerciseContext
+from api.shared.llm import LLMOutputTruncatedError
 
 
 def _input(*, token: str = "t" * 32, run_id: str = "run_123456") -> RunAgentInput:
@@ -64,6 +65,15 @@ class _CancellingService:
         async def stream():
             yield "Đang giải"
             raise asyncio.CancelledError
+
+        return stream()
+
+
+class _TruncatedService:
+    async def create_delta_stream(self, _context: Any) -> Any:
+        async def stream():
+            yield "Đang giải đến đáp án D"
+            raise LLMOutputTruncatedError("response length limit")
 
         return stream()
 
@@ -227,6 +237,47 @@ async def test_agui_cancellation_persists_partial_answer_as_interrupted(
             "user_id": "user-1",
             "client_request_id": "run_123456",
             "content": "Đang giải",
+            "interrupted": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agui_output_truncation_marks_partial_answer_interrupted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    finished: list[dict[str, Any]] = []
+
+    async def begin_turn(**_kwargs: Any) -> tuple[dict[str, str], None]:
+        return {"conversation_id": "conversation-1"}, None
+
+    async def load_model_history(*_args: Any) -> list[dict[str, str]]:
+        return []
+
+    async def finish_turn(**kwargs: Any) -> str:
+        finished.append(kwargs)
+        return "assistant-message"
+
+    monkeypatch.setattr(agui, "begin_turn", begin_turn)
+    monkeypatch.setattr(agui, "load_model_history", load_model_history)
+    monkeypatch.setattr(agui, "finish_turn", finish_turn)
+
+    response = await agui.create_agui_response(
+        request_accept=None,
+        input_data=_input(),
+        user_id="user-1",
+        context=_context(),
+        service=_TruncatedService(),
+    )
+    events = await _events(response)
+
+    assert [event["type"] for event in events[-2:]] == ["TEXT_MESSAGE_END", "RUN_ERROR"]
+    assert events[-1]["code"] == "ask_rin_run_failed"
+    assert finished == [
+        {
+            "user_id": "user-1",
+            "client_request_id": "run_123456",
+            "content": "Đang giải đến đáp án D",
             "interrupted": True,
         }
     ]

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from api.config import get_settings
 from api.shared.llm_usage import extract_usage, record_llm_usage
 from api.shared.retry import (
+    NonRetryableLLMError,
     async_retry,
     build_async_retrying,
     is_retryable_llm_error,
@@ -27,10 +28,15 @@ from api.shared.retry import (
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
 _DEEPSEEK_PROVIDER = "deepseek"
+_TRUNCATED_FINISH_REASONS = frozenset({"length", "max_tokens"})
 
 
 class LLMConfigurationError(ValueError):
     """Raised when required LLM settings are missing."""
+
+
+class LLMOutputTruncatedError(NonRetryableLLMError):
+    """Raised when the provider stops because the output-token limit was reached."""
 
 
 @dataclass(frozen=True)
@@ -304,6 +310,29 @@ def _extract_choice_content(choice: object) -> object:
     return getattr(message, "content", "")
 
 
+def _extract_choice_finish_reason(choice: object) -> str | None:
+    reason = (
+        choice.get("finish_reason")
+        if isinstance(choice, dict)
+        else getattr(choice, "finish_reason", None)
+    )
+    if reason is None:
+        return None
+    value = getattr(reason, "value", reason)
+    return str(value).strip().lower() or None
+
+
+def _raise_for_truncated_finish_reason(
+    finish_reason: str | None, *, before_visible_text: bool
+) -> None:
+    if finish_reason not in _TRUNCATED_FINISH_REASONS:
+        return
+    detail = " before producing visible text" if before_visible_text else " before finishing"
+    raise LLMOutputTruncatedError(
+        f"Rin-chan reached the response length limit{detail}. Please ask to continue."
+    )
+
+
 def _extract_response_content(response: object) -> object:
     choices = getattr(response, "choices", None)
     if choices is None and isinstance(response, dict):
@@ -489,7 +518,7 @@ class LiteLLMClient(LLMClient):
         partially-sent reply cannot be restarted.
         """
 
-        async def _open_to_first_token() -> tuple[str, Any]:
+        async def _open_to_first_token() -> tuple[str, Any, str | None]:
             stream = await acompletion(
                 **_litellm_kwargs(
                     config=self.config,
@@ -502,11 +531,15 @@ class LiteLLMClient(LLMClient):
             )
             async for chunk in stream:
                 text = self._first_delta_from_chunk(chunk)
+                finish_reason = self._finish_reason_from_chunk(chunk)
                 if text:
-                    return text, stream
+                    return text, stream, finish_reason
+                _raise_for_truncated_finish_reason(finish_reason, before_visible_text=True)
             raise RuntimeError("LLM returned an empty completion")
 
-        first_delta, stream = await self._async_retry("stream_text")(_open_to_first_token)()
+        first_delta, stream, finish_reason = await self._async_retry("stream_text")(
+            _open_to_first_token
+        )()
         yield first_delta
 
         final_usage: dict[str, int] | None = None
@@ -518,6 +551,9 @@ class LiteLLMClient(LLMClient):
             if choices is None and isinstance(chunk, dict):
                 choices = chunk.get("choices", [])
             for choice in choices or []:
+                next_finish_reason = _extract_choice_finish_reason(choice)
+                if next_finish_reason:
+                    finish_reason = next_finish_reason
                 text = _extract_stream_delta_text(_extract_choice_content(choice))
                 if text:
                     yield text
@@ -528,6 +564,7 @@ class LiteLLMClient(LLMClient):
                 usage=final_usage,
                 action=action,
             )
+        _raise_for_truncated_finish_reason(finish_reason, before_visible_text=False)
 
     @staticmethod
     def _first_delta_from_chunk(chunk: object) -> str:
@@ -539,6 +576,17 @@ class LiteLLMClient(LLMClient):
             if text:
                 return text
         return ""
+
+    @staticmethod
+    def _finish_reason_from_chunk(chunk: object) -> str | None:
+        choices = getattr(chunk, "choices", None)
+        if choices is None and isinstance(chunk, dict):
+            choices = chunk.get("choices", [])
+        for choice in choices or []:
+            reason = _extract_choice_finish_reason(choice)
+            if reason:
+                return reason
+        return None
 
     async def agenerate_structured(
         self,

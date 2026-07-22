@@ -8,6 +8,10 @@ from api.domains.assistant import service as ask_rin
 from api.domains.assistant import streaming
 
 
+def test_tutor_output_budget_allows_complete_explanations() -> None:
+    assert ask_rin._TUTOR_MAX_OUTPUT_TOKENS == 2048
+
+
 def test_build_tutor_prompt_ignores_suspicious_history_messages():
     prompt = asyncio.run(
         ask_rin.build_tutor_prompt(
