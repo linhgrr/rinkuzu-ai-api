@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 - Pydantic resolves this at runtime for OpenAPI.
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,10 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class QuizQuestionShape(BaseModel):
     """Single/multiple-choice question with answer-shape validation.
 
-    Shared by the draft API contract (QuizDraftQuestion) and the LLM
-    extraction schema (ExtractedQuizQuestion); each subclass sets its own
-    model_config. The DB model (persistence.QuizQuestion) intentionally does
-    NOT inherit this — it must model_validate legacy records leniently.
+    Used by the LLM extraction schema. Draft editing has a separate, more
+    permissive shape so incomplete manual work can be autosaved safely.
     """
 
     question: str = Field(min_length=1)
@@ -58,8 +56,31 @@ class QuizQuestionShape(BaseModel):
         return payload
 
 
-class QuizDraftQuestion(QuizQuestionShape):
+class QuizDraftQuestion(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    question: str = Field(default="", max_length=2000)
+    type: Literal["single", "multiple"]
+    options: list[Annotated[str, Field(max_length=500)]] = Field(min_length=2, max_length=20)
+    correct_index: int | None = Field(default=None, alias="correctIndex")
+    correct_indexes: list[int] = Field(default_factory=list, alias="correctIndexes")
+    question_image: str | None = Field(default=None, max_length=2048, alias="questionImage")
+    option_images: list[Annotated[str, Field(max_length=2048)] | None] = Field(
+        default_factory=list, alias="optionImages"
+    )
+
+    @model_validator(mode="after")
+    def validate_draft_answer_shape(self) -> QuizDraftQuestion:
+        option_count = len(self.options)
+        if self.option_images and len(self.option_images) != option_count:
+            raise ValueError("optionImages must be empty or match the number of options")
+        if self.correct_index is not None and not 0 <= self.correct_index < option_count:
+            raise ValueError("correctIndex is out of range")
+        if len(set(self.correct_indexes)) != len(self.correct_indexes):
+            raise ValueError("correctIndexes must be unique")
+        if any(index < 0 or index >= option_count for index in self.correct_indexes):
+            raise ValueError("correctIndexes contains an out-of-range value")
+        return self
 
 
 class QuizDraftCreateRequest(BaseModel):
@@ -74,13 +95,23 @@ class QuizDraftCreateRequest(BaseModel):
     prompt: str | None = Field(
         default=None, max_length=2000, description="Custom AI prompt to guide question generation."
     )
+    is_private: bool = False
+
+
+class QuizManualDraftCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    category_id: str | None = None
+    is_private: bool = False
 
 
 class QuizDraftPatchRequest(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
+    title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     category_id: str | None = None
-    questions: list[QuizDraftQuestion] | None = None
+    questions: list[QuizDraftQuestion] | None = Field(default=None, max_length=200)
+    is_private: bool | None = None
+    expected_revision: int | None = Field(default=None, ge=0)
 
 
 class QuizDraftSubmitRequest(BaseModel):
@@ -106,8 +137,13 @@ class QuizDraftResponseData(BaseModel):
     description: str
     category_id: str | None
     prompt: str | None
+    source_type: Literal["pdf", "manual"]
+    is_private: bool
+    revision: int
+    question_count: int
     pdf: QuizDraftPdfInfo
     status: Literal[
+        "drafting",
         "queued",
         "processing",
         "completed",
@@ -122,7 +158,7 @@ class QuizDraftResponseData(BaseModel):
     submitted_quiz_id: str | None
     created_at: datetime
     updated_at: datetime
-    expires_at: datetime
+    expires_at: datetime | None
 
 
 class QuizDraftSingleResponse(BaseModel):

@@ -14,6 +14,7 @@ from api.schemas.validators import PathID
 from api.shared.persistence.common import is_storage_infra_error
 
 from .draft_service import (
+    QuizDraftConflictError,
     QuizDraftDependencyError,
     QuizDraftNotFoundError,
     QuizDraftService,
@@ -27,6 +28,7 @@ from .schemas import (
     QuizDraftPatchRequest,
     QuizDraftSingleResponse,
     QuizDraftSubmitRequest,
+    QuizManualDraftCreateRequest,
 )
 
 drafts_router = APIRouter(prefix="/api/v1/quiz/drafts", tags=["quiz-drafts"])
@@ -43,6 +45,8 @@ def _service_error_to_http(exc: Exception) -> NoReturn:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if isinstance(exc, QuizDraftValidationError):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if isinstance(exc, QuizDraftConflictError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if isinstance(exc, QuizDraftDependencyError):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if isinstance(exc, AppError):
@@ -75,6 +79,23 @@ async def create_quiz_draft(
         _service_error_to_http(exc)
 
     quiz_draft_task_manager.schedule(draft["draft_id"], user_id)
+    return ok({"draft": public_draft(draft)})
+
+
+@drafts_router.post("/manual", response_model=StandardResponse[QuizDraftSingleResponse])
+@limiter.limit(get_settings().rate_limit_quiz_drafts, exempt_when=is_admin_request)
+async def create_manual_quiz_draft(
+    request: Request,
+    req: QuizManualDraftCreateRequest,
+    user_id: Annotated[str, Depends(get_current_user)],
+) -> Any:
+    """Create a durable manual draft without scheduling an AI worker."""
+    del request
+    service = QuizDraftService()
+    try:
+        draft = await service.create_manual_draft(req, user_id)
+    except Exception as exc:
+        _service_error_to_http(exc)
     return ok({"draft": public_draft(draft)})
 
 

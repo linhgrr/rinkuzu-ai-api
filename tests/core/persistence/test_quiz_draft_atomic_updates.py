@@ -7,6 +7,7 @@ from typing import ClassVar
 
 import pytest
 
+from api.domains.quiz.schemas import QuizDraftQuestion
 from api.shared.persistence import quiz_drafts as quiz_draft_store
 from api.shared.persistence.documents import QuizDraftStatus
 
@@ -121,6 +122,35 @@ async def test_update_query_includes_owner_and_status_ne_cancelled(fake_doc):
     assert finder.update_calls
     set_payload = finder.update_calls[0][0][0]["$set"]
     assert set_payload["status"] == QuizDraftStatus.PROCESSING.value
+
+
+@pytest.mark.asyncio
+async def test_update_uses_expected_revision_and_increments_atomically(fake_doc):
+    doc = _public_doc()
+    doc.revision = 4
+    finder = _FakeFind(update_result=doc)
+    fake_doc.finder = finder
+
+    await quiz_draft_store.update_quiz_draft_for_user(
+        "draft-1",
+        "user-1",
+        {"title": "Changed"},
+        expected_revision=3,
+    )
+
+    assert {"revision": 3} in fake_doc.last_find_args
+    update_payload = finder.update_calls[0][0][0]
+    assert update_payload["$inc"] == {"revision": 1}
+
+
+def test_normalize_questions_accepts_draft_contract_models():
+    question = QuizDraftQuestion.model_validate(
+        {"question": "", "type": "single", "options": ["", ""], "correctIndex": 0}
+    )
+
+    [normalized] = quiz_draft_store._normalize_questions([question])
+
+    assert normalized.model_dump(by_alias=True)["correctIndex"] == 0
 
 
 @pytest.mark.asyncio

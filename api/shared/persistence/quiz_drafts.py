@@ -4,6 +4,7 @@ from typing import Any
 
 from beanie import UpdateResponse
 from beanie.odm.enums import SortDirection
+from pydantic import BaseModel
 
 from .common import normalize_for_bson, utc_now
 from .documents import (
@@ -16,15 +17,15 @@ from .documents import (
 )
 
 
-def _normalize_questions(
-    questions: list[dict[str, Any]] | list[QuizQuestion] | None,
-) -> list[QuizQuestion]:
+def _normalize_questions(questions: list[Any] | None) -> list[QuizQuestion]:
     if not questions:
         return []
     normalized: list[QuizQuestion] = []
     for question in questions:
         if isinstance(question, QuizQuestion):
             normalized.append(question)
+        elif isinstance(question, BaseModel):
+            normalized.append(QuizQuestion.model_validate(question.model_dump(by_alias=True)))
         else:
             normalized.append(QuizQuestion.model_validate(question))
     return normalized
@@ -36,6 +37,7 @@ def _normalize_update_payload(updates: dict[str, Any]) -> dict[str, Any]:
     for key, value in updates.items():
         if key == "questions":
             payload[key] = normalize_for_bson(_normalize_questions(value))
+            payload["question_count"] = len(value or [])
         elif key == "progress":
             payload[key] = normalize_for_bson(QuizDraftProgressPayload.model_validate(value or {}))
         elif key == "pdf":
@@ -56,6 +58,10 @@ def _document_to_public_dict(doc: QuizDraftDocument | QuizDraftListProjection) -
         "description": doc.description,
         "category_id": doc.category_id,
         "prompt": doc.prompt,
+        "source_type": getattr(doc, "source_type", "pdf"),
+        "is_private": getattr(doc, "is_private", False),
+        "revision": getattr(doc, "revision", 0),
+        "question_count": getattr(doc, "question_count", len(questions)),
         "pdf": doc.pdf.model_dump() if isinstance(doc.pdf, QuizDraftPdf) else dict(doc.pdf or {}),
         "status": doc.status.value if isinstance(doc.status, QuizDraftStatus) else str(doc.status),
         "progress": doc.progress.model_dump()
@@ -87,6 +93,10 @@ async def create_quiz_draft(doc: dict[str, Any]) -> dict[str, Any]:
         description=str(doc.get("description") or ""),
         category_id=doc.get("category_id"),
         prompt=doc.get("prompt"),
+        source_type=doc.get("source_type", "pdf"),
+        is_private=bool(doc.get("is_private", False)),
+        revision=int(doc.get("revision", 0)),
+        question_count=len(doc.get("questions") or []),
         pdf=QuizDraftPdf.model_validate(doc.get("pdf") or {}),
         status=QuizDraftStatus(str(doc.get("status") or QuizDraftStatus.QUEUED.value)),
         progress=QuizDraftProgressPayload.model_validate(doc.get("progress") or {}),
@@ -95,7 +105,7 @@ async def create_quiz_draft(doc: dict[str, Any]) -> dict[str, Any]:
         submitted_quiz_id=doc.get("submitted_quiz_id"),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
-        expires_at=doc["expires_at"],
+        expires_at=doc.get("expires_at"),
     )
     await created.insert()
     return _document_to_public_dict(created)
@@ -114,6 +124,8 @@ async def update_quiz_draft_for_user(
     draft_id: str,
     user_id: str,
     updates: dict[str, Any],
+    *,
+    expected_revision: int | None = None,
 ) -> dict[str, Any] | None:
     """Atomically update only when owned and not already cancelled.
 
@@ -122,12 +134,15 @@ async def update_quiz_draft_for_user(
     """
     set_payload = _normalize_update_payload(updates)
     set_payload.setdefault("updated_at", utc_now())
-    doc = await QuizDraftDocument.find_one(
+    predicates: list[Any] = [
         QuizDraftDocument.draft_id == draft_id,
         QuizDraftDocument.user_id == user_id,
         {"status": {"$ne": QuizDraftStatus.CANCELLED.value}},
-    ).update(
-        {"$set": set_payload},
+    ]
+    if expected_revision is not None:
+        predicates.append({"revision": expected_revision})
+    doc = await QuizDraftDocument.find_one(*predicates).update(
+        {"$set": set_payload, "$inc": {"revision": 1}},
         response_type=UpdateResponse.NEW_DOCUMENT,
     )
     if doc is None:

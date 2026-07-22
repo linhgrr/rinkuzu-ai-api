@@ -37,7 +37,7 @@ from .extraction import (
 )
 
 if TYPE_CHECKING:
-    from .schemas import QuizDraftCreateRequest, QuizDraftPatchRequest
+    from .schemas import QuizDraftCreateRequest, QuizDraftPatchRequest, QuizManualDraftCreateRequest
 
 EXPIRY_HOURS = 48
 TOTAL_STEPS = 3
@@ -61,6 +61,10 @@ class QuizDraftValidationError(QuizDraftServiceError):
     """Raised when user-supplied draft data is invalid."""
 
 
+class QuizDraftConflictError(QuizDraftServiceError):
+    """Raised when an autosave is based on a stale draft revision."""
+
+
 class QuizDraftDependencyError(QuizDraftServiceError):
     """Raised when external services required by draft processing are unavailable."""
 
@@ -71,13 +75,23 @@ def _pdf_too_large_message(max_pdf_bytes: int) -> str:
 
 def public_draft(doc: dict[str, Any]) -> dict[str, Any]:
     """Return the public draft shape used by API responses."""
+    pdf = doc.get("pdf") or {}
     return {
         "draft_id": doc.get("draft_id"),
         "title": doc.get("title"),
         "description": doc.get("description"),
         "category_id": doc.get("category_id"),
         "prompt": doc.get("prompt"),
-        "pdf": doc.get("pdf") or {},
+        "source_type": doc.get("source_type") or "pdf",
+        "is_private": bool(doc.get("is_private", False)),
+        "revision": int(doc.get("revision", 0)),
+        "question_count": int(doc.get("question_count", len(doc.get("questions") or []))),
+        "pdf": {
+            "s3_key": pdf.get("s3_key"),
+            "file_name": pdf.get("file_name"),
+            "file_size": pdf.get("file_size"),
+            "page_count": pdf.get("page_count"),
+        },
         "status": doc.get("status"),
         "progress": doc.get("progress") or {"processed": 0, "total": TOTAL_STEPS, "percent": 0},
         "questions": doc.get("questions") or [],
@@ -128,6 +142,9 @@ class QuizDraftService:
             "description": (req.description or "").strip(),
             "category_id": req.category_id,
             "prompt": (req.prompt or "").strip() or None,
+            "source_type": "pdf",
+            "is_private": getattr(req, "is_private", False),
+            "revision": 0,
             "pdf": {
                 "s3_key": normalized_key,
                 "file_name": req.file_name.strip(),
@@ -146,6 +163,39 @@ class QuizDraftService:
 
         # Persistence propagates storage/programming errors; no false None on outage.
         return await create_quiz_draft(doc)
+
+    async def create_manual_draft(
+        self,
+        req: QuizManualDraftCreateRequest,
+        user_id: str,
+    ) -> dict[str, Any]:
+        """Create a durable private workspace without invoking extraction services."""
+        if not mongo_store.is_available():
+            raise QuizDraftDependencyError("MongoDB is not available.")
+
+        now = datetime.now(UTC)
+        return await create_quiz_draft(
+            {
+                "draft_id": uuid.uuid4().hex,
+                "user_id": user_id,
+                "title": req.title.strip(),
+                "description": (req.description or "").strip(),
+                "category_id": req.category_id,
+                "prompt": None,
+                "source_type": "manual",
+                "is_private": req.is_private,
+                "revision": 0,
+                "pdf": {},
+                "status": "drafting",
+                "progress": {"processed": 0, "total": 0, "percent": 0},
+                "questions": [],
+                "error": None,
+                "submitted_quiz_id": None,
+                "created_at": now,
+                "updated_at": now,
+                "expires_at": None,
+            }
+        )
 
     async def get_draft(self, draft_id: str, user_id: str) -> dict[str, Any]:
         draft = await load_quiz_draft_for_user(draft_id, user_id)
@@ -169,18 +219,29 @@ class QuizDraftService:
         updates: dict[str, Any] = {}
         if req.title is not None:
             updates["title"] = req.title.strip()
-        if req.description is not None:
-            updates["description"] = req.description.strip()
-        if req.category_id is not None:
+        if "description" in req.model_fields_set:
+            updates["description"] = (req.description or "").strip()
+        if "category_id" in req.model_fields_set:
             updates["category_id"] = req.category_id
         if req.questions is not None:
             updates["questions"] = req.questions
+        if req.is_private is not None:
+            updates["is_private"] = req.is_private
 
         if not updates:
             return existing
 
-        updated = await update_quiz_draft_for_user(draft_id, user_id, updates)
+        updated = await update_quiz_draft_for_user(
+            draft_id,
+            user_id,
+            updates,
+            expected_revision=req.expected_revision,
+        )
         if not updated:
+            if req.expected_revision is not None:
+                latest = await load_quiz_draft_for_user(draft_id, user_id)
+                if latest is not None:
+                    raise QuizDraftConflictError("Draft changed in another session.")
             raise QuizDraftNotFoundError("Draft not found.")
         return updated
 

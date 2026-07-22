@@ -14,6 +14,7 @@ from .common import utc_now
 
 
 class QuizDraftStatus(StrEnum):
+    DRAFTING = "drafting"
     QUEUED = "queued"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -26,11 +27,13 @@ class QuizDraftStatus(StrEnum):
 class QuizQuestion(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    question: str = Field(min_length=1)
+    question: str = Field(default="", max_length=2000)
     type: Literal["single", "multiple"]
-    options: list[str] = Field(min_length=4, max_length=5)
+    options: list[str] = Field(min_length=2, max_length=20)
     correct_index: int | None = Field(default=None, alias="correctIndex")
     correct_indexes: list[int] = Field(default_factory=list, alias="correctIndexes")
+    question_image: str | None = Field(default=None, max_length=2048, alias="questionImage")
+    option_images: list[str | None] = Field(default_factory=list, alias="optionImages")
 
 
 class QuizDraftPdf(BaseModel):
@@ -272,6 +275,10 @@ class QuizDraftDocument(Document):
     description: str = ""
     category_id: str | None = None
     prompt: str | None = None
+    source_type: Literal["pdf", "manual"] = "pdf"
+    is_private: bool = False
+    revision: int = 0
+    question_count: int = 0
     pdf: QuizDraftPdf = Field(default_factory=QuizDraftPdf)
     status: QuizDraftStatus = QuizDraftStatus.QUEUED
     progress: QuizDraftProgressPayload = Field(default_factory=QuizDraftProgressPayload)
@@ -280,7 +287,7 @@ class QuizDraftDocument(Document):
     submitted_quiz_id: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
-    expires_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime | None = Field(default_factory=utc_now)
 
     @before_event([Insert, Replace, SaveChanges])
     def touch_updated_at(self) -> None:
@@ -302,6 +309,10 @@ class QuizDraftListProjection(BaseModel):
     description: str = ""
     category_id: str | None = None
     prompt: str | None = None
+    source_type: Literal["pdf", "manual"] = "pdf"
+    is_private: bool = False
+    revision: int = 0
+    question_count: int = 0
     pdf: QuizDraftPdf = Field(default_factory=QuizDraftPdf)
     status: QuizDraftStatus
     progress: QuizDraftProgressPayload = Field(default_factory=QuizDraftProgressPayload)
@@ -309,7 +320,7 @@ class QuizDraftListProjection(BaseModel):
     submitted_quiz_id: str | None = None
     created_at: datetime
     updated_at: datetime
-    expires_at: datetime
+    expires_at: datetime | None
 
 
 class DocumentOCRPage(BaseModel):
