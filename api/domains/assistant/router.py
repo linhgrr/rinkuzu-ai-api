@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any
 
+from ag_ui.core import RunAgentInput  # noqa: TC002 - FastAPI resolves at runtime.
 from fastapi import APIRouter, Depends, Request
 from sse_starlette import EventSourceResponse
 
@@ -27,6 +28,12 @@ from api.schemas.validators import (  # noqa: TC001 - FastAPI resolves at runtim
 from api.shared.llm import SSE_STREAM_HEADERS, serialize_responses_sse_event
 from api.shared.llm_usage import LlmAction
 
+from .agui import (
+    create_agui_response,
+    latest_user_message,
+    read_exercise_context_token,
+    validate_run_identity,
+)
 from .context_tokens import (
     ExerciseContext,
     issue_context_token,
@@ -242,6 +249,51 @@ async def ask_rin_chan(
         ping=15,
         send_timeout=30,
     )
+
+
+@router.post("/agent")
+async def run_ask_rin_chan_agent(
+    request: Request,
+    input_data: RunAgentInput,
+    user_id: Annotated[str, Depends(get_current_user)],
+    manager: Any = Depends(get_session_manager),
+    chunk_store: Any = Depends(get_chunk_chroma_store),
+) -> Any:
+    """Run Ask Rin-chan using the official AG-UI input and event protocol."""
+    try:
+        context = read_context_token(read_exercise_context_token(input_data), user_id=user_id)
+        validate_run_identity(input_data, context)
+        message = latest_user_message(input_data)
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            code="validation_error",
+            message="Invalid AG-UI run input",
+            detail=str(exc),
+            status_code=422,
+        ) from exc
+
+    context = await _resolve_context(
+        context,
+        user_id=user_id,
+        message=message,
+        manager=manager,
+        chunk_store=chunk_store,
+    )
+    try:
+        return await create_agui_response(
+            request_accept=request.headers.get("accept"),
+            input_data=input_data,
+            user_id=user_id,
+            context=context,
+            service=get_ask_rin_chan_service(),
+        )
+    except ValueError as exc:
+        raise AppError(
+            code="validation_error",
+            message="Invalid Ask Rin-chan message",
+            detail=str(exc),
+            status_code=422,
+        ) from exc
 
 
 @router.get(

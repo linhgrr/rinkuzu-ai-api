@@ -17,7 +17,7 @@ from api.shared.llm import (
 )
 from api.shared.llm_usage import LlmAction
 
-from .streaming import generate_tutor_text, stream_tutor_sse
+from .streaming import generate_tutor_text, stream_tutor_sse, stream_tutor_text
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -418,6 +418,19 @@ class AskRinChanService:
             action=context.action,
             max_tokens=_TUTOR_MAX_OUTPUT_TOKENS,
             on_complete=on_complete,
+        )
+
+    async def create_delta_stream(self, context: AskRinRequestContext) -> AsyncIterator[str]:
+        """Create a raw delta stream for typed protocol transports."""
+        self._validate_current_question(context.user_question)
+        model = _resolve_tutor_model()
+        self._validate_model_capabilities(context, model)
+        return await stream_tutor_text(
+            input_messages=await self.build_messages(context),
+            model=model,
+            timeout_sec=get_settings().llm_timeout_sec,
+            action=context.action,
+            max_tokens=_TUTOR_MAX_OUTPUT_TOKENS,
         )
 
     @staticmethod

@@ -22,6 +22,16 @@ _LEASE_SECONDS = 240
 _MODEL_HISTORY_MESSAGES = 12
 
 
+def assistant_message_id(user_id: str, client_request_id: str) -> str:
+    """Build a stable globally unique assistant message id for replay."""
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"https://rinkuzu.com/ask-rin-chan/{user_id}/{client_request_id}/assistant",
+        )
+    )
+
+
 async def _get_or_create_conversation(user_id: str, context_id: str) -> dict:
     now = utc_now()
     collection = AskRinConversationDocument.get_pymongo_collection()
@@ -183,7 +193,7 @@ async def finish_turn(
     if request.status in {"completed", "interrupted"} and request.assistant_message_id:
         return request.assistant_message_id
 
-    message_id = str(uuid.uuid4())
+    message_id = assistant_message_id(user_id, client_request_id)
     try:
         await AskRinMessageDocument(
             message_id=message_id,

@@ -18,6 +18,7 @@ description = "FastAPI backend for Rinkuzu adaptive learning and content pipelin
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "ag-ui-protocol==0.1.19",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "python-multipart>=0.0.27",

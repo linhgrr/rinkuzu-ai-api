@@ -35,6 +35,25 @@ async def generate_tutor_text(
     )
 
 
+async def stream_tutor_text(
+    *,
+    input_messages: list[dict[str, Any]],
+    model: str,
+    timeout_sec: float,
+    action: str,
+    max_tokens: int | None = None,
+) -> AsyncIterator[str]:
+    """Return raw text deltas for protocol adapters such as AG-UI."""
+    return astream_text_completion(
+        messages=input_messages,
+        model=model,
+        temperature=0.7,
+        timeout=timeout_sec,
+        max_tokens=max_tokens,
+        action=action,
+    )
+
+
 async def stream_tutor_sse(
     *,
     input_messages: list[dict[str, Any]],
