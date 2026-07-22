@@ -80,6 +80,10 @@ def test_agui_input_requires_signed_context_and_matching_thread() -> None:
         agui.validate_run_identity(input_data, _context())
 
 
+def test_agui_accepts_assistant_ui_seven_character_run_id() -> None:
+    agui.validate_run_identity(_input(run_id="Ab3xYz9"), _context())
+
+
 @pytest.mark.asyncio
 async def test_agui_stream_emits_typed_lifecycle_and_persists_once(
     monkeypatch: pytest.MonkeyPatch,

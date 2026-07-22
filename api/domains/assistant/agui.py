@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from typing import TYPE_CHECKING
 
 from ag_ui.core import (
@@ -37,7 +36,7 @@ if TYPE_CHECKING:
 
     from .context_tokens import ExerciseContext
 
-_RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+_MAX_RUN_ID_LENGTH = 128
 _MAX_INPUT_MESSAGES = 100
 _MIN_CONTEXT_TOKEN_LENGTH = 32
 _MAX_CONTEXT_TOKEN_LENGTH = 32_768
@@ -59,8 +58,8 @@ def read_exercise_context_token(input_data: RunAgentInput) -> str:
 def validate_run_identity(input_data: RunAgentInput, context: ExerciseContext) -> None:
     if input_data.thread_id != context.context_id:
         raise ValueError("threadId does not match the signed exercise context")
-    if not _RUN_ID_PATTERN.fullmatch(input_data.run_id):
-        raise ValueError("runId must contain 8-128 URL-safe characters")
+    if not 1 <= len(input_data.run_id) <= _MAX_RUN_ID_LENGTH:
+        raise ValueError("runId must contain 1-128 characters")
     if len(input_data.messages) > _MAX_INPUT_MESSAGES:
         raise ValueError(f"At most {_MAX_INPUT_MESSAGES} messages are accepted")
 
