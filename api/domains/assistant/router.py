@@ -21,7 +21,9 @@ from api.domains.learning.router import (
 )
 from api.exceptions import AppError
 from api.schemas.common import StandardResponse, ok
-from api.schemas.validators import PathID  # noqa: TC001 - FastAPI resolves at runtime.
+from api.schemas.validators import (  # noqa: TC001 - FastAPI resolves at runtime.
+    ExerciseContextPathID,
+)
 from api.shared.llm import SSE_STREAM_HEADERS, serialize_responses_sse_event
 from api.shared.llm_usage import LlmAction
 
@@ -247,7 +249,7 @@ async def ask_rin_chan(
     response_model=StandardResponse[AskRinConversationResponse | None],
 )
 async def read_conversation(
-    exercise_context_id: PathID,
+    exercise_context_id: ExerciseContextPathID,
     user_id: Annotated[str, Depends(get_current_user)],
 ) -> Any:
     result = await get_conversation(user_id, exercise_context_id)
@@ -275,7 +277,7 @@ async def read_conversation(
 
 @router.delete("/conversations/{exercise_context_id}")
 async def clear_conversation(
-    exercise_context_id: PathID,
+    exercise_context_id: ExerciseContextPathID,
     user_id: Annotated[str, Depends(get_current_user)],
 ) -> Any:
     deleted = await delete_conversation(user_id, exercise_context_id)
