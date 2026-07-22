@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 
 from .config import get_settings
 from .domains.assistant import router as ask_rin_router
+from .domains.assistant.legacy_router import legacy_quiz_router, legacy_session_router
 from .domains.content_pipeline import router as pipeline_router
 from .domains.learning import history_router, knowledge_router
 from .domains.learning import router as session_router
@@ -205,6 +206,8 @@ app.include_router(quiz_drafts_router)
 app.include_router(admin_ocr_keys_router.router)
 app.include_router(admin_usage_router.router)
 app.include_router(ask_rin_router.router)
+app.include_router(legacy_quiz_router)
+app.include_router(legacy_session_router)
 
 
 @app.get("/api/live", include_in_schema=False)
